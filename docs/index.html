@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CS7150 Class Demos</title>
+<meta name="description" content="Interactive demos and Jupyter notebooks for CS7150 Deep Learning at Northeastern University.">
+<style>
+:root{
+  --bg:#faf9f5;--surface:#ffffff;--surface-1:#f1efe8;
+  --text-primary:#26251f;--text-secondary:#5f5e5a;--text-muted:#888780;
+  --border:#d3d1c7;--border-strong:#b4b2a9;
+  --accent:#185FA5;--accent-soft:#378ADD;--accent-warm:#BA7517;--accent-green:#0F6E56;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#1a1a18;--surface:#232320;--surface-1:#2c2c2a;
+  --text-primary:#eceae2;--text-secondary:#b4b2a9;--text-muted:#888780;
+  --border:#3a3a36;--border-strong:#5f5e5a;
+  --accent:#79b1ec;--accent-soft:#378ADD;--accent-warm:#d9a24d;--accent-green:#4fbb99;
+}}
+:root[data-theme="dark"]{
+  --bg:#1a1a18;--surface:#232320;--surface-1:#2c2c2a;
+  --text-primary:#eceae2;--text-secondary:#b4b2a9;--text-muted:#888780;
+  --border:#3a3a36;--border-strong:#5f5e5a;
+  --accent:#79b1ec;--accent-soft:#378ADD;--accent-warm:#d9a24d;--accent-green:#4fbb99;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg);color:var(--text-primary);
+  font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;
+  line-height:1.6;
+}
+.page{max-width:960px;margin:0 auto;padding:0 20px 72px}
+header{padding-block:56px 28px;border-bottom:1px solid var(--border)}
+.eyebrow{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);margin:0 0 10px}
+h1{font-size:34px;font-weight:600;letter-spacing:-.015em;margin:0 0 12px}
+header p{margin:0;font-size:17px;color:var(--text-secondary);max-width:62ch}
+header p a{color:inherit}
+h2{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);
+   font-weight:600;margin:48px 0 16px}
+a{color:var(--accent)}
+a:hover{text-decoration:none}
+
+/* featured interactive demos */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}
+.card{
+  display:block;text-decoration:none;color:inherit;background:var(--surface);
+  border:1px solid var(--border);border-radius:12px;padding:20px 22px;
+  transition:border-color .15s ease, transform .15s ease;
+}
+.card:hover{border-color:var(--border-strong);transform:translateY(-1px)}
+.card .tag{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-warm)}
+.card h3{font-size:19px;font-weight:600;margin:8px 0 8px;letter-spacing:-.01em}
+.card p{margin:0;font-size:15px;color:var(--text-secondary)}
+.card .go{display:inline-block;margin-top:14px;font-size:15px;color:var(--accent)}
+
+/* notebook groups */
+.group{margin-top:32px}
+.group h3{font-size:17px;font-weight:600;margin:0 0 4px}
+.group .blurb{margin:0 0 14px;font-size:15px;color:var(--text-secondary)}
+ul.nb{list-style:none;margin:0;padding:0;border-top:1px solid var(--border)}
+ul.nb li{
+  border-bottom:1px solid var(--border);padding:13px 2px;
+  display:flex;gap:16px;align-items:baseline;flex-wrap:wrap;
+}
+ul.nb .name{font-size:16px;font-weight:500;flex:1 1 300px;min-width:0}
+ul.nb .name span{display:block;font-weight:400;font-size:14.5px;color:var(--text-secondary);margin-top:2px}
+ul.nb .links{display:flex;gap:14px;font-size:14px;white-space:nowrap}
+ul.nb .links a{color:var(--text-secondary);text-decoration:none;border-bottom:1px solid var(--border-strong)}
+ul.nb .links a:hover{color:var(--accent);border-color:var(--accent)}
+
+footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--border);
+  font-size:14.5px;color:var(--text-muted)}
+footer a{color:var(--text-secondary)}
+@media (max-width:640px){
+  h1{font-size:27px}
+  header{padding-block:36px 22px}
+  ul.nb li{gap:8px}
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <p class="eyebrow">Northeastern University &middot; CS 7150</p>
+  <h1>Deep Learning class demos</h1>
+  <p>Interactive visualizations and Jupyter notebooks used in lecture. Everything here lives in
+     <a href="https://github.com/CS7150/classdemos">github.com/CS7150/classdemos</a> &mdash;
+     notebooks open straight into Colab, and the interactive pages run in the browser with nothing to install.</p>
+</header>
+
+<h2>Interactive demos</h2>
+<div class="cards">
+  <a class="card" href="demos/perceptron.html">
+    <span class="tag">Runs in your browser</span>
+    <h3>Rosenblatt's perceptron</h3>
+    <p>The update rule, the cone of surviving weight vectors, and the mistake bound, shown side by side in
+       data space and weight space. Step through a run, scrub its history, or watch the worst case ride the
+       edge of the cone.</p>
+    <span class="go">Open the demo &rarr;</span>
+  </a>
+</div>
+
+<h2>Notebooks</h2>
+
+<div class="group">
+  <h3>Single neurons and what they can separate</h3>
+  <p class="blurb">The perceptron, its learning rule, and the limits of one linear threshold unit.</p>
+  <ul class="nb">
+    <li>
+      <div class="name">Perceptron Learning in 2D
+        <span>Rosenblatt's algorithm on linearly separable 2D data, visualized step by step.</span></div>
+      <div class="links">
+        <a href="https://colab.research.google.com/github/CS7150/classdemos/blob/main/PerceptronLearning.ipynb">Colab</a>
+        <a href="https://github.com/CS7150/classdemos/blob/main/PerceptronLearning.ipynb">Source</a>
+      </div>
+    </li>
+    <li>
+      <div class="name">Fraction Linearly Separable
+        <span>How quickly the share of boolean functions computable by one neuron collapses as inputs grow.</span></div>
+      <div class="links">
+        <a href="https://colab.research.google.com/github/CS7150/classdemos/blob/main/FractionLinearlySeparable.ipynb">Colab</a>
+        <a href="https://github.com/CS7150/classdemos/blob/main/FractionLinearlySeparable.ipynb">Source</a>
+      </div>
+    </li>
+    <li>
+      <div class="name">Logic Networks
+        <span>McCulloch&ndash;Pitts neurons with a sign nonlinearity, wired into logic circuits.</span></div>
+      <div class="links">
+        <a href="https://colab.research.google.com/github/CS7150/classdemos/blob/main/LogicNetworks.ipynb">Colab</a>
+        <a href="https://github.com/CS7150/classdemos/blob/main/LogicNetworks.ipynb">Source</a>
+      </div>
+    </li>
+  </ul>
+</div>
+
+<div class="group">
+  <h3>XOR and the first hidden layer</h3>
+  <p class="blurb">What one layer cannot do, and what happens once you train two or more.</p>
+  <ul class="nb">
+    <li>
+      <div class="name">Learning XOR
+        <span>A two-layer tanh network trained on the XOR truth table by hand-rolled gradient descent.</span></div>
+      <div class="links">
+        <a href="https://colab.research.google.com/github/CS7150/classdemos/blob/main/LearningXor.ipynb">Colab</a>
+        <a href="https://github.com/CS7150/classdemos/blob/main/LearningXor.ipynb">Source</a>
+      </div>
+    </li>
+    <li>
+      <div class="name">Learning XOR (batch variant)
+        <span>The same network trained on the full truth table each step instead of one row at a time.</span></div>
+      <div class="links">
+        <a href="https://colab.research.google.com/github/CS7150/classdemos/blob/main/Learning%20Xor.ipynb">Colab</a>
+        <a href="https://github.com/CS7150/classdemos/blob/main/Learning%20Xor.ipynb">Source</a>
+      </div>
+    </li>
+    <li>
+      <div class="name">Learning Four-Layer XOR
+        <span>A deeper net on XOR, checkerboard, and sine-wave targets, with a widget for the training run.</span></div>
+      <div class="links">
+        <a href="https://colab.research.google.com/github/CS7150/classdemos/blob/main/LearningFourLayerXor.ipynb">Colab</a>
+        <a href="https://github.com/CS7150/classdemos/blob/main/LearningFourLayerXor.ipynb">Source</a>
+      </div>
+    </li>
+    <li>
+      <div class="name">Rumelhart, Hinton &amp; Williams Mirror
+        <span>Reproduces the 1986 symmetry-detection experiment on all 64 six-bit patterns.</span></div>
+      <div class="links">
+        <a href="https://colab.research.google.com/github/CS7150/classdemos/blob/main/RumelhartHintonWilliamsMirror.ipynb">Colab</a>
+        <a href="https://github.com/CS7150/classdemos/blob/main/RumelhartHintonWilliamsMirror.ipynb">Source</a>
+      </div>
+    </li>
+  </ul>
+</div>
+
+<div class="group">
+  <h3>Training dynamics</h3>
+  <p class="blurb">Watching decision boundaries and loss surfaces move while a small network learns.</p>
+  <ul class="nb">
+    <li>
+      <div class="name">Two-Layer 2D Net Widget
+        <span>An interactive two-layer ReLU classifier: hidden-unit lines and the boundary they compose.</span></div>
+      <div class="links">
+        <a href="https://colab.research.google.com/github/CS7150/classdemos/blob/main/TwoLayerTwoDNetWidget.ipynb">Colab</a>
+        <a href="https://github.com/CS7150/classdemos/blob/main/TwoLayerTwoDNetWidget.ipynb">Source</a>
+      </div>
+    </li>
+    <li>
+      <div class="name">Explore Two-Layer 2D Net
+        <span>The same network with the training run scrubbable, for comparing optimizers and targets.</span></div>
+      <div class="links">
+        <a href="https://colab.research.google.com/github/CS7150/classdemos/blob/main/ExploreTwoLayerTwoDNet.ipynb">Colab</a>
+        <a href="https://github.com/CS7150/classdemos/blob/main/ExploreTwoLayerTwoDNet.ipynb">Source</a>
+      </div>
+    </li>
+    <li>
+      <div class="name">2D Optimization
+        <span>Gradient descent on a small 2D classification problem, plotted alongside the decision boundary.</span></div>
+      <div class="links">
+        <a href="https://colab.research.google.com/github/CS7150/classdemos/blob/main/2dOptimization.ipynb">Colab</a>
+        <a href="https://github.com/CS7150/classdemos/blob/main/2dOptimization.ipynb">Source</a>
+      </div>
+    </li>
+  </ul>
+</div>
+
+<div class="group">
+  <h3>Backpropagation and loss functions</h3>
+  <p class="blurb">Derivatives by hand, and what different losses actually reward.</p>
+  <ul class="nb">
+    <li>
+      <div class="name">By-Hand Backpropagation
+        <span>Build a computation graph from scratch and implement the forward and backward passes yourself.</span></div>
+      <div class="links">
+        <a href="https://colab.research.google.com/github/CS7150/classdemos/blob/main/ByHandBackpropagation.ipynb">Colab</a>
+        <a href="https://github.com/CS7150/classdemos/blob/main/ByHandBackpropagation.ipynb">Source</a>
+      </div>
+    </li>
+    <li>
+      <div class="name">Graph KL Loss
+        <span>KL divergence, cross-entropy, MSE and L1 over the same softmax, graphed against each other.</span></div>
+      <div class="links">
+        <a href="https://colab.research.google.com/github/CS7150/classdemos/blob/main/GraphKLLoss.ipynb">Colab</a>
+        <a href="https://github.com/CS7150/classdemos/blob/main/GraphKLLoss.ipynb">Source</a>
+      </div>
+    </li>
+    <li>
+      <div class="name">Softmax Chart
+        <span>The figure for turning a pair of logits into probabilities and comparing them to a target.</span></div>
+      <div class="links">
+        <a href="https://colab.research.google.com/github/CS7150/classdemos/blob/main/SoftmaxChart.ipynb">Colab</a>
+        <a href="https://github.com/CS7150/classdemos/blob/main/SoftmaxChart.ipynb">Source</a>
+      </div>
+    </li>
+  </ul>
+</div>
+
+<div class="group">
+  <h3>Convolution and vision</h3>
+  <p class="blurb">Convolution as a matrix, and the fully-connected versus convolutional comparison.</p>
+  <ul class="nb">
+    <li>
+      <div class="name">Toeplitz Convolutions
+        <span>1D and 2D convolution written as Toeplitz matrices: shift equivariance, padding, parameter counts.</span></div>
+      <div class="links">
+        <a href="https://colab.research.google.com/github/CS7150/classdemos/blob/main/TopelitzConvolutions.ipynb">Colab</a>
+        <a href="https://github.com/CS7150/classdemos/blob/main/TopelitzConvolutions.ipynb">Source</a>
+      </div>
+    </li>
+    <li>
+      <div class="name">CIFAR-10 Classifier
+        <span>Homework notebook: a fully-connected baseline on CIFAR-10, then a convolutional network.</span></div>
+      <div class="links">
+        <a href="https://colab.research.google.com/github/CS7150/classdemos/blob/main/CIFAR_classifier.ipynb">Colab</a>
+        <a href="https://github.com/CS7150/classdemos/blob/main/CIFAR_classifier.ipynb">Source</a>
+      </div>
+    </li>
+  </ul>
+</div>
+
+<div class="group">
+  <h3>Large pretrained models</h3>
+  <p class="blurb">Poking at CLIP and Stable Diffusion, and building the sample data they run on.</p>
+  <ul class="nb">
+    <li>
+      <div class="name">CLIP Doctor
+        <span>Rank images by cosine similarity to text prompts using a pretrained CLIP ViT-B/32.</span></div>
+      <div class="links">
+        <a href="https://colab.research.google.com/github/CS7150/classdemos/blob/main/ClipDoctor.ipynb">Colab</a>
+        <a href="https://github.com/CS7150/classdemos/blob/main/ClipDoctor.ipynb">Source</a>
+      </div>
+    </li>
+    <li>
+      <div class="name">Diffusion
+        <span>Take a Stable Diffusion pipeline apart and look at the networks inside it.</span></div>
+      <div class="links">
+        <a href="https://colab.research.google.com/github/CS7150/classdemos/blob/main/Diffusion.ipynb">Colab</a>
+        <a href="https://github.com/CS7150/classdemos/blob/main/Diffusion.ipynb">Source</a>
+      </div>
+    </li>
+    <li>
+      <div class="name">Data Set Maker
+        <span>How the coco_humans sample set used by the other notebooks was built from COCO 2017.</span></div>
+      <div class="links">
+        <a href="https://colab.research.google.com/github/CS7150/classdemos/blob/main/DataSetMaker.ipynb">Colab</a>
+        <a href="https://github.com/CS7150/classdemos/blob/main/DataSetMaker.ipynb">Source</a>
+      </div>
+    </li>
+  </ul>
+</div>
+
+<footer>
+  Several notebooks import the small <a href="https://github.com/CS7150/classdemos/tree/main/cs7150">cs7150</a>
+  helper package from this repository, and some use
+  <a href="https://github.com/davidbau/baukit">baukit</a> for their widgets.
+  &middot; <a href="https://github.com/CS7150/classdemos">Repository</a>
+</footer>
+
+</div>
+</body>
+</html>
