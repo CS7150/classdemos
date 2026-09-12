@@ -47,7 +47,7 @@ table.bt tr.now td{color:var(--text-primary);font-weight:500}
 <svg viewBox="0 0 1040 440" role="img" preserveAspectRatio="xMidYMid meet">
 <title>Perceptron learning in data space and weight space</title>
 <desc>Left: labelled points, the margin corridor, the model's separating plane, and the update parallelogram. Right: weight space with one constraint line per example, the green wedge of weight vectors that classify everything correctly, the blue bound cone, the trajectory so far, and an optional worst-case zigzag riding the cone edge. A slider scrubs backwards and forwards through the run's history.</desc>
-<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker><clipPath id="wclip"><rect x="530" y="44" width="498" height="388"/></clipPath></defs>
 <g id="stage"></g>
 </svg>
 </div>
@@ -60,7 +60,7 @@ table.bt tr.now td{color:var(--text-primary);font-weight:500}
 <label class="cb"><input type="checkbox" id="z0" onchange="setz(this.checked)">start w at 0</label>
 </div>
 <div class="row">
-<span class="klab">history</span>
+<span class="klab">steps</span>
 <input type="range" id="ks" min="0" max="0" step="1" value="0" oninput="setk(+this.value)">
 <span class="knum" id="kv">0</span>
 </div>
@@ -68,7 +68,7 @@ table.bt tr.now td{color:var(--text-primary);font-weight:500}
 <div class="cap" id="caption"></div>
 <div class="lg">Amber line: the model's separating plane, perpendicular to w. Blue half-plane: where the model says +. Pink cap: where w must lie after k mistakes, cut by the length ceiling |w| &#8804; &#8730;(|w&#8320;|&#178; + kR&#178;) and the shadow floor w*&#183;w &#8805; w*&#183;w&#8320; + k&#947;; the dashed pink rays are the cone it spans. Green wedge: every w that classifies every point correctly. Pink zigzag: the extremal run, stepping corner to corner where the chord meets the arc. Each step picks adversarially: of the mistakes available, the one whose update leaves w at the widest angle to w*.</div>
 <script>
-var LX=261,LY=228,RX=779,RY=228,LR=[12,44,510,432],RRc=[530,44,1028,432],ST=0.0012,WR=196,RFIT=184;
+var LX=261,LY=228,RX=779,RY=228,LR=[12,44,510,432],RRc=[530,44,1028,432],ST=0.0012,WR=196;
 var W,U,XS,P,G,RAD,KB,p0,A1,A2,WEDGE,W0,S0=0,N0=0;
 var sc=110,HIST,HITS,ci,hit,hs,phase,msg,kk,WC=false,Z0=false,w,BEY=false;
 function L(a,b){return [LX+sc*a,LY-sc*b];}
@@ -147,7 +147,7 @@ function setk(v){
 function setwc(v){WC=v;anim();}
 function setz(v){Z0=v;boot();}
 function startMsg(){return Z0?'w starts at zero: every point ties, so every point counts as a mistake, and the cone constrains nothing.'
- :'w starts within 15&#176; of &#8722;w*, almost exactly backwards. The amber line is its separating plane: most of the points land on the wrong side.';}
+ :'w starts pointed the wrong way. The amber line is its separating plane: most of the points land on the wrong side.';}
 function para(F,rc,lab){var cr=corr(),pv=[w[0]+cr[0],w[1]+cr[1]],s='';
  s+=ln(F(0,0),F(cr[0],cr[1]),rc,'stroke="#D85A30" stroke-width="2.5"',0,1);
  s+=ln(F(w[0],w[1]),F(pv[0],pv[1]),rc,'stroke="#D85A30" stroke-width="1" stroke-dasharray="6 5"',0);
@@ -185,14 +185,15 @@ function render(){
  // The bound pins two things at once: |w| <= rad(k) and w*.w >= shad(k).  Together they cut a
  // circular cap out of weight space, and the cone is only its angular hull.  Draw the cap when
  // its radius fits the panel -- ticking "worst case" zooms out far enough to keep it in view.
- var cr=rad(ci)*sc,cf=capAngle(ci),capFits=!imp&&cr<=RFIT&&cr>2;
- if(vac&&!capFits)s+='<circle cx="'+RX+'" cy="'+RY+'" r="'+WR+'" fill="#D4537E" opacity="0.13"/>';
- else if(!imp&&!capFits)s+=wedge(p0-th,p0+th,WR,'#D4537E',0.15);
- if(capFits){
+ // Always at true scale, however far off the panel that reaches: the clip rect cuts it at the
+ // plot's edge and the rest is left to the imagination.  Ticking "worst case" zooms out to fit.
+ var cr=rad(ci)*sc,cf=capAngle(ci),ray=Math.max(WR,cr*1.15);
+ if(!imp){s+='<g clip-path="url(#wclip)">';
   if(cf>=Math.PI-1e-9)s+='<circle cx="'+RX+'" cy="'+RY+'" r="'+cr.toFixed(1)+'" fill="#D4537E" fill-opacity="0.20" stroke="#C0456C" stroke-opacity="0.7" stroke-width="1.2"/>';
   else s+=capShape(p0-cf,p0+cf,cr);
-  // the cone continues past the arc as an angular claim, but nothing out there is reachable
-  if(!vac)for(var e=-1;e<=1;e+=2)s+='<line x1="'+RX+'" y1="'+RY+'" x2="'+(RX+WR*Math.cos(p0+e*th)).toFixed(1)+'" y2="'+(RY-WR*Math.sin(p0+e*th)).toFixed(1)+'" stroke="#D4537E" stroke-width="1" stroke-dasharray="5 5" opacity="0.55"/>';}
+  // the cone continues past the corners as an angular claim, over ground nothing can reach
+  if(!vac)for(var e=-1;e<=1;e+=2)s+='<line x1="'+RX+'" y1="'+RY+'" x2="'+(RX+ray*Math.cos(p0+e*th)).toFixed(1)+'" y2="'+(RY-ray*Math.sin(p0+e*th)).toFixed(1)+'" stroke="#D4537E" stroke-width="1" stroke-dasharray="5 5" opacity="0.55"/>';
+  s+='</g>';}
  // keep the label clear of the w* tick, which sits wherever w* happens to point
  if(vac)s+='<text class="ts" x="'+RX+'" y="'+(Math.sin(p0)>0?RY+WR-4:RY-WR+20).toFixed(0)+'" text-anchor="middle" fill="#993556">cone: every direction</text>';
  s+=wedge(A1,A2,WR,'#1D9E75',0.34);
