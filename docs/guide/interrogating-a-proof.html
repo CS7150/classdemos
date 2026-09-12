@@ -64,6 +64,11 @@ figcaption{font-size:14px;color:var(--text-muted);margin-top:7px}
 .box ol li{margin-bottom:9px}
 .box ol li b{color:var(--text-primary);font-weight:600}
 .close{margin-top:34px}
+pre.code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13.5px;line-height:1.6;
+ background:var(--surface-1);border:1px solid var(--border);border-radius:8px;padding:12px 15px;
+ margin:0 0 14px 17px;overflow-x:auto;color:var(--text-primary)}
+ol.proof{margin:0 0 14px 17px;padding-left:22px;color:var(--text-secondary)}
+ol.proof li{margin-bottom:8px}
 .lede{color:var(--text-secondary);max-width:66ch;margin:0 0 4px}
 h2+.lede{margin-top:-6px}
 .ts{font-size:15px;fill:var(--text-secondary)}
@@ -85,13 +90,16 @@ svg.old .ts{font-size:13px}
 
 <header>
 <h1>Interrogating a proof with an LLM<span> &mdash; an annotated transcript</span></h1>
-<p>A record of building the
-<a href="../demos/perceptron.html">perceptron convergence demo</a> across two conversations with an
-LLM agent: one in a plain chat that produced the first working figure, and one in a coding agent
-that rebuilt most of what that figure meant. Almost nothing here was specified in advance, and the
-questions are the part worth keeping.</p>
-<p>The centre column has the prompts, what came back, and the figure as it stood at that moment.
-The margin has the reasoning that led to the next question.</p>
+<p>How can you steer an AI to teach you something new that you don&rsquo;t know yet? AI agents are
+trained to follow your instructions, and they can be great teachers, but it can be a challenge to get
+them to teach you something you haven&rsquo;t learned yet. Here is an annotated summary of a
+conversation you can try yourself, showing several techniques for doing it.</p>
+<p>The conversation is about learning Rosenblatt&rsquo;s perceptron algorithm, and how to prove that
+it converges. Even though the AI can give a proof in a single prompt, it took a few hours of
+conversation to get the AI to really explain it well. Along the way I am asking it to make a pretty
+visual explanation as an interactive JavaScript widget.</p>
+<p>The centre column has the prompts, what came back, and the figure as it stood at that moment. The
+margin has what I was thinking that led to the next question.</p>
 </header>
 
 <div class="box">
@@ -106,10 +114,14 @@ the theorem. Nothing in the conversation will flag this. Only a check will.</p>
 <p>The transcript below shows ways to overcome all three of these problems.</p>
 </div>
 <h2>Part one &mdash; getting the first picture</h2>
-<p class="lede">This half ran in a plain chat, starting from &ldquo;I&rsquo;m going to teach
-Rosenblatt&rsquo;s algorithm today, what is the best way to teach it?&rdquo; Interactive artifacts are
-not kept in shared conversations, so the first two figures here are reconstructions, redrawn from
-screenshots; the rest were rebuilt by running the original code for each step.</p>
+<p class="lede">This half ran in an ordinary chat. Interactive artifacts are not kept in shared
+conversations, so two of the figures here are redrawn from screenshots; the rest were rebuilt by
+running the original code for each step.</p>
+<section class="beat"><div class="main"><p class="prompt"><span class="who">You</span>&ldquo;I&rsquo;m going to teach Rosenblatt&rsquo;s algorithm today. What is the best way to teach it? Remind me exactly the algorithm.&rdquo;</p><p class="reply">The algorithm came back in four lines. Augment each <code>x</code> with a constant 1 so the bias rides along in <code>w</code>, take labels <code>y &isin; {+1, &minus;1}</code>, and:</p><pre class="code">w &larr; 0
+repeat until no mistakes:
+    for each (x, y) in the training set:
+        if y (w &middot; x) &le; 0:        # a mistake, ties included
+            w &larr; w + y x</pre><p class="reply">Then Novikoff&rsquo;s bound. If some unit <code>w*</code> separates the data with margin <code>&gamma; = min<sub>i</sub> y<sub>i</sub>(w*&middot;x<sub>i</sub>) &gt; 0</code>, and every <code>&#8741;x<sub>i</sub>&#8741; &le; R</code>, then the algorithm makes at most <code>(R/&gamma;)&sup2;</code> mistakes, whatever order the examples arrive in.</p><p class="reply">And the proof, in three steps:</p><ol class="proof"><li>Every mistake grows the projection: <code>w*&middot;w<sub>k</sub> &ge; w*&middot;w<sub>k&minus;1</sub> + &gamma;</code>, so <code>w*&middot;w<sub>k</sub> &ge; k&gamma;</code>.</li><li>Every mistake barely grows the length: <code>&#8741;w<sub>k</sub>&#8741;&sup2; = &#8741;w<sub>k&minus;1</sub>&#8741;&sup2; + 2y(w<sub>k&minus;1</sub>&middot;x) + &#8741;x&#8741;&sup2; &le; &#8741;w<sub>k&minus;1</sub>&#8741;&sup2; + R&sup2;</code>, because the middle term is <code>&le; 0</code> exactly when it was a mistake. So <code>&#8741;w<sub>k</sub>&#8741; &le; &radic;k&middot;R</code>.</li><li>Cauchy&ndash;Schwarz: <code>k&gamma; &le; w*&middot;w<sub>k</sub> &le; &#8741;w<sub>k</sub>&#8741; &le; &radic;k&middot;R</code>, which rearranges to <code>k &le; (R/&gamma;)&sup2;</code>.</li></ol><p class="reply">Correct, complete, and delivered in one prompt.</p></div><aside class="note"><h4>This is a fine proof, and I didn't understand it</h4><p>That proof is all fine and good if you are a mathematician who is very familiar with making Cauchy&ndash;Schwarz inequality arguments. For everybody else it lacks intuition. Nothing in it is wrong; it just doesn't tell you <i>why</i> any of it is true.</p><p>If you don't understand something an AI agent has told you, the most important thing to do is to say so. I did that in about twenty different ways over the rest of this conversation, until we ended up with something I actually understood.</p><span class="did">Say &ldquo;I don't understand&rdquo; out loud, and keep saying it. A correct answer you can't follow is not the end of the exchange; it is the start of one.</span></aside></section>
 <section class="beat"><div class="main"><p class="prompt"><span class="who">You</span>&ldquo;Simplify the proof for me; make it common-sense for whiteboard argument.&rdquo;</p><p class="reply">&ldquo;Whiteboard version: two gauges on the board, one counting real progress, one counting bloat. Progress climbs steadily. Bloat can't keep up. When they cross, you're out of mistakes.&rdquo;</p><p class="reply">Then the units, set first so the rest reads in one scale: the longest input has length 1, and &gamma; is how far the good separator keeps points off the fence. Gauge 1 is the shadow on true north, climbing by at least &gamma; a mistake. Gauge 2 is the length, which cannot keep up because the correction always leans backward.</p><p class="reply">That vocabulary &mdash; gauges, true north, progress against bloat &mdash; is what the rest of both conversations ran on.</p></div><aside class="note"><h4>I asked for plain words before I asked for a picture</h4><p>When I asked for a whiteboard proof, it didn't summarise the algebra. It gave me words I might actually say out loud at a board: two gauges, one counting progress and one counting bloat, and the moment they cross.</p><p>The words sketched the intuition, but so briefly that on their own they were almost nonsensical. That is a common AI problem. No worries though &mdash; I was after a figure.</p><span class="did">Ask for the common-sense version early, and separately from asking for a drawing. They are different questions, and the answer to one is not a specification for the other.</span></aside></section>
 <section class="beat"><div class="main"><p class="prompt"><span class="who">You</span>&ldquo;Please draw the diagram here for me. Maybe with js/svg?&rdquo;</p><p class="reply">What came back was a plot of the two sides of the inequality: <code>k&gamma;</code> rising as a straight line, <code>&radic;k</code> as a curve, a slider for &gamma;, and the crossing point running away as the margin shrinks.</p><figure><svg class="snap" viewBox="0 0 660 404" role="img">
 <title>The two gauges colliding</title>
@@ -235,81 +247,14 @@ bound drawn as a blue cone.</figcaption></figure>
 <section class="beat"><div class="main"><p class="prompt"><span class="who">You</span>&ldquo;Maybe label it <i>pink: Cauchy&ndash;Schwarz limit</i>, or <i>pink: bounded region for worst-case w</i>?&rdquo;</p><p class="reply">Neither fits. The region is the conjunction of the two inductive bounds; Cauchy&ndash;Schwarz is the step applied to it to get the cone, so that name belongs to the input. And it holds every <code>w</code> still permitted, not the worst one, which is its corner. The label became &ldquo;where w must lie after k mistakes&rdquo; &mdash; necessary rather than sufficient.</p></div><aside class="note"><h4>I proposed two names and both were wrong</h4><p>I suggested calling the region the Cauchy&ndash;Schwarz limit, or the bounded region for the worst case. The agent pushed back on both, and was right to.</p><p>Cauchy&ndash;Schwarz is the step you apply to the region to get the cone, so that name belongs to the input. And the region holds every <code>w</code> still permitted, not just the worst one, which is only its corner.</p><span class="did">Propose names deliberately and ask for arguments against them. A wrong name repeats, and the figure never contradicts it.</span></aside></section>
 
 
+
 <div class="close">
-<h2>The strategy underneath</h2>
-
 <div class="box">
-<h3>What the questions were drawn from</h3>
-<p><b>The statement of the theorem, held next to the picture.</b> Nearly every question that changed
-something traces back to a specific clause. &ldquo;What&rsquo;s it bounding?&rdquo; comes from knowing
-the theorem bounds <code>w</code>. &ldquo;Reason from the structure of the proof&rdquo; comes from
-knowing the conclusion is about a ratio. The figure gets compared against the sentence, not against
-taste.</p>
-<p><b>Shape sense that runs ahead of the algebra.</b> &ldquo;Is it a parallelogram?&rdquo;
-&ldquo;Maybe it touches the corner.&rdquo; &ldquo;Shouldn&rsquo;t those be half-lines?&rdquo; None of
-these were verified before being asked. Half-seeing a structure and naming it is enough, and the
-naming is what makes the answer checkable.</p>
-<p><b>The room.</b> &ldquo;So we can talk about it out loud in class unambiguously.&rdquo; Imagining
-saying a thing to thirty people is a constraint the mathematics does not supply, and it caught both a
-stale label and two wrong names.</p>
-<p><b>The ends of the range.</b> What should this show at k = 0, where the theorem says nothing? What
-happens when the margin goes to zero? Degenerate cases are cheap to ask about and the answers are
-unambiguous.</p>
-<p><b>Looking.</b> Several turns are just the rendering arriving and the understanding changing:
-&ldquo;now that you&rsquo;ve drawn it, I see.&rdquo; That is a use of the agent as a rendering
-surface rather than as a source of answers, and it is the fastest thing in either transcript.</p>
-</div>
-
-<div class="box">
-<h3>Where to press, and where to let it run</h3>
-<p>The pressure is not applied evenly. Layout, colour and wording were handed over with almost no
-argument &mdash; say what you want, look at the result, adjust. What got interrogated was every claim
-about what a drawn thing <i>means</i>.</p>
-<p>The sharpest moment to press is when the agent narrates significance. The violet-wedge problem
-happened exactly where the reply said, in effect, here is the convergence argument made visible.
-Adjacency to a proof is not a role in it, and a figure placed beside an argument will be read as part
-of it.</p>
-<p>Openness is cheapest where building is cheap. &ldquo;Switch to raw x&rdquo; cost three minutes and
-settled a question that discussion had not. When a change is one commit, rendering beats reasoning
-about what the rendering would look like.</p>
-<p>The agent is also worth using as a source of structure and not only as a draftsman. Kaczmarz, the
-standard-basis construction that saturates the bound, the dimension argument for why two dimensions
-cannot realise the worst case &mdash; none of those were prompted by someone who already knew them.
-Take the mathematics, then check it.</p>
-</div>
-
-<div class="box">
-<h3>What agreement looks like from the inside</h3>
-<p>Across both conversations the agent opened replies with &ldquo;Fair&rdquo;, &ldquo;Good
-catch&rdquo;, &ldquo;Good instinct&rdquo;, &ldquo;You&rsquo;re right, and the fault is mine.&rdquo;
-Those phrases attach equally to the turns that fixed something real and the turns that built the
-wrong thing well. The warmth carries no information.</p>
-<p>The failure mode here was never flattery. It was unearned significance: a correct object given a
-role it did not have. The agent&rsquo;s own description afterwards is exact &mdash; <i>I put it next
-to the proof talk and made it look load-bearing</i>. Nothing in the conversation could have surfaced
-that, because the conversation was about what the wedge showed, and it did show that.</p>
-<p>What surfaced it was leaving the conversation and looking at the screen with the theorem in mind.
-The check is mechanical: for each element, what object does it constrain, and is that object where
-the element says it should be. Run it after every change. It caught two separate defects in the same
-sitting, and both times the answer was available in one glance once the question was asked.</p>
-<p>The signals worth noticing run the other way. The agent refused two proposed names, contradicted
-the premise of a question about the spray, volunteered that the extremal path needs dimension at
-least k and so cannot occur in the figure being drawn, and said plainly that it did not know the
-worst case in fixed small dimension and would want to check. Those turns moved the understanding
-more than any of the agreements.</p>
-</div>
-
-<div class="box">
-<h3>The shape of it</h3>
-<p>No part of this was specified in advance. The sequence is: ask for something, look at what
-arrives, find the one element that does not fit, ask what it means, and trace the answer to its cause
-rather than patching where it showed.</p>
-<p>Two conversations and about forty rounds produced a figure whose parts each do a job: a chord
-moving outward linearly while an arc grows as the square root, the corner where they meet, the only
-point saturating both bounds at once, and a wedge whose width is what remains of 180&deg; once the
-data has had its say.</p>
-<p>Each of those came from a question that started in confusion, and the
-<a href="../demos/perceptron.html">finished demo</a> shows none of it.</p>
+<h3>Try it yourself</h3>
+<p>The visualization we ended up with is <a href="../demos/perceptron.html">here</a>. You can play
+with it to learn a bit about the algorithm and its proof.</p>
+<p>But my recommendation is to try having this conversation yourself, and to build your own
+visualization. You will find that you learn a great deal from making your own.</p>
 </div>
 </div>
 
