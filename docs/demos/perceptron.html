@@ -66,7 +66,7 @@ table.bt tr.now td{color:var(--text-primary);font-weight:500}
 </div>
 <div class="rd" id="readout"></div>
 <div class="cap" id="caption"></div>
-<div class="lg">Amber line: the model's separating plane, perpendicular to w. Blue cone: where w must lie after k mistakes. Green wedge: every w that classifies every point correctly. Pink zigzag: the extremal run, riding the cone edge.</div>
+<div class="lg">Amber line: the model's separating plane, perpendicular to w. Blue cone: where w must lie after k mistakes. Green wedge: every w that classifies every point correctly. Pink zigzag: the extremal run, riding the cone edge. Each step picks adversarially: among the mistakes available, one of the two whose update leaves w at the widest angle to w*.</div>
 <script>
 var LX=261,LY=228,RX=779,RY=228,LR=[12,44,510,432],RRc=[530,44,1028,432],ST=0.0012,WR=196;
 var W,U,XS,P,G,RAD,KB,p0,A1,A2,WEDGE,W0,S0=0,N0=0;
@@ -227,14 +227,31 @@ function caption(n){
  t+='</table>';
  document.getElementById('caption').innerHTML=h+t;
 }
+function pickWorst(){
+ // Rank every available mistake by the angle its update would leave between w and w*,
+ // worst (widest) first, then choose between the two worst.  Each point sits in P twice,
+ // as +x and as -x labelled -, and both give the same y.x, so keep only distinct updates.
+ var cand=[];
+ for(var j=0;j<P.length;j++){var p=P[j];
+  if(!bad(p))continue;
+  var cx=p[2]*p[0],cy=p[2]*p[1],vx=w[0]+cx,vy=w[1]+cy,m=Math.hypot(vx,vy);
+  cand.push([j,m>0?(W[0]*vx+W[1]*vy)/m:-1,cx,cy]);}
+ if(!cand.length)return null;
+ cand.sort(function(a,b){return a[1]-b[1];});
+ var top=[cand[0]];
+ for(var k=1;k<cand.length&&top.length<2;k++){var dup=false;
+  for(var t=0;t<top.length;t++)
+   if(Math.abs(cand[k][2]-top[t][2])<1e-12&&Math.abs(cand[k][3]-top[t][3])<1e-12)dup=true;
+  if(!dup)top.push(cand[k]);}
+ return top[Math.floor(Math.random()*top.length)][0];}
 function act(){var btn=document.getElementById('go');
  if(phase==='find'){
   if(ci>head()){ci=head();w=HIST[ci];syncSlider();}
   else if(ci<head()){HIST=HIST.slice(0,ci+1);HITS=HITS.slice(0,ci);syncSlider();}
-  for(var j=0;j<P.length;j++){var i=j%P.length,p=P[i];
-   if(bad(p)){hit=i;hs='bad';phase='apply';btn.textContent='Add y\u00b7x to w';
-    msg='Labelled '+(p[2]>0?'+ but outside the shaded half-plane.':'&#8722; but inside the shaded half-plane.')+' The parallelogram shows where w goes next.';
-    anim();return;}}
+  var i=pickWorst();
+  if(i!=null){var p=P[i];hit=i;hs='bad';phase='apply';btn.textContent='Add y\u00b7x to w';
+   msg='Labelled '+(p[2]>0?'+ but outside the shaded half-plane.':'&#8722; but inside the shaded half-plane.')+' Of every mistake available, this one leaves w among the two furthest from w*. The parallelogram shows where w goes next.';
+   anim();return;}
   hit=null;hs=null;msg='No mistakes left. w sits inside the green wedge and never moves again.';anim();return;}
  var c=corr();HIST.push([w[0]+c[0],w[1]+c[1]]);HITS.push(hit);ci=HIST.length-1;w=HIST[ci];
  hs='fixed';phase='find';btn.textContent='Find mistake';
@@ -243,9 +260,9 @@ function act(){var btn=document.getElementById('go');
 function advance(){
  if(ci>head()){ci=head();w=HIST[ci];}
  else if(ci<head()){HIST=HIST.slice(0,ci+1);HITS=HITS.slice(0,ci);}
- for(var j=0;j<P.length;j++){var p=P[j];
-  if(bad(p)){HIST.push([w[0]+p[2]*p[0],w[1]+p[2]*p[1]]);HITS.push(j);ci=HIST.length-1;w=HIST[ci];return true;}}
- return false;}
+ var j=pickWorst();
+ if(j==null)return false;
+ var p=P[j];HIST.push([w[0]+p[2]*p[0],w[1]+p[2]*p[1]]);HITS.push(j);ci=HIST.length-1;w=HIST[ci];return true;}
 function boot(){HIST=[Z0?[0,0]:[W0[0],W0[1]]];HITS=[];ci=0;w=HIST[0];hit=null;hs=null;phase='find';sc=110;
  recalc();syncSlider();msg=startMsg();
  document.getElementById('go').textContent='Find mistake';anim();}
