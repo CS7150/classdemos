@@ -193,9 +193,6 @@ function render(){
   // the cone continues past the corners as an angular claim, over ground nothing can reach
   if(!vac)for(var e=-1;e<=1;e+=2)s+='<line x1="'+RX+'" y1="'+RY+'" x2="'+(RX+ray*Math.cos(p0+e*th)).toFixed(1)+'" y2="'+(RY-ray*Math.sin(p0+e*th)).toFixed(1)+'" stroke="#D4537E" stroke-width="1" stroke-dasharray="5 5" opacity="0.55"/>';
   s+='</g>';}
- // Name the region, not the cone: it is bounded even while the cone admits every direction,
- // and the readout reports that separately.  Keep clear of the w* tick, wherever w* points.
- s+='<text class="ts" x="'+RX+'" y="'+(Math.sin(p0)>0?RY+WR-4:RY-WR+20).toFixed(0)+'" text-anchor="middle" fill="#993556">pink: where w must lie after k mistakes</text>';
  s+=wedge(A1,A2,WR,'#1D9E75',0.34);
  var hc=(hs==='bad'&&hit!=null)?corr():null;
  // Each point's dual: the hyperplane {w : w.x = 0} of weights that tie on it, perpendicular to
@@ -222,7 +219,12 @@ function render(){
 }
  s+=warrow(Rp,RRc);
  s+='<circle cx="'+RX+'" cy="'+RY+'" r="3" fill="var(--text-primary)"/>';
+ // Name the region, not the cone: it is bounded even while the cone admits every direction, and
+ // the readout reports that separately.  Drawn last, over the spray rather than under it, and
+ // kept clear of the w* tick wherever w* points.
+ s+='<text id="caplab" class="ts" x="'+RX+'" y="'+(Math.sin(p0)>0?RY+WR-4:RY-WR+20).toFixed(0)+'" text-anchor="middle" fill="#993556">pink: where w must lie after k mistakes</text>';
  document.getElementById('stage').innerHTML=s;
+ label();
  var ang=n>0?(Math.acos(Math.max(-1,Math.min(1,(W[0]*w[0]+W[1]*w[1])/n)))*180/Math.PI).toFixed(1)+'&#176;':'&#8212;';
  var cone=imp?'empty':(vac?'unbounded':(th*180/Math.PI).toFixed(1)+'&#176;');
  document.getElementById('readout').innerHTML=(msg?msg+'<br>':'')+
@@ -230,6 +232,13 @@ function render(){
   '<br>&#947;/R = '+(G/RAD).toFixed(3)+' &#183; cone here: <b>'+cone+'</b> &#183; wedge '+(WEDGE*180/Math.PI).toFixed(1)+'&#176; &#183; bound: at most <b>'+KB+'</b> mistakes';
  caption(n);
 }
+function label(){var t=document.getElementById('caplab');if(!t||!t.getBBox)return;
+ var b;try{b=t.getBBox();}catch(e){return;}
+ var r=document.createElementNS('http://www.w3.org/2000/svg','rect');
+ r.setAttribute('x',(b.x-7).toFixed(1));r.setAttribute('y',(b.y-3).toFixed(1));
+ r.setAttribute('width',(b.width+14).toFixed(1));r.setAttribute('height',(b.height+6).toFixed(1));
+ r.setAttribute('rx','4');r.setAttribute('fill','var(--bg)');
+ t.parentNode.insertBefore(r,t);}
 function f2(x){return x.toFixed(2);}
 function caption(n){
  var sB=shad(ci),rB=rad(ci),aS=W[0]*w[0]+W[1]*w[1],thB=coneAngle(ci);
