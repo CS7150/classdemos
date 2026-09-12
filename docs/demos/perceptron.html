@@ -90,27 +90,29 @@ function bad(p){return p[2]*(w[0]*p[0]+w[1]*p[1])<=0;}
 function corr(){var h=P[hit];return [h[2]*h[0],h[2]*h[1]];}
 function feasAll(f){var c=Math.cos(f),s=Math.sin(f);for(var j=0;j<XS.length;j++)if(c*XS[j][0]+s*XS[j][1]<=0)return false;return true;}
 function gen(){
- var nb=Math.round(+document.getElementById('np').value/2);
+ // Each point is drawn on its own: a margin m past w*, an offset t along the plane,
+ // and a label y, giving x = y(mw* + tu).  The two classes are sampled independently,
+ // so the cloud is not point-symmetric and no two points share an update y.x.
+ var np=+document.getElementById('np').value;
  var an=Math.random()*Math.PI*2;W=[Math.cos(an),Math.sin(an)];U=[-W[1],W[0]];
  XS=[];P=[];G=9;RAD=0;
- for(var i=0;i<nb;i++){
-  var m,t;
-  if(i===0){m=0.10+Math.random()*0.055;t=0.72+Math.random()*0.38;}
-  else if(i===1){m=0.10+Math.random()*0.055;t=-(0.72+Math.random()*0.38);}
-  else {m=0.13+Math.random()*0.34;t=(Math.random()*2-1)*1.02;}
+ for(var i=0;i<np;i++){
+  var m,t,y;
+  // Seed one point of each label close to the plane, to keep the margin narrow.
+  if(i===0){m=0.10+Math.random()*0.055;t=0.72+Math.random()*0.38;y=1;}
+  else if(i===1){m=0.10+Math.random()*0.055;t=-(0.72+Math.random()*0.38);y=-1;}
+  else {m=0.13+Math.random()*0.34;t=(Math.random()*2-1)*1.02;y=Math.random()<0.5?1:-1;}
   var a=m*W[0]+t*U[0],b=m*W[1]+t*U[1];
-  XS.push([a,b]);P.push([a,b,1]);P.push([-a,-b,-1]);
+  XS.push([a,b]);P.push([y*a,y*b,y]);
   G=Math.min(G,m);RAD=Math.max(RAD,Math.hypot(a,b));}
  for(var i2=P.length-1;i2>0;i2--){var j2=Math.floor(Math.random()*(i2+1)),tm=P[i2];P[i2]=P[j2];P[j2]=tm;}
  p0=Math.atan2(W[1],W[0]);A1=p0;A2=p0;
  var g1=0;while(feasAll(A1-ST)&&g1++<2600)A1-=ST;
  var g2=0;while(feasAll(A2+ST)&&g2++<2600)A2+=ST;
  WEDGE=(A2-A1)/2;
- var tgt=Math.round(nb*0.75),best=null,bd=99;
- for(var q=0;q<900;q++){var aa=Math.random()*2*Math.PI,v=[Math.cos(aa),Math.sin(aa)],cnt=0;
-  for(var r=0;r<XS.length;r++)if(v[0]*XS[r][0]+v[1]*XS[r][1]<=0)cnt++;
-  var dd=Math.abs(cnt-tgt);if(dd<bd){bd=dd;best=v;if(dd===0)break;}}
- W0=[best[0]*0.85*RAD,best[1]*0.85*RAD];}
+ // Start w pointed almost exactly backwards: within 15 degrees of -w*.
+ var a0=p0+Math.PI+(Math.random()*2-1)*15*Math.PI/180;
+ W0=[0.85*RAD*Math.cos(a0),0.85*RAD*Math.sin(a0)];}
 function shad(j){return S0+j*G;}
 function rad(j){return Math.sqrt(N0*N0+j*RAD*RAD);}
 function coneAngle(j){var s=shad(j);if(s<=0)return Math.PI;return Math.acos(Math.max(-1,Math.min(1,s/rad(j))));}
@@ -140,7 +142,7 @@ function setk(v){
 function setwc(v){WC=v;anim();}
 function setz(v){Z0=v;boot();}
 function startMsg(){return Z0?'w starts at zero: every point ties, so every point counts as a mistake, and the cone constrains nothing.'
- :'w starts pointed the wrong way. The amber line is its separating plane: a quarter of the points land on the right side.';}
+ :'w starts within 15&#176; of &#8722;w*, almost exactly backwards. The amber line is its separating plane: most of the points land on the wrong side.';}
 function para(F,rc,lab){var cr=corr(),pv=[w[0]+cr[0],w[1]+cr[1]],s='';
  s+=ln(F(0,0),F(cr[0],cr[1]),rc,'stroke="#D85A30" stroke-width="2.5"',0,1);
  s+=ln(F(w[0],w[1]),F(pv[0],pv[1]),rc,'stroke="#D85A30" stroke-width="1" stroke-dasharray="6 5"',0);
@@ -179,7 +181,9 @@ function render(){
   s+='<text class="ts" x="'+RX+'" y="'+(RY-WR+20)+'" text-anchor="middle" fill="#185FA5">cone: every direction</text>';}
  else if(!imp)s+=wedge(p0-th,p0+th,WR,'#378ADD',0.17);
  s+=wedge(A1,A2,WR,'#1D9E75',0.34);
- for(var j=0;j<XS.length;j++){var x=XS[j],nn=Math.hypot(x[0],x[1]),pp=[-x[1]/nn,x[0]/nn],hi=(hs==='bad'&&hit!=null&&Math.abs(Math.abs(P[hit][0])-Math.abs(x[0]))<1e-9);
+ var hc=(hs==='bad'&&hit!=null)?corr():null;
+ for(var j=0;j<XS.length;j++){var x=XS[j],nn=Math.hypot(x[0],x[1]),pp=[-x[1]/nn,x[0]/nn],
+  hi=(hc!=null&&Math.abs(x[0]-hc[0])<1e-9&&Math.abs(x[1]-hc[1])<1e-9);
   s+=ln(Rp(pp[0],pp[1]),Rp(-pp[0],-pp[1]),RRc,'stroke="'+(hi?'#E24B4A':'var(--border-strong)')+'" stroke-width="'+(hi?2.5:0.9)+'"',1);}
  s+='<line x1="'+RX+'" y1="'+RY+'" x2="'+(RX+188*Math.cos(p0)).toFixed(1)+'" y2="'+(RY-188*Math.sin(p0)).toFixed(1)+'" stroke="#0F6E56" stroke-width="2" stroke-dasharray="7 5"/>';
  s+='<text class="ts" x="'+(RX+208*Math.cos(p0)).toFixed(1)+'" y="'+(RY-208*Math.sin(p0)).toFixed(1)+'" text-anchor="middle" fill="#0F6E56">w*</text>';
@@ -229,8 +233,8 @@ function caption(n){
 }
 function pickWorst(){
  // Rank every available mistake by the angle its update would leave between w and w*,
- // worst (widest) first, then choose between the two worst.  Each point sits in P twice,
- // as +x and as -x labelled -, and both give the same y.x, so keep only distinct updates.
+ // worst (widest) first, then choose between the two worst.  Candidates that would move w
+ // identically count once, so the two are always genuinely different updates.
  var cand=[];
  for(var j=0;j<P.length;j++){var p=P[j];
   if(!bad(p))continue;
