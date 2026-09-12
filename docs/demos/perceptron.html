@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Rosenblatt's perceptron: mistakes, cones and the bound</title>
+<title>Rosenblatt's perceptron: update, margin, and bound</title>
 <style>
 :root{--bg:#faf9f5;--surface:#ffffff;--surface-1:#f1efe8;--text-primary:#26251f;--text-secondary:#5f5e5a;--text-muted:#888780;--border:#d3d1c7;--border-strong:#b4b2a9;}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#1a1a18;--surface:#232320;--surface-1:#2c2c2a;--text-primary:#eceae2;--text-secondary:#b4b2a9;--text-muted:#888780;--border:#3a3a36;--border-strong:#5f5e5a;}}
@@ -42,7 +42,7 @@ table.bt tr.now td{color:var(--text-primary);font-weight:500}
 </head>
 <body>
 <div class="nav"><a href="../">&larr; CS7150 class demos</a></div>
-<h1>Rosenblatt's perceptron: the update, the cone, and the bound</h1>
+<h1>Rosenblatt's perceptron: update, margin, and bound</h1>
 <div id="wrap">
 <svg viewBox="0 0 1040 440" role="img" preserveAspectRatio="xMidYMid meet">
 <title>Perceptron learning in data space and weight space</title>
