@@ -269,13 +269,12 @@ function act(){var btn=document.getElementById('go');
   if(ci>head()){ci=head();w=HIST[ci];syncSlider();}
   else if(ci<head()){HIST=HIST.slice(0,ci+1);HITS=HITS.slice(0,ci);syncSlider();}
   var i=pickWorst();
-  if(i!=null){var p=P[i];hit=i;hs='bad';phase='apply';btn.textContent='Add y\u00b7x to w';
-   msg='Labelled '+(p[2]>0?'+ but outside the shaded half-plane.':'&#8722; but inside the shaded half-plane.')+' Of every mistake available, this is the one whose update leaves w furthest from w*. The parallelogram shows where w goes next.';
+  if(i!=null){hit=i;hs='bad';phase='apply';btn.textContent='Add y\u00b7x to w';msg='';
    anim();return;}
   hit=null;hs=null;msg='No mistakes left. w sits inside the green wedge and never moves again.';anim();return;}
  var c=corr();HIST.push([w[0]+c[0],w[1]+c[1]]);HITS.push(hit);ci=HIST.length-1;w=HIST[ci];
  hs='fixed';phase='find';btn.textContent='Find mistake';
- msg='Committed. Scrub back to compare with where w was.';
+ msg='';
  syncSlider();anim();}
 function advance(){
  if(ci>head()){ci=head();w=HIST[ci];}
