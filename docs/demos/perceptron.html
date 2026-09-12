@@ -66,9 +66,9 @@ table.bt tr.now td{color:var(--text-primary);font-weight:500}
 </div>
 <div class="rd" id="readout"></div>
 <div class="cap" id="caption"></div>
-<div class="lg">Amber line: the model's separating plane, perpendicular to w. Blue half-plane: where the model says +. Pink cone: where w must lie after k mistakes. Green wedge: every w that classifies every point correctly. Pink zigzag: the extremal run, riding the cone's edge. Each step picks adversarially: of the mistakes available, the one whose update leaves w at the widest angle to w*.</div>
+<div class="lg">Amber line: the model's separating plane, perpendicular to w. Blue half-plane: where the model says +. Pink cap: where w must lie after k mistakes, cut by the length ceiling |w| &#8804; &#8730;(|w&#8320;|&#178; + kR&#178;) and the shadow floor w*&#183;w &#8805; w*&#183;w&#8320; + k&#947;; the dashed pink rays are the cone it spans. Green wedge: every w that classifies every point correctly. Pink zigzag: the extremal run, stepping corner to corner where the chord meets the arc. Each step picks adversarially: of the mistakes available, the one whose update leaves w at the widest angle to w*.</div>
 <script>
-var LX=261,LY=228,RX=779,RY=228,LR=[12,44,510,432],RRc=[530,44,1028,432],ST=0.0012,WR=196;
+var LX=261,LY=228,RX=779,RY=228,LR=[12,44,510,432],RRc=[530,44,1028,432],ST=0.0012,WR=196,RFIT=184;
 var W,U,XS,P,G,RAD,KB,p0,A1,A2,WEDGE,W0,S0=0,N0=0;
 var sc=110,HIST,HITS,ci,hit,hs,phase,msg,kk,WC=false,Z0=false,w,BEY=false;
 function L(a,b){return [LX+sc*a,LY-sc*b];}
@@ -115,11 +115,16 @@ function gen(){
  W0=[0.85*RAD*Math.cos(a0),0.85*RAD*Math.sin(a0)];}
 function shad(j){return S0+j*G;}
 function rad(j){return Math.sqrt(N0*N0+j*RAD*RAD);}
-function coneAngle(j){var s=shad(j);if(s<=0)return Math.PI;return Math.acos(Math.max(-1,Math.min(1,s/rad(j))));}
+function capAngle(j){var r=rad(j);return r>0?Math.acos(Math.max(-1,Math.min(1,shad(j)/r))):0;}
+function coneAngle(j){return shad(j)<=0?Math.PI:capAngle(j);}
 function recalc(){S0=W[0]*HIST[0][0]+W[1]*HIST[0][1];N0=Math.hypot(HIST[0][0],HIST[0][1]);KB=0;
  for(var q=1;q<=4000;q++){if(coneAngle(q)<=WEDGE){KB=q;break;}}
  if(!KB)KB=4000;}
-function wcTip(j){var th=coneAngle(j),an=p0+(j%2?th:-th),r=rad(j);return [r*Math.cos(an),r*Math.sin(an)];}
+function wcTip(j){var th=capAngle(j),an=p0+(j%2?th:-th),r=rad(j);return [r*Math.cos(an),r*Math.sin(an)];}
+function capShape(a1,a2,r){var big=(a2-a1)>Math.PI?1:0;
+ return '<path d="M '+(RX+r*Math.cos(a1)).toFixed(1)+' '+(RY-r*Math.sin(a1)).toFixed(1)+
+  ' A '+r.toFixed(1)+' '+r.toFixed(1)+' 0 '+big+' 0 '+(RX+r*Math.cos(a2)).toFixed(1)+' '+
+  (RY-r*Math.sin(a2)).toFixed(1)+' Z" fill="#D4537E" fill-opacity="0.20" stroke="#C0456C" stroke-opacity="0.7" stroke-width="1.2"/>';}
 function wedge(a1,a2,r,f,op){var big=(a2-a1)>Math.PI?1:0;
  return '<path d="M '+RX+' '+RY+' L '+(RX+r*Math.cos(a1)).toFixed(1)+' '+(RY-r*Math.sin(a1)).toFixed(1)+' A '+r+' '+r+' 0 '+big+' 0 '+(RX+r*Math.cos(a2)).toFixed(1)+' '+(RY-r*Math.sin(a2)).toFixed(1)+' Z" fill="'+f+'" opacity="'+op+'"/>';}
 function need(){var m=Math.hypot(w[0],w[1]);if(hs==='bad'&&hit!=null){var c=corr();m=Math.max(m,Math.hypot(w[0]+c[0],w[1]+c[1]));}
@@ -177,9 +182,19 @@ function render(){
  else if(ci>0&&ci<=head()&&HITS[ci-1]!=null){var hf=P[HITS[ci-1]],pf=L(hf[0],hf[1]);
   if(ins(pf,LR))s+='<circle cx="'+pf[0].toFixed(1)+'" cy="'+pf[1].toFixed(1)+'" r="13" fill="none" stroke="#1D9E75" stroke-width="2.5"/>';}
  var th=coneAngle(ci),imp=shad(ci)>rad(ci),vac=th>=Math.PI-1e-9;
- if(vac){s+='<circle cx="'+RX+'" cy="'+RY+'" r="'+WR+'" fill="#D4537E" opacity="0.13"/>';
-  s+='<text class="ts" x="'+RX+'" y="'+(RY-WR+20)+'" text-anchor="middle" fill="#993556">cone: every direction</text>';}
- else if(!imp)s+=wedge(p0-th,p0+th,WR,'#D4537E',0.15);
+ // The bound pins two things at once: |w| <= rad(k) and w*.w >= shad(k).  Together they cut a
+ // circular cap out of weight space, and the cone is only its angular hull.  Draw the cap when
+ // its radius fits the panel -- ticking "worst case" zooms out far enough to keep it in view.
+ var cr=rad(ci)*sc,cf=capAngle(ci),capFits=!imp&&cr<=RFIT&&cr>2;
+ if(vac&&!capFits)s+='<circle cx="'+RX+'" cy="'+RY+'" r="'+WR+'" fill="#D4537E" opacity="0.13"/>';
+ else if(!imp&&!capFits)s+=wedge(p0-th,p0+th,WR,'#D4537E',0.15);
+ if(capFits){
+  if(cf>=Math.PI-1e-9)s+='<circle cx="'+RX+'" cy="'+RY+'" r="'+cr.toFixed(1)+'" fill="#D4537E" fill-opacity="0.20" stroke="#C0456C" stroke-opacity="0.7" stroke-width="1.2"/>';
+  else s+=capShape(p0-cf,p0+cf,cr);
+  // the cone continues past the arc as an angular claim, but nothing out there is reachable
+  if(!vac)for(var e=-1;e<=1;e+=2)s+='<line x1="'+RX+'" y1="'+RY+'" x2="'+(RX+WR*Math.cos(p0+e*th)).toFixed(1)+'" y2="'+(RY-WR*Math.sin(p0+e*th)).toFixed(1)+'" stroke="#D4537E" stroke-width="1" stroke-dasharray="5 5" opacity="0.55"/>';}
+ // keep the label clear of the w* tick, which sits wherever w* happens to point
+ if(vac)s+='<text class="ts" x="'+RX+'" y="'+(Math.sin(p0)>0?RY+WR-4:RY-WR+20).toFixed(0)+'" text-anchor="middle" fill="#993556">cone: every direction</text>';
  s+=wedge(A1,A2,WR,'#1D9E75',0.34);
  var hc=(hs==='bad'&&hit!=null)?corr():null;
  for(var j=0;j<XS.length;j++){var x=XS[j],nn=Math.hypot(x[0],x[1]),pp=[-x[1]/nn,x[0]/nn],
