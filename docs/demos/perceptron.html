@@ -46,7 +46,7 @@ table.bt tr.now td{color:var(--text-primary);font-weight:500}
 <div id="wrap">
 <svg viewBox="0 0 1040 440" role="img" preserveAspectRatio="xMidYMid meet">
 <title>Perceptron learning in data space and weight space</title>
-<desc>Left: labelled points, the margin corridor, the model's separating plane, and the update parallelogram. Right: weight space with one constraint line per example, the green wedge of weight vectors that classify everything correctly, the blue bound cone, the trajectory so far, and an optional worst-case zigzag riding the cone edge. A slider scrubs backwards and forwards through the run's history.</desc>
+<desc>Left: labelled points, the margin corridor, the model's separating plane, and the update parallelogram. Right: weight space with one constraint line per example, the green wedge of weight vectors that classify everything correctly, the pink region where w must lie after k mistakes, the trajectory so far, and an optional worst-case zigzag stepping between that region's corners. A slider scrubs backwards and forwards through the run and past its end.</desc>
 <defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker><clipPath id="wclip"><rect x="530" y="44" width="498" height="388"/></clipPath></defs>
 <g id="stage"></g>
 </svg>
@@ -140,13 +140,12 @@ function setk(v){
  ci=v;w=HIST[Math.min(ci,head())];hit=null;hs=null;phase='find';
  document.getElementById('go').textContent='Find mistake';
  syncSlider();
- msg=ci===0?startMsg():(ci>head()
+ msg=ci===0?'':(ci>head()
    ?'Past the end of the run: w stopped at step '+head()+'. The cone keeps tightening and the worst case keeps walking its edge.'
    :(ci===head()?'At step '+ci+' of the run.':'Reviewing step '+ci+' of '+head()+'.'));
  anim();}
 function setwc(v){WC=v;anim();}
 function setz(v){Z0=v;boot();}
-function startMsg(){return Z0?'w starts at zero: every point ties, so every point counts as a mistake, and the cone constrains nothing.':'';}
 function para(F,rc,lab){var cr=corr(),pv=[w[0]+cr[0],w[1]+cr[1]],s='';
  s+=ln(F(0,0),F(cr[0],cr[1]),rc,'stroke="#D85A30" stroke-width="2.5"',0,1);
  s+=ln(F(w[0],w[1]),F(pv[0],pv[1]),rc,'stroke="#D85A30" stroke-width="1" stroke-dasharray="6 5"',0);
@@ -193,8 +192,9 @@ function render(){
   // the cone continues past the corners as an angular claim, over ground nothing can reach
   if(!vac)for(var e=-1;e<=1;e+=2)s+='<line x1="'+RX+'" y1="'+RY+'" x2="'+(RX+ray*Math.cos(p0+e*th)).toFixed(1)+'" y2="'+(RY-ray*Math.sin(p0+e*th)).toFixed(1)+'" stroke="#D4537E" stroke-width="1" stroke-dasharray="5 5" opacity="0.55"/>';
   s+='</g>';}
- // keep the label clear of the w* tick, which sits wherever w* happens to point
- if(vac)s+='<text class="ts" x="'+RX+'" y="'+(Math.sin(p0)>0?RY+WR-4:RY-WR+20).toFixed(0)+'" text-anchor="middle" fill="#993556">cone: every direction</text>';
+ // Name the region, not the cone: it is bounded even while the cone admits every direction,
+ // and the readout reports that separately.  Keep clear of the w* tick, wherever w* points.
+ s+='<text class="ts" x="'+RX+'" y="'+(Math.sin(p0)>0?RY+WR-4:RY-WR+20).toFixed(0)+'" text-anchor="middle" fill="#993556">pink: where w must lie after k mistakes</text>';
  s+=wedge(A1,A2,WR,'#1D9E75',0.34);
  var hc=(hs==='bad'&&hit!=null)?corr():null;
  for(var j=0;j<XS.length;j++){var x=XS[j],nn=Math.hypot(x[0],x[1]),pp=[-x[1]/nn,x[0]/nn],
@@ -277,7 +277,7 @@ function advance(){
  if(j==null)return false;
  var p=P[j];HIST.push([w[0]+p[2]*p[0],w[1]+p[2]*p[1]]);HITS.push(j);ci=HIST.length-1;w=HIST[ci];return true;}
 function boot(){HIST=[Z0?[0,0]:[W0[0],W0[1]]];HITS=[];ci=0;w=HIST[0];hit=null;hs=null;phase='find';sc=110;
- recalc();syncSlider();msg=startMsg();
+ recalc();syncSlider();msg='';
  document.getElementById('go').textContent='Find mistake';anim();}
 function fresh(){gen();boot();}
 document.addEventListener('keydown',function(e){
