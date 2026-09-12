@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Rosenblatt's perceptron: update, margin, and bound</title>
+<title>Rosenblatt's Perceptron Algorithm</title>
 <style>
 :root{--bg:#faf9f5;--surface:#ffffff;--surface-1:#f1efe8;--text-primary:#26251f;--text-secondary:#5f5e5a;--text-muted:#888780;--border:#d3d1c7;--border-strong:#b4b2a9;}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#1a1a18;--surface:#232320;--surface-1:#2c2c2a;--text-primary:#eceae2;--text-secondary:#b4b2a9;--text-muted:#888780;--border:#3a3a36;--border-strong:#5f5e5a;}}
@@ -11,7 +11,8 @@
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;background:var(--bg);color:var(--text-primary);font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;}
 body{min-height:100vh;display:flex;flex-direction:column;padding:16px 22px 20px;gap:10px}
-h1{font-size:19px;font-weight:500;margin:0;color:var(--text-secondary)}
+h1{font-size:22px;font-weight:600;margin:0;color:var(--text-primary);letter-spacing:-.01em}
+h1 span{font-size:17px;font-weight:400;color:var(--text-secondary);letter-spacing:0}
 .nav{font-size:14px;margin:0 0 -2px}
 .nav a{color:var(--text-muted);text-decoration:none}
 .nav a:hover{color:var(--text-secondary);text-decoration:underline}
@@ -37,12 +38,12 @@ table.bt td{text-align:right;padding:2px 14px 2px 0;color:var(--text-secondary)}
 table.bt tr.now td{color:var(--text-primary);font-weight:500}
 .knum{font-size:16px;color:var(--text-primary);min-width:34px;text-align:right}
 .klab{font-size:16px;color:var(--text-secondary);white-space:nowrap}
-@media (max-width:900px){body{padding:12px}.rd{font-size:14px}button,select{font-size:14px;height:34px}}
+@media (max-width:900px){body{padding:12px}.rd{font-size:14px}h1{font-size:18px}h1 span{font-size:14px}button,select{font-size:14px;height:34px}}
 </style>
 </head>
 <body>
 <div class="nav"><a href="../">&larr; CS7150 class demos</a></div>
-<h1>Rosenblatt's perceptron: update, margin, and bound</h1>
+<h1>Rosenblatt's Perceptron Algorithm<span>: update, margin, bound and convergence proof</span></h1>
 <div id="wrap">
 <svg viewBox="0 0 1040 440" role="img" preserveAspectRatio="xMidYMid meet">
 <title>Perceptron learning in data space and weight space</title>
