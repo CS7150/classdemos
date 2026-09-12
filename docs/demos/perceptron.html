@@ -135,7 +135,7 @@ function need(){var m=Math.hypot(w[0],w[1]);if(hs==='bad'&&hit!=null){var c=corr
  for(var i=0;i<HIST.length;i++)m=Math.max(m,Math.hypot(HIST[i][0],HIST[i][1]));
  if(WC)m=Math.max(m,rad(Math.min(ci,200)));
  return Math.max(m*1.20,RAD*1.28,1.2);}
-function anim(){var t=Math.max(8,Math.min(122,168/need()));
+function anim(){var t=Math.max(8,Math.min(152,210/need()));
  if(Math.abs(t-sc)>0.4){sc+=(t-sc)*0.22;render();requestAnimationFrame(anim);}else{sc=t;render();}}
 function head(){return HIST.length-1;}
 function syncSlider(){var sl=document.getElementById('ks');sl.max=Math.max(head(),Math.min(KB,200));sl.value=ci;document.getElementById('kv').textContent=ci;}
