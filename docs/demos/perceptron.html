@@ -66,7 +66,7 @@ table.bt tr.now td{color:var(--text-primary);font-weight:500}
 </div>
 <div class="rd" id="readout"></div>
 <div class="cap" id="caption"></div>
-<div class="lg">Amber line: the model's separating plane, perpendicular to w. Blue half-plane: where the model says +. Pink cap: where w must lie after k mistakes, cut by the length ceiling |w| &#8804; &#8730;(|w&#8320;|&#178; + kR&#178;) and the shadow floor w*&#183;w &#8805; w*&#183;w&#8320; + k&#947;; the dashed pink rays are the cone it spans. Green wedge: every w that classifies every point correctly. Pink zigzag: the extremal run, stepping corner to corner where the chord meets the arc. Each step picks adversarially: of the mistakes available, the one whose update leaves w at the widest angle to w*.</div>
+<div class="lg">Amber line: the model's separating plane, perpendicular to w. Blue half-plane: where the model says +. Pink cap: where w must lie after k mistakes, cut by the length ceiling |w| &#8804; &#8730;(|w&#8320;|&#178; + kR&#178;) and the shadow floor w*&#183;w &#8805; w*&#183;w&#8320; + k&#947;; the dashed pink rays are the cone it spans. Each thin line in weight space is one point's constraint, blue where the point is a +. Green wedge: every w that classifies every point correctly. Pink zigzag: the extremal run, stepping corner to corner where the chord meets the arc. Each step picks adversarially: of the mistakes available, the one whose update leaves w at the widest angle to w*.</div>
 <script>
 var LX=261,LY=228,RX=779,RY=228,LR=[12,44,510,432],RRc=[530,44,1028,432],ST=0.0012,WR=196;
 var W,U,XS,P,G,RAD,KB,p0,A1,A2,WEDGE,W0,S0=0,N0=0;
@@ -103,7 +103,7 @@ function gen(){
   else if(i===1){m=0.10+Math.random()*0.055;t=-(0.72+Math.random()*0.38);y=-1;}
   else {m=0.13+Math.random()*0.34;t=(Math.random()*2-1)*1.02;y=Math.random()<0.5?1:-1;}
   var a=m*W[0]+t*U[0],b=m*W[1]+t*U[1];
-  XS.push([a,b]);P.push([y*a,y*b,y]);
+  XS.push([a,b,y]);P.push([y*a,y*b,y]);
   G=Math.min(G,m);RAD=Math.max(RAD,Math.hypot(a,b));}
  for(var i2=P.length-1;i2>0;i2--){var j2=Math.floor(Math.random()*(i2+1)),tm=P[i2];P[i2]=P[j2];P[j2]=tm;}
  p0=Math.atan2(W[1],W[0]);A1=p0;A2=p0;
@@ -199,7 +199,9 @@ function render(){
  var hc=(hs==='bad'&&hit!=null)?corr():null;
  for(var j=0;j<XS.length;j++){var x=XS[j],nn=Math.hypot(x[0],x[1]),pp=[-x[1]/nn,x[0]/nn],
   hi=(hc!=null&&Math.abs(x[0]-hc[0])<1e-9&&Math.abs(x[1]-hc[1])<1e-9);
-  s+=ln(Rp(pp[0],pp[1]),Rp(-pp[0],-pp[1]),RRc,'stroke="'+(hi?'#E24B4A':'var(--border-strong)')+'" stroke-width="'+(hi?2.5:0.9)+'"',1);}
+  // one line per point, matching the colour it has in data space
+  s+=ln(Rp(pp[0],pp[1]),Rp(-pp[0],-pp[1]),RRc,'stroke="'+(hi?'#E24B4A':(x[2]>0?'#378ADD':'var(--border-strong)'))+
+   '" stroke-width="'+(hi?2.5:0.9)+'"'+(hi||x[2]<0?'':' opacity="0.6"'),1);}
  s+='<line x1="'+RX+'" y1="'+RY+'" x2="'+(RX+188*Math.cos(p0)).toFixed(1)+'" y2="'+(RY-188*Math.sin(p0)).toFixed(1)+'" stroke="#0F6E56" stroke-width="2" stroke-dasharray="7 5"/>';
  s+='<text class="ts" x="'+(RX+208*Math.cos(p0)).toFixed(1)+'" y="'+(RY-208*Math.sin(p0)).toFixed(1)+'" text-anchor="middle" fill="#0F6E56">w*</text>';
  if(WC){var lim=Math.min(ci,200),wp='';
