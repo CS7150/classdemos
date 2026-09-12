@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>j-final</title>
+<style>
+:root{--bg:#faf9f5;--surface:#ffffff;--surface-1:#f1efe8;--text-primary:#26251f;--text-secondary:#5f5e5a;--text-muted:#888780;--border:#d3d1c7;--border-strong:#b4b2a9;}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#1a1a18;--surface:#232320;--surface-1:#2c2c2a;--text-primary:#eceae2;--text-secondary:#b4b2a9;--text-muted:#888780;--border:#3a3a36;--border-strong:#5f5e5a;}}
+:root[data-theme="dark"]{--bg:#1a1a18;--surface:#232320;--surface-1:#2c2c2a;--text-primary:#eceae2;--text-secondary:#b4b2a9;--text-muted:#888780;--border:#3a3a36;--border-strong:#5f5e5a;}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text-primary);font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif;}
+body{min-height:100vh;display:flex;flex-direction:column;padding:16px 22px 20px;gap:10px}
+h1{font-size:22px;font-weight:600;margin:0;color:var(--text-primary);letter-spacing:-.01em}
+h1 span{font-size:17px;font-weight:400;color:var(--text-secondary);letter-spacing:0}
+.nav{font-size:14px;margin:0 0 -2px}
+.nav a{color:var(--text-muted);text-decoration:none}
+.nav a:hover{color:var(--text-secondary);text-decoration:underline}
+#wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+svg{width:100%;height:auto;max-height:100%;display:block}
+.ts{font-size:15px;fill:var(--text-secondary)}
+/* a halo in the page colour: lets the figure show through where the glyphs do not sit */
+.gl{paint-order:stroke;stroke:var(--bg);stroke-width:3.5px;stroke-linejoin:round;stroke-opacity:0.8;
+ text-shadow:0 0 4px var(--bg),0 0 4px var(--bg)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+#go{padding:0 10px;min-width:132px;border:2px solid var(--text-secondary)}
+button,select{height:40px;padding:0 14px;border:1px solid var(--border-strong);background:var(--surface);border-radius:8px;font-size:16px;color:var(--text-primary);cursor:pointer;font-family:inherit;white-space:nowrap}
+button:hover,select:hover{background:var(--surface-1)}
+label.cb{display:flex;align-items:center;gap:7px;font-size:16px;color:var(--text-secondary);cursor:pointer;white-space:nowrap}
+input[type=range]{flex:1;min-width:140px;accent-color:#378ADD}
+input[type=checkbox]{width:18px;height:18px;accent-color:#D4537E}
+.rd{font-size:16px;color:var(--text-secondary);line-height:1.7}
+.rd b{font-weight:500;color:var(--text-primary)}
+.lg{font-size:14px;color:var(--text-muted)}
+.cap{font-size:15px;color:var(--text-secondary);line-height:1.75;border-top:1px solid var(--border);padding-top:8px}
+.cap b{font-weight:500;color:var(--text-primary)}
+.cap .num{font-variant-numeric:tabular-nums}
+table.bt{border-collapse:collapse;margin-top:6px;font-size:14px;font-variant-numeric:tabular-nums}
+table.bt th{text-align:right;padding:2px 14px 2px 0;font-weight:400;color:var(--text-muted)}
+table.bt td{text-align:right;padding:2px 14px 2px 0;color:var(--text-secondary)}
+table.bt tr.now td{color:var(--text-primary);font-weight:500}
+.knum{font-size:16px;color:var(--text-primary);min-width:34px;text-align:right}
+.klab{font-size:16px;color:var(--text-secondary);white-space:nowrap}
+@media (max-width:900px){body{padding:12px}.rd{font-size:14px}h1{font-size:18px}h1 span{font-size:14px}button,select{font-size:14px;height:34px}}
+</style>
+<script>(function(){var s=0x9E3779B9;Math.random=function(){s|=0;s=(s+0x6D2B79F5)|0;var t=Math.imul(s^(s>>>15),1|s);t=(t+Math.imul(t^(t>>>7),61|t))^t;return ((t^(t>>>14))>>>0)/4294967296;};})();</script><style>.nav,h1,.lg,.cap{display:none!important}html,body{min-height:0}body{padding:8px 10px 10px;gap:8px}#wrap{flex:none}svg{border:1px solid var(--border);border-radius:6px;background:var(--surface)}.rd{font-size:14px;line-height:1.6}</style></head>
+<body>
+<div class="nav"><a href="../">&larr; CS7150 class demos</a></div>
+<h1>Rosenblatt's Perceptron Algorithm<span>: update, margin, bound and convergence proof</span></h1>
+<div id="wrap">
+<svg viewBox="0 0 1040 440" role="img" preserveAspectRatio="xMidYMid meet">
+<title>Perceptron learning in data space and weight space</title>
+<desc>Left: labelled points, the margin corridor, the model's separating plane, and the update parallelogram. Right: weight space with one dual hyperplane per example, the green wedge of weight vectors that classify everything correctly, the pink region where w must lie after k mistakes, the trajectory so far, and an optional worst-case zigzag stepping between that region's corners. A slider scrubs backwards and forwards through the run and past its end.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker><clipPath id="wclip"><rect x="530" y="44" width="498" height="388"/></clipPath></defs>
+<g id="stage"></g>
+</svg>
+</div>
+<div class="row">
+<button id="go" onclick="act()">Find mistake</button>
+<button onclick="fresh()">New data</button>
+<span class="klab">points</span>
+<select id="np" onchange="fresh()"><option value="16">16</option><option value="32" selected>32</option><option value="64">64</option></select>
+<label class="cb"><input type="checkbox" id="wc" onchange="setwc(this.checked)">worst case</label>
+<label class="cb"><input type="checkbox" id="z0" onchange="setz(this.checked)">start w at 0</label>
+</div>
+<div class="row">
+<span class="klab">steps</span>
+<input type="range" id="ks" min="0" max="0" step="1" value="0" oninput="setk(+this.value)">
+<span class="knum" id="kv">0</span>
+</div>
+<div class="rd" id="readout"></div>
+<div class="cap" id="caption"></div>
+<div class="lg">Amber line: the model's separating plane, perpendicular to w. Blue half-plane: where the model says +. Pink cap: where w must lie after k mistakes, cut by the length ceiling |w| &#8804; &#8730;(|w&#8320;|&#178; + kR&#178;) and the shadow floor w*&#183;w &#8805; w*&#183;w&#8320; + k&#947;; the dashed pink rays are the cone it spans. Each thin line in weight space is one point's dual, the weights that tie on it, blue for +, grey for &#8722;; the chosen point's is drawn heavier, and the green wedge is where all their half-planes overlap. Green wedge: every w that classifies every point correctly. Pink zigzag: the extremal run, stepping corner to corner where the chord meets the arc. Each step picks adversarially: of the mistakes available, the one whose update leaves w at the widest angle to w*.</div>
+<script>
+var LX=261,LY=228,RX=779,RY=228,LR=[12,44,510,432],RRc=[530,44,1028,432],ST=0.0012,WR=196;
+var W,U,XS,P,G,RAD,KB,p0,A1,A2,WEDGE,W0,S0=0,N0=0;
+var sc=110,HIST,HITS,ci,hit,hs,phase,msg,kk,WC=false,Z0=false,w,BEY=false;
+function L(a,b){return [LX+sc*a,LY-sc*b];}
+function Rp(a,b){return [RX+sc*a,RY-sc*b];}
+function ins(p,r){return p[0]>r[0]+6&&p[0]<r[2]-6&&p[1]>r[1]+6&&p[1]<r[3]-6;}
+function clip(p,q,r,inf){var dx=q[0]-p[0],dy=q[1]-p[1],t0=inf?-1e7:0,t1=inf?1e7:1,ok=true;
+ function c(pp,qq){if(pp===0){if(qq<0)ok=false;return;}var rr=qq/pp;if(pp<0){if(rr>t1)ok=false;else if(rr>t0)t0=rr;}else{if(rr<t0)ok=false;else if(rr<t1)t1=rr;}}
+ c(-dx,p[0]-r[0]);c(dx,r[2]-p[0]);c(-dy,p[1]-r[1]);c(dy,r[3]-p[1]);
+ if(!ok)return null;return {a:[p[0]+t0*dx,p[1]+t0*dy],b:[p[0]+t1*dx,p[1]+t1*dy],full:t1>=0.999};}
+function ln(p,q,r,st,inf,mk){var c=clip(p,q,r,inf);if(!c)return '';
+ return '<line x1="'+c.a[0].toFixed(1)+'" y1="'+c.a[1].toFixed(1)+'" x2="'+c.b[0].toFixed(1)+'" y2="'+c.b[1].toFixed(1)+'" '+st+(mk&&c.full?' marker-end="url(#arrow)"':'')+'/>';}
+function hp(poly,nx,ny,c){var o=[];for(var i=0;i<poly.length;i++){var A=poly[i],B=poly[(i+1)%poly.length],da=nx*A[0]+ny*A[1]-c,db=nx*B[0]+ny*B[1]-c;
+ if(da>=0)o.push(A);if((da>=0)!==(db>=0)){var t=da/(da-db);o.push([A[0]+t*(B[0]-A[0]),A[1]+t*(B[1]-A[1])]);}}return o;}
+function ge(poly,vx,vy,val){return hp(poly,vx,-vy,val*sc+vx*LX-vy*LY);}
+function poly(pts,f,op){if(pts.length<3)return '';var s='';for(var i=0;i<pts.length;i++)s+=pts[i][0].toFixed(1)+','+pts[i][1].toFixed(1)+' ';
+ return '<polygon points="'+s+'" fill="'+f+'" opacity="'+op+'"/>';}
+function rect(r){return [[r[0],r[1]],[r[2],r[1]],[r[2],r[3]],[r[0],r[3]]];}
+function bad(p){return p[2]*(w[0]*p[0]+w[1]*p[1])<=0;}
+function corr(){var h=P[hit];return [h[2]*h[0],h[2]*h[1]];}
+function feasAll(f){var c=Math.cos(f),s=Math.sin(f);for(var j=0;j<XS.length;j++)if(c*XS[j][0]+s*XS[j][1]<=0)return false;return true;}
+function gen(){
+ // Each point is drawn on its own: a margin m past w*, an offset t along the plane,
+ // and a label y, giving x = y(mw* + tu).  The two classes are sampled independently,
+ // so the cloud is not point-symmetric and no two points share an update y.x.
+ var np=+document.getElementById('np').value;
+ var an=Math.random()*Math.PI*2;W=[Math.cos(an),Math.sin(an)];U=[-W[1],W[0]];
+ XS=[];P=[];G=9;RAD=0;
+ for(var i=0;i<np;i++){
+  var m,t,y;
+  // Seed one point of each label close to the plane, to keep the margin narrow.
+  if(i===0){m=0.10+Math.random()*0.055;t=0.72+Math.random()*0.38;y=1;}
+  else if(i===1){m=0.10+Math.random()*0.055;t=-(0.72+Math.random()*0.38);y=-1;}
+  else {m=0.13+Math.random()*0.34;t=(Math.random()*2-1)*1.02;y=Math.random()<0.5?1:-1;}
+  var a=m*W[0]+t*U[0],b=m*W[1]+t*U[1];
+  XS.push([a,b,y]);P.push([y*a,y*b,y]);
+  G=Math.min(G,m);RAD=Math.max(RAD,Math.hypot(a,b));}
+ for(var i2=P.length-1;i2>0;i2--){var j2=Math.floor(Math.random()*(i2+1)),tm=P[i2];P[i2]=P[j2];P[j2]=tm;}
+ p0=Math.atan2(W[1],W[0]);A1=p0;A2=p0;
+ var g1=0;while(feasAll(A1-ST)&&g1++<2600)A1-=ST;
+ var g2=0;while(feasAll(A2+ST)&&g2++<2600)A2+=ST;
+ WEDGE=(A2-A1)/2;
+ // Start w pointed almost exactly backwards: within 15 degrees of -w*.
+ var a0=p0+Math.PI+(Math.random()*2-1)*15*Math.PI/180;
+ W0=[0.85*RAD*Math.cos(a0),0.85*RAD*Math.sin(a0)];}
+function shad(j){return S0+j*G;}
+function rad(j){return Math.sqrt(N0*N0+j*RAD*RAD);}
+function capAngle(j){var r=rad(j);return r>0?Math.acos(Math.max(-1,Math.min(1,shad(j)/r))):0;}
+function coneAngle(j){return shad(j)<=0?Math.PI:capAngle(j);}
+function recalc(){S0=W[0]*HIST[0][0]+W[1]*HIST[0][1];N0=Math.hypot(HIST[0][0],HIST[0][1]);KB=0;
+ for(var q=1;q<=4000;q++){if(coneAngle(q)<=WEDGE){KB=q;break;}}
+ if(!KB)KB=4000;}
+function wcTip(j){var th=capAngle(j),an=p0+(j%2?th:-th),r=rad(j);return [r*Math.cos(an),r*Math.sin(an)];}
+function capShape(a1,a2,r){var big=(a2-a1)>Math.PI?1:0;
+ return '<path d="M '+(RX+r*Math.cos(a1)).toFixed(1)+' '+(RY-r*Math.sin(a1)).toFixed(1)+
+  ' A '+r.toFixed(1)+' '+r.toFixed(1)+' 0 '+big+' 0 '+(RX+r*Math.cos(a2)).toFixed(1)+' '+
+  (RY-r*Math.sin(a2)).toFixed(1)+' Z" fill="#D4537E" fill-opacity="0.20" stroke="#C0456C" stroke-opacity="0.7" stroke-width="1.2"/>';}
+function wedge(a1,a2,r,f,op){var big=(a2-a1)>Math.PI?1:0;
+ return '<path d="M '+RX+' '+RY+' L '+(RX+r*Math.cos(a1)).toFixed(1)+' '+(RY-r*Math.sin(a1)).toFixed(1)+' A '+r+' '+r+' 0 '+big+' 0 '+(RX+r*Math.cos(a2)).toFixed(1)+' '+(RY-r*Math.sin(a2)).toFixed(1)+' Z" fill="'+f+'" opacity="'+op+'"/>';}
+function need(){var m=Math.hypot(w[0],w[1]);if(hs==='bad'&&hit!=null){var c=corr();m=Math.max(m,Math.hypot(w[0]+c[0],w[1]+c[1]));}
+ for(var i=0;i<HIST.length;i++)m=Math.max(m,Math.hypot(HIST[i][0],HIST[i][1]));
+ if(WC)m=Math.max(m,rad(Math.min(ci,200)));
+ return Math.max(m*1.20,RAD*1.28,1.2);}
+function anim(){var t=Math.max(8,Math.min(122,168/need()));
+ if(Math.abs(t-sc)>0.4){sc+=(t-sc)*0.22;render();requestAnimationFrame(anim);}else{sc=t;render();}}
+function head(){return HIST.length-1;}
+function syncSlider(){var sl=document.getElementById('ks');sl.max=Math.max(head(),Math.min(KB,200));sl.value=ci;document.getElementById('kv').textContent=ci;}
+function setk(v){
+ if(v>head()){ci=head();w=HIST[ci];var ok=true;while(head()<v&&ok)ok=advance();}
+ ci=v;w=HIST[Math.min(ci,head())];hit=null;hs=null;phase='find';
+ document.getElementById('go').textContent='Find mistake';
+ syncSlider();
+ msg=(ci>head()
+   ?'Past the end of the run: w stopped at step '+head()+'. The region keeps tightening and the worst case keeps walking its corners.'
+   :'');
+ anim();}
+function setwc(v){WC=v;anim();}
+function setz(v){Z0=v;boot();}
+function para(F,rc,lab){var cr=corr(),pv=[w[0]+cr[0],w[1]+cr[1]],s='';
+ s+=ln(F(0,0),F(cr[0],cr[1]),rc,'stroke="#D85A30" stroke-width="2.5"',0,1);
+ s+=ln(F(w[0],w[1]),F(pv[0],pv[1]),rc,'stroke="#D85A30" stroke-width="1" stroke-dasharray="6 5"',0);
+ s+=ln(F(cr[0],cr[1]),F(pv[0],pv[1]),rc,'stroke="#BA7517" stroke-width="1" stroke-dasharray="6 5"',0);
+ s+=ln(F(0,0),F(pv[0],pv[1]),rc,'stroke="#7F77DD" stroke-width="2.5" stroke-dasharray="8 6"',0,1);
+ if(lab){var lp=F(cr[0]*0.58,cr[1]*0.58);if(ins(lp,rc))s+='<text class="ts gl" x="'+(lp[0]+12).toFixed(1)+'" y="'+(lp[1]-8).toFixed(1)+'" fill="#993C1D">y&#183;x</text>';}
+ return s;}
+function warrow(F,rc){var n=Math.hypot(w[0],w[1]);if(n===0)return '';
+ var s=ln(F(0,0),F(w[0],w[1]),rc,'stroke="#BA7517" stroke-width="3"'+(BEY?' opacity="0.45" stroke-dasharray="8 6"':''),0,1);
+ var v=[-w[1]/n,w[0]/n],lp=F(w[0]*0.55+v[0]*0.16*n,w[1]*0.55+v[1]*0.16*n);
+ if(ins(lp,rc))s+='<text class="ts gl" x="'+lp[0].toFixed(1)+'" y="'+lp[1].toFixed(1)+'" text-anchor="middle" fill="#854F0B"'+(BEY?' opacity="0.55"':'')+'>w</text>';
+ return s;}
+function render(){
+ BEY=ci>head();
+ var s='',n=Math.hypot(w[0],w[1]);
+ s+='<line x1="520" y1="36" x2="520" y2="436" stroke="var(--border-strong)" stroke-width="0.5"/>';
+ s+='<text class="ts gl" x="261" y="24" text-anchor="middle" fill="var(--text-secondary)">data space</text>';
+ // w* is pinned 208 out along p0, so it lands on the title when it points near straight up.
+ // Slide the title to the opposite side rather than let the two sit on each other.
+ var wsx=RX+208*Math.cos(p0),wsy=RY-208*Math.sin(p0),
+  tx=(Math.abs(wsy-24)<22&&Math.abs(wsx-RX)<64)?(wsx<RX?RX+140:RX-140):RX;
+ s+='<text class="ts gl" x="'+tx.toFixed(0)+'" y="24" text-anchor="middle" fill="var(--text-secondary)">weight space</text>';
+ if(n>0)s+=poly(ge(rect(LR),w[0],w[1],0),'#378ADD',0.11);
+ s+=poly(ge(ge(rect(LR),W[0],W[1],-G),-W[0],-W[1],-G),'#1D9E75',0.17);
+ s+=ln(L(0,0),L(U[0],U[1]),LR,'stroke="#0F6E56" stroke-width="1.2" stroke-dasharray="6 5"',1);
+ var nb=0;
+ for(var i=0;i<P.length;i++){var p=P[i],c=L(p[0],p[1]);
+  if(bad(p)){nb++;if(ins(c,LR))s+='<circle cx="'+c[0].toFixed(1)+'" cy="'+c[1].toFixed(1)+'" r="10" fill="none" stroke="#E24B4A" stroke-width="1.2" opacity="0.55"/>';}
+  if(ins(c,LR))s+='<circle cx="'+c[0].toFixed(1)+'" cy="'+c[1].toFixed(1)+'" r="5.5" fill="'+(p[2]>0?'#378ADD':'var(--surface)')+'" stroke="'+(p[2]>0?'#185FA5':'#5F5E5A')+'" stroke-width="1.2"/>';}
+ if(n>0)s+=ln(L(-w[1]/n,w[0]/n),L(w[1]/n,-w[0]/n),LR,'stroke="#BA7517" stroke-width="2.5"'+(BEY?' opacity="0.45" stroke-dasharray="8 6"':''),1);
+ s+=warrow(L,LR);
+ if(hs==='bad'&&hit!=null){var h=P[hit],cr0=corr(),ph=L(h[0],h[1]);
+  if(ins(ph,LR))s+='<circle cx="'+ph[0].toFixed(1)+'" cy="'+ph[1].toFixed(1)+'" r="13" fill="none" stroke="#E24B4A" stroke-width="3"/>';
+  if(h[2]<0)s+=ln(L(h[0],h[1]),L(cr0[0],cr0[1]),LR,'stroke="#D85A30" stroke-width="0.8" stroke-dasharray="4 4"',0);
+  s+=para(L,LR,1);}
+ else if(ci>0&&ci<=head()&&HITS[ci-1]!=null){var hf=P[HITS[ci-1]],pf=L(hf[0],hf[1]);
+  if(ins(pf,LR))s+='<circle cx="'+pf[0].toFixed(1)+'" cy="'+pf[1].toFixed(1)+'" r="13" fill="none" stroke="#1D9E75" stroke-width="2.5"/>';}
+ var th=coneAngle(ci),imp=shad(ci)>rad(ci),vac=th>=Math.PI-1e-9;
+ // The bound pins two things at once: |w| <= rad(k) and w*.w >= shad(k).  Together they cut a
+ // circular cap out of weight space, and the cone is only its angular hull.  Draw the cap when
+ // its radius fits the panel -- ticking "worst case" zooms out far enough to keep it in view.
+ // Always at true scale, however far off the panel that reaches: the clip rect cuts it at the
+ // plot's edge and the rest is left to the imagination.  Ticking "worst case" zooms out to fit.
+ var cr=rad(ci)*sc,cf=capAngle(ci),ray=Math.max(WR,cr*1.15);
+ if(!imp){s+='<g clip-path="url(#wclip)">';
+  if(cf>=Math.PI-1e-9)s+='<circle cx="'+RX+'" cy="'+RY+'" r="'+cr.toFixed(1)+'" fill="#D4537E" fill-opacity="0.20" stroke="#C0456C" stroke-opacity="0.7" stroke-width="1.2"/>';
+  else s+=capShape(p0-cf,p0+cf,cr);
+  // the cone continues past the corners as an angular claim, over ground nothing can reach
+  if(!vac)for(var e=-1;e<=1;e+=2)s+='<line x1="'+RX+'" y1="'+RY+'" x2="'+(RX+ray*Math.cos(p0+e*th)).toFixed(1)+'" y2="'+(RY-ray*Math.sin(p0+e*th)).toFixed(1)+'" stroke="#D4537E" stroke-width="1" stroke-dasharray="5 5" opacity="0.55"/>';
+  s+='</g>';}
+ s+=wedge(A1,A2,WR,'#1D9E75',0.34);
+ var hc=(hs==='bad'&&hit!=null)?corr():null;
+ // Each point's dual: the hyperplane {w : w.x = 0} of weights that tie on it, perpendicular to
+ // the point and coloured by its class.  The green wedge is the intersection of the half-planes
+ // these bound, so two of these lines are its edges.  The chosen point's dual is drawn heavier,
+ // in its own colour rather than a red that would sit outside the scheme.
+ for(var j=0;j<XS.length;j++){var x=XS[j],nn=Math.hypot(x[0],x[1]),pp=[-x[1]/nn,x[0]/nn],
+  hi=(hc!=null&&Math.abs(x[0]-hc[0])<1e-9&&Math.abs(x[1]-hc[1])<1e-9),bl=x[2]>0;
+  s+=ln(Rp(pp[0],pp[1]),Rp(-pp[0],-pp[1]),RRc,'stroke="'+(bl?'#378ADD':'var(--border-strong)')+
+   '" stroke-width="'+(hi?2.5:0.9)+'"'+(hi||!bl?'':' opacity="0.6"'),1);}
+ s+='<line x1="'+RX+'" y1="'+RY+'" x2="'+(RX+188*Math.cos(p0)).toFixed(1)+'" y2="'+(RY-188*Math.sin(p0)).toFixed(1)+'" stroke="#0F6E56" stroke-width="2" stroke-dasharray="7 5"/>';
+ s+='<text class="ts gl" x="'+(RX+208*Math.cos(p0)).toFixed(1)+'" y="'+(RY-208*Math.sin(p0)).toFixed(1)+'" text-anchor="middle" fill="#0F6E56">w*</text>';
+ if(WC){var lim=Math.min(ci,200),wp='';
+  for(var q=0;q<=lim;q++){var tp=Rp(wcTip(q)[0],wcTip(q)[1]);wp+=tp[0].toFixed(1)+','+tp[1].toFixed(1)+' ';}
+  s+='<polyline points="'+wp+'" fill="none" stroke="#D4537E" stroke-width="0.8" stroke-dasharray="1 3.5" stroke-linecap="round" opacity="0.45"/>';
+  // only the corner for the current k is the live one; the rest are where it has been
+  for(var q2=1;q2<=lim;q2++){var t2=wcTip(q2),tp2=Rp(t2[0],t2[1]),nw=q2===lim;
+   if(ins(tp2,RRc))s+='<circle cx="'+tp2[0].toFixed(1)+'" cy="'+tp2[1].toFixed(1)+'" r="'+(nw?4:2.1)+'" fill="#D4537E"'+(nw?'':' opacity="0.4"')+'/>';}
+  var lt=Rp(wcTip(lim)[0],wcTip(lim)[1]);
+  if(ins(lt,RRc))s+='<text class="ts" x="'+(lt[0]+12).toFixed(1)+'" y="'+(lt[1]-10).toFixed(1)+'" fill="#993556">worst case</text>';}
+ var hh=Math.min(ci,head()),pts='';for(var t3=0;t3<=hh;t3++){var tp3=Rp(HIST[t3][0],HIST[t3][1]);pts+=tp3[0].toFixed(1)+','+tp3[1].toFixed(1)+' ';}
+ if(hh>0)s+='<polyline points="'+pts+'" fill="none" stroke="#BA7517" stroke-width="1.4" stroke-dasharray="4 4" opacity="0.55"/>';
+ if(hs==='bad'&&hit!=null){s+=para(Rp,RRc,0);
+}
+ s+=warrow(Rp,RRc);
+ s+='<circle cx="'+RX+'" cy="'+RY+'" r="3" fill="var(--text-primary)"/>';
+ // Name the region, not the cone: it is bounded even while the cone admits every direction, and
+ // the readout reports that separately.  Drawn last, over the spray rather than under it, and
+ // kept clear of the w* tick wherever w* points.
+ s+='<text id="caplab" class="ts" x="'+RX+'" y="'+(Math.sin(p0)>0?RY+WR-4:RY-WR+20).toFixed(0)+'" text-anchor="middle" fill="#993556">pink: where w must lie after k mistakes</text>';
+ document.getElementById('stage').innerHTML=s;
+ label();
+ var ang=n>0?(Math.acos(Math.max(-1,Math.min(1,(W[0]*w[0]+W[1]*w[1])/n)))*180/Math.PI).toFixed(1)+'&#176;':'&#8212;';
+ var cone=imp?'empty':(vac?'unbounded':(th*180/Math.PI).toFixed(1)+'&#176;');
+ document.getElementById('readout').innerHTML=(msg?msg+'<br>':'')+
+  'step <b>'+ci+'</b>'+(BEY?' (run ended at '+head()+')':' of '+head())+' &#183; misclassified <b>'+nb+' of '+P.length+'</b> &#183; |w| = <b>'+n.toFixed(2)+'</b> &#183; angle to w* <b>'+ang+'</b>'+
+  '<br>&#947;/R = '+(G/RAD).toFixed(3)+' &#183; cone here: <b>'+cone+'</b> &#183; wedge '+(WEDGE*180/Math.PI).toFixed(1)+'&#176; &#183; bound: at most <b>'+KB+'</b> mistakes';
+ caption(n);
+}
+function label(){var t=document.getElementById('caplab');if(!t||!t.getBBox)return;
+ var b;try{b=t.getBBox();}catch(e){return;}
+ var r=document.createElementNS('http://www.w3.org/2000/svg','rect');
+ r.setAttribute('x',(b.x-7).toFixed(1));r.setAttribute('y',(b.y-3).toFixed(1));
+ r.setAttribute('width',(b.width+14).toFixed(1));r.setAttribute('height',(b.height+6).toFixed(1));
+ r.setAttribute('rx','4');r.setAttribute('fill','var(--bg)');
+ t.parentNode.insertBefore(r,t);}
+function f2(x){return x.toFixed(2);}
+function caption(n){
+ var sB=shad(ci),rB=rad(ci),aS=W[0]*w[0]+W[1]*w[1],thB=coneAngle(ci);
+ var h='<div><b>1. shadow floor.</b> Each mistake adds at least &#947; along w*: '+
+  'w*&#183;w<sub>k</sub> &#8805; w*&#183;w<sub>0</sub> + k&#947; = <span class="num">'+f2(S0)+' + '+ci+'&#215;'+f2(G)+' = <b>'+f2(sB)+'</b></span>'+
+  ' &#183; actual <span class="num"><b>'+f2(aS)+'</b></span>'+(BEY?' (step '+head()+')':'')+'</div>';
+ h+='<div><b>2. length ceiling.</b> Each mistake adds at most R&#178; to |w|&#178;: '+
+  '|w<sub>k</sub>| &#8804; &#8730;(|w<sub>0</sub>|&#178; + kR&#178;) = <span class="num">&#8730;('+f2(N0*N0)+' + '+ci+'&#215;'+f2(RAD*RAD)+') = <b>'+f2(rB)+'</b></span>'+
+  ' &#183; actual <span class="num"><b>'+f2(n)+'</b></span>'+(BEY?' (step '+head()+')':'')+'</div>';
+ h+='<div><b>3. Cauchy&#8211;Schwarz.</b> A shadow cannot exceed the vector casting it, so cos&#952;<sub>k</sub> = (w*&#183;w<sub>k</sub>)/|w<sub>k</sub>| &#8805; <span class="num">'+
+  f2(sB)+' / '+f2(rB)+' = <b>'+(rB>0?(sB/rB).toFixed(3):'&#8212;')+'</b></span>, and a cosine can never pass 1. '+
+  'The numerator grows like k, the denominator like &#8730;k, so the ratio must reach the ceiling.</div>';
+ h+='<div><b>4. termination.</b> So &#952;<sub>k</sub> &#8804; <b>'+(thB>=Math.PI-1e-9?'180.0':(thB*180/Math.PI).toFixed(1))+'&#176;</b>. '+
+  'Once that falls to the wedge half-angle <b>'+(WEDGE*180/Math.PI).toFixed(1)+'&#176;</b>, every still-permitted w already classifies everything correctly, forcing <b>k &#8804; '+KB+'</b>.</div>';
+ var ks=[0,ci,Math.min(ci+1,KB),Math.ceil(KB/2),KB],seen={},rows=[];
+ ks.sort(function(a,b){return a-b;});
+ for(var i=0;i<ks.length;i++){var q=ks[i];if(q<0||q>KB||seen[q])continue;seen[q]=1;rows.push(q);}
+ var t='<table class="bt"><tr><th>k</th><th>shadow &#8805;</th><th>|w| &#8804;</th><th>cos&#952; &#8805;</th><th>&#952; &#8804;</th></tr>';
+ for(var j=0;j<rows.length;j++){var q2=rows[j],s2=shad(q2),r2=rad(q2),c2=r2>0?s2/r2:0,a2=coneAngle(q2);
+  t+='<tr'+(q2===ci?' class="now"':'')+'><td>'+q2+'</td><td>'+f2(s2)+'</td><td>'+f2(r2)+'</td><td>'+
+   (s2<=0?'&#8212;':c2.toFixed(3))+'</td><td>'+(a2>=Math.PI-1e-9?'180.0&#176;':(a2*180/Math.PI).toFixed(1)+'&#176;')+'</td></tr>';}
+ t+='</table>';
+ document.getElementById('caption').innerHTML=h+t;
+}
+function pickWorst(){
+ // Take the worst mistake available: the one whose update leaves w at the widest angle
+ // to w*.  That is the angle the cone bounds, so the run rides the cone's edge.
+ var cand=[];
+ for(var j=0;j<P.length;j++){var p=P[j];
+  if(!bad(p))continue;
+  var cx=p[2]*p[0],cy=p[2]*p[1],vx=w[0]+cx,vy=w[1]+cy,m=Math.hypot(vx,vy);
+  cand.push([j,m>0?(W[0]*vx+W[1]*vy)/m:-1,cx,cy]);}
+ if(!cand.length)return null;
+ cand.sort(function(a,b){return a[1]-b[1];});
+ return cand[0][0];}
+function act(){var btn=document.getElementById('go');
+ if(phase==='find'){
+  if(ci>head()){ci=head();w=HIST[ci];syncSlider();}
+  else if(ci<head()){HIST=HIST.slice(0,ci+1);HITS=HITS.slice(0,ci);syncSlider();}
+  var i=pickWorst();
+  if(i!=null){hit=i;hs='bad';phase='apply';btn.textContent='Add y\u00b7x to w';msg='';
+   anim();return;}
+  hit=null;hs=null;msg='No mistakes left. w sits inside the green wedge and never moves again.';anim();return;}
+ var c=corr();HIST.push([w[0]+c[0],w[1]+c[1]]);HITS.push(hit);ci=HIST.length-1;w=HIST[ci];
+ hs='fixed';phase='find';btn.textContent='Find mistake';
+ msg='';
+ syncSlider();anim();}
+function advance(){
+ if(ci>head()){ci=head();w=HIST[ci];}
+ else if(ci<head()){HIST=HIST.slice(0,ci+1);HITS=HITS.slice(0,ci);}
+ var j=pickWorst();
+ if(j==null)return false;
+ var p=P[j];HIST.push([w[0]+p[2]*p[0],w[1]+p[2]*p[1]]);HITS.push(j);ci=HIST.length-1;w=HIST[ci];return true;}
+function boot(){HIST=[Z0?[0,0]:[W0[0],W0[1]]];HITS=[];ci=0;w=HIST[0];hit=null;hs=null;phase='find';sc=110;
+ recalc();syncSlider();msg='';
+ document.getElementById('go').textContent='Find mistake';anim();}
+function fresh(){gen();boot();}
+document.addEventListener('keydown',function(e){
+ if(e.key===' '||e.key==='Enter'){e.preventDefault();act();}
+ else if(e.key==='ArrowLeft'){if(ci>0)setk(ci-1);}
+ else if(e.key==='ArrowRight'){if(ci<+document.getElementById('ks').max)setk(ci+1);}
+ else if(e.key==='n'||e.key==='N'){fresh();}
+ else if(e.key==='w'||e.key==='W'){var c=document.getElementById('wc');c.checked=!c.checked;setwc(c.checked);}
+ else if(e.key==='z'||e.key==='Z'){var c2=document.getElementById('z0');c2.checked=!c2.checked;setz(c2.checked);}
+});
+gen();boot();
+</script>
+<script>var q=function(i){return document.getElementById(i)};var c=q('wc');if(c&&!c.checked)c.click();for(var i=0;i<8;i++)q('go').click();</script><script src="embed.js"></script></body>
+</html>
