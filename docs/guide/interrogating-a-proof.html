@@ -64,6 +64,8 @@ figcaption{font-size:14px;color:var(--text-muted);margin-top:7px}
 .box ol li{margin-bottom:9px}
 .box ol li b{color:var(--text-primary);font-weight:600}
 .close{margin-top:34px}
+.lede{color:var(--text-secondary);max-width:66ch;margin:0 0 4px}
+h2+.lede{margin-top:-6px}
 .ts{font-size:15px;fill:var(--text-secondary)}
 .gl{paint-order:stroke;stroke:var(--bg);stroke-width:3.5px;stroke-linejoin:round;stroke-opacity:.8;
  text-shadow:0 0 4px var(--bg),0 0 4px var(--bg)}
@@ -83,9 +85,10 @@ figcaption{font-size:14px;color:var(--text-muted);margin-top:7px}
 <header>
 <h1>Interrogating a proof with an LLM<span> &mdash; an annotated transcript</span></h1>
 <p>A record of building the
-<a href="../demos/perceptron.html">perceptron convergence demo</a> in conversation with an LLM agent.
-Most of what ended up in the figure came from questions asked along the way rather than from a plan
-at the start, and the questions are the part worth keeping.</p>
+<a href="../demos/perceptron.html">perceptron convergence demo</a> across two conversations with an
+LLM agent: one in a plain chat that produced the first working figure, and one in a coding agent
+that rebuilt most of what that figure meant. Almost nothing here was specified in advance, and the
+questions are the part worth keeping.</p>
 <p>The centre column has the prompts, what came back, and the figure as it stood at that moment.
 The margin has the reasoning that led to the next question.</p>
 </header>
@@ -101,6 +104,18 @@ fact. It is the two of you settling on a picture that looks right, reads well, a
 misrepresents the theorem. Nothing in the conversation will flag this. Only a check will.</p>
 <p>Everything below is a defence against one of those three.</p>
 </div>
+<h2>Part one &mdash; getting the first picture</h2>
+<p class="lede">This half ran in a plain chat, starting from &ldquo;I&rsquo;m going to teach
+Rosenblatt&rsquo;s algorithm today, what is the best way to teach it?&rdquo; The figures from it are
+not recoverable &mdash; interactive artifacts are not kept in shared conversations &mdash; so this
+part is prompts and replies only. The first figure below is what it ended up producing.</p>
+<section class="beat"><div class="main"><p class="prompt"><span class="who">You</span>&ldquo;Please draw the diagram here for me. Maybe with js/svg?&rdquo;</p><p class="reply">What came back was a plot of the two sides of the inequality: <code>k&gamma;</code> rising as a straight line, <code>&radic;k&middot;R</code> as a curve, a slider for &gamma;, and the crossing point running away as the margin shrinks. Then a second figure, a triangle showing the correction leaning backward against <code>w</code> at more than 90&deg;.</p><p class="prompt"><span class="who">You</span>&ldquo;The plot is not informative, but I think that the triangles could be. But you&rsquo;ve plotted <code>w</code> without plotting <code>w*</code> and you are not showing the mass of other points. I think to explain it would be helpful to show the points.&rdquo;</p><p class="reply">&ldquo;Fair.&rdquo; Redrawn with the data, the true separator, its margin corridor, and <code>w</code>&rsquo;s boundary rotating as you step through mistakes.</p></div><aside class="note"><h4>Drawing the algebra instead of the situation</h4><p>Asked for the diagram, the model plotted the last line of the proof: two functions of k, crossing. It is a correct picture of the inequality and it contains no data, no <code>w</code>, and no <code>w*</code>.</p><p>That is a natural reading of &ldquo;the diagram&rdquo; when the preceding text was algebra. It is also a picture of the symbols rather than of what the symbols describe.</p><span class="did">Check whether the figure contains the objects the theorem is about, or only quantities derived from them. If the data is not in it, say which parts of the setup you want drawn.</span></aside></section>
+<section class="beat"><div class="main"><p class="prompt"><span class="who">You</span>&ldquo;I like the margin figure, but the ringed point you&rsquo;ve drawn is not on the wrong side. We need some examples that are on the wrong side!&rdquo;</p><p class="reply">&ldquo;Caught it: I was ringing the point and applying the update in the same click, so you only ever saw the boundary that had already fixed it.&rdquo; Split into two clicks &mdash; find the violation, look at it, then apply.</p><p class="reply">That split is why the finished demo has a Find mistake step at all.</p></div><aside class="note"><h4>The figure contradicting its own caption</h4><p>The label said the ringed point was misclassified. The picture showed it on the correct side. Both were rendered from the same state, so one of them was wrong.</p><p>The cause was timing rather than mathematics: the ring and the update landed in the same frame.</p><span class="did">When a figure asserts something about a specific element, look at that element and check the assertion by eye. Bugs in what is shown do not appear in the code that computes it.</span></aside></section>
+<section class="beat"><div class="main"><p class="prompt"><span class="who">You</span>&ldquo;I liked the previous visualization better. Except that <i>find a mistake</i> didn&rsquo;t work! I want a 2d scatterplot of data points where the initial model misclassifies many of them.&rdquo;</p><p class="reply">&ldquo;The dataset was the problem: after one update <code>w</code> already separated everything, so the second click had nothing to find.&rdquo; Rebuilt starting from a badly wrong <code>w</code>, 12 of 16 points misclassified at the outset, every wrong point carrying a red halo.</p><p class="reply">That became the default the demo is still built around, and the same request reappears much later as &ldquo;start <code>w</code> within 15&deg; of &minus;<code>w*</code>&rdquo;.</p></div><aside class="note"><h4>An instance too easy to show anything</h4><p>Nothing was broken. The figure was correct, the algorithm was correct, and the example converged before the thing being demonstrated could happen.</p><p>Choosing the instance is part of building the visualization, not a detail underneath it.</p><span class="did">Ask what the hardest honest case looks like, and make that the default. A demo that succeeds immediately has nothing left to show.</span></aside></section>
+<section class="beat"><div class="main"><p class="prompt"><span class="who">You</span>&ldquo;It&rsquo;s great, except that it doesn&rsquo;t show how <code>w</code> is updated from the error case. Is it a parallelogram?&rdquo;</p><p class="reply">Yes, and the second side is the data point itself: the correction <code>y&middot;x</code> is the point&rsquo;s own position vector drawn from the origin, flipped through the origin when the label is negative. So <code>w</code> and the point are two sides and the new <code>w</code> is the diagonal.</p><p class="reply">Which makes visible something the pseudocode hides: the correction has no free parameters. No gradient, no step size, no loss being differentiated.</p></div><aside class="note"><h4>Guessing, then asking</h4><p>The question carried a specific guess. That is cheaper to answer than an open request, and the answer comes back sharper because there is something definite to confirm or deny.</p><span class="did">When you half-see a structure, name it in the question. &ldquo;Is it a parallelogram&rdquo; gets a better answer than &ldquo;how should the update be drawn&rdquo;.</span></aside></section>
+<section class="beat"><div class="main"><p class="prompt"><span class="who">You</span>&ldquo;You haven&rsquo;t highlighted the narrowing solution space, but I&rsquo;d like that.&rdquo;</p><p class="reply">Added as a violet wedge that starts unbounded and is sliced by each constraint the run bumps into, closing onto the green solution wedge. Presented alongside the convergence discussion, with several paragraphs on what it shows.</p><p class="prompt"><span class="who">You</span>&ldquo;The cone on the right that you said is used to prove convergence doesn&rsquo;t really make sense to me &mdash; e.g. the <code>w</code> isn&rsquo;t in that blueish cone &mdash; what&rsquo;s it bounding? Are we drawing the wrong vector?&rdquo;</p><p class="reply">&ldquo;You&rsquo;re right, and the fault is mine: that violet wedge bounds the solutions, not <code>w</code>. <code>w</code> is never promised to be inside it. It&rsquo;s bookkeeping about which constraints have been ruled out, and it has no role in the convergence proof. I put it next to the proof talk and made it look load-bearing.&rdquo;</p><p class="reply">The region that does bound <code>w</code> is a different one: centred on <code>w*</code>, half-angle <code>arccos(&radic;k&middot;&gamma;/R)</code>. That is the ancestor of the pink region in the finished demo, and it exists because of this question.</p></div><aside class="note"><h4>Is the thing the theorem talks about inside the region?</h4><p>The wedge had been requested, built to specification, and then described as the convergence argument. Nothing in the exchange flagged it. It was correct geometry doing the wrong job.</p><p>What separated them was a question with a yes or no answer: the theorem is about <code>w</code>, so is <code>w</code> in there? It was not, and it was never going to be.</p><span class="did">For each region in a figure, name the object it constrains and check that object is inside it on screen. &ldquo;Nothing, it is context&rdquo; is a fine answer &mdash; what is worth catching is a region sitting next to the proof and borrowing its authority.</span></aside></section>
+<section class="beat"><div class="main"><p class="prompt"><span class="who">You</span>&ldquo;On the current data shown, why is it that after the second iteration the <code>w</code> vector is not in the blue cone? Is the blue cone more aggressive than the real bound?&rdquo;</p><p class="reply">&ldquo;Good catch, and the answer is yes.&rdquo; Both gauges assume <code>w</code> starts at zero. With a nonzero start they pick up offsets, so the honest bound is <code>cos&theta;<sub>k</sub> &ge; (w*&middot;w&#8320; + k&gamma;) / &radic;(|w&#8320;|&sup2; + kR&sup2;)</code>. The default start pointed away from <code>w*</code>, making the numerator negative for the first few steps, where the true region is the whole plane.</p><p class="prompt"><span class="who">You</span>&ldquo;Certainly when k=0 the blue cone should be the full 360, right?&rdquo;</p><p class="reply">Right: with no mistakes yet, nothing has been paid off and the bound constrains nothing. The slider had not gone down to 0, and the vacuous case is now drawn as a full disc.</p></div><aside class="note"><h4>The same check, run twice more</h4><p>The identical question &mdash; is <code>w</code> inside it &mdash; caught a second and unrelated defect: a formula valid only for <code>w&#8320; = 0</code> being drawn over a run that starts elsewhere.</p><p>Then the boundary case. At k = 0 the theorem says nothing, and a figure that draws a tight region there is claiming more than the theorem does.</p><span class="did">Keep one containment check and re-run it after every change. Check the ends too: what should the figure show where the statement is vacuous, and does it.</span></aside></section>
+<section class="beat"><div class="main"><p class="prompt"><span class="who">You</span>&ldquo;To explain the bounds cone, I think we should show a hypothetical worst-case rollout of the worst possible zig-zag of updates, starting from the worst case and updating up to step t, showing how it stays in the cone.&rdquo;</p><p class="reply">The extremal walk is pinned: every step must add exactly &gamma; of shadow and exactly R&sup2; of length-squared, so the tip sits at <code>k&gamma;</code> horizontally and <code>&radic;k&middot;R</code> in radius, riding the cone edge at every k. Three conditions, each the extreme of one inequality in the proof.</p><p class="reply">With a caveat offered unprompted: staying perpendicular to <code>w</code> at every step needs a fresh direction each time, so this trajectory requires dimension at least k. In two dimensions it dies after a couple of steps, which is why the real runs sit well inside the region rather than on its edge.</p><p class="prompt"><span class="who">You</span>&ldquo;How hard is it to construct data points and an unlucky ordering that actually exercises the worst case?&rdquo;</p><p class="reply">&ldquo;Trivially easy in high dimensions, and apparently impossible in two. The lever is dimension, not ordering.&rdquo; Then the construction: the standard basis in <code>R<sup>n</sup></code>, all labelled +1, gives exactly n mistakes against a bound of n.</p><p class="reply">And an admission: &ldquo;What the worst case actually is in fixed small d, I don&rsquo;t know off the top of my head, and I&rsquo;d want to check rather than guess.&rdquo;</p></div><aside class="note"><h4>Asking how tight the bound really is</h4><p>The question was about the gap between the drawn region and what the algorithm does. The answer named a real limitation of the figure: in two dimensions the extremal walk cannot be realised, so the pink path is a bound and not something the demo could ever produce.</p><p>The closing &ldquo;I don&rsquo;t know&rdquo; is the useful kind of answer. An estimate would have been easy to produce and hard to check.</p><span class="did">Ask what the figure is promising that the situation cannot deliver. A model willing to say a construction is unreachable in the case you are drawing is giving you more than one that explains the construction well.</span></aside></section>
 <div class="box">
 <h3>How this went in practice</h3>
 <p>The starting point was not knowing what the figure should show. That is the reason for doing it,
@@ -113,10 +128,14 @@ come up in conversation. It comes up when someone checks a number or reads a lab
 <p>The margin notes are mostly about those three situations.</p>
 </div>
 
+<h2>Part two &mdash; rebuilding what it meant</h2>
+<p class="lede">The first conversation ended by handing the page to a coding agent with repository
+access. From here the figures are recoverable, pulled from the commits themselves.</p>
+
 <div class="box">
-<h3>Where it started</h3>
+<h3>What part one produced</h3>
 <p>A working demo of the perceptron mistake bound. It ran, it was correct, and it looked finished.
-Nine questions later most of its elements had changed meaning.</p>
+Most of its elements changed meaning over the rounds that follow.</p>
 <figure style="padding-left:0"><svg class="snap" viewBox="0 0 1040 440" role="img" preserveAspectRatio="xMidYMid meet">
 <title>Perceptron learning in data space and weight space</title>
 <desc>Left: labelled points, the margin corridor, the model's separating plane, and the update parallelogram. Right: weight space with one constraint line per example, the green wedge of weight vectors that classify everything correctly, the blue bound cone, the trajectory so far, and an optional worst-case zigzag riding the cone edge. A slider scrubs backwards and forwards through the run's history.</desc>
@@ -126,7 +145,6 @@ Nine questions later most of its elements had changed meaning.</p>
 bound drawn as a blue cone.</figcaption></figure>
 </div>
 
-<h2>The transcript</h2>
 <section class="beat"><div class="main"><p class="prompt"><span class="who">You</span>&ldquo;When it finds a mistake, don&rsquo;t take the first one it happens to scan. Sort the mistakes by which produces the worst updated <code>w</code> &mdash; the maximum angle with <code>w*</code> &mdash; and pick among the worst two.&rdquo;</p><p class="reply">Implemented, then measured rather than asserted: over 197 picks the chosen update was the worst available every time. The random choice between two never varied.</p><p class="reply">Each point sat in the array twice, as <code>+x</code> and as <code>&minus;x</code> labelled minus, and both produce the same update <code>y&middot;x</code>. The two worst were one update counted twice. Deduplicating by update vector made the choice real: 98/68 across the worst and second-worst.</p><figure><svg class="snap" viewBox="0 0 1040 440" role="img" preserveAspectRatio="xMidYMid meet">
 <title>Perceptron learning in data space and weight space</title>
 <desc>Left: labelled points, the margin corridor, the model's separating plane, and the update parallelogram. Right: weight space with one constraint line per example, the green wedge of weight vectors that classify everything correctly, the blue bound cone, the trajectory so far, and an optional worst-case zigzag riding the cone edge. A slider scrubs backwards and forwards through the run's history.</desc>
@@ -173,44 +191,82 @@ bound drawn as a blue cone.</figcaption></figure>
 <section class="beat"><div class="main"><p class="prompt"><span class="who">You</span>&ldquo;When we choose a mistake, should we put a green dot in the right place in weight space? It would show up on the corresponding spray line.&rdquo;</p><p class="reply">The model picked one reading, built a crossing-point marker, measured its distribution over 191 updates, found a step-dependent pattern in it, and wrote it up.</p><p class="prompt"><span class="who">You</span>&ldquo;Maybe you are imagining a different dot than I am?&rdquo;</p><p class="reply">Three candidates existed &mdash; the tip of <code>y&middot;x</code>, the tip of <code>w+y&middot;x</code>, and the crossing on the line &mdash; and the request did not separate them. Listing all three led to a fourth answer: at that stage a point has no position in weight space, because its dual is a line.</p></div><aside class="note"><h4>Three readings of one request</h4><p>The request had at least three referents. One was chosen and built, with measurements attached.</p><p>The work was careful, which made the mismatch harder to spot than a straightforward error would have been.</p><span class="did">For ambiguous geometry, ask for the list before the implementation: name the candidates, say which satisfy the constraint, and wait.</span></aside></section>
 <section class="beat"><div class="main"><p class="prompt"><span class="who">You</span>&ldquo;Maybe label it <i>pink: Cauchy&ndash;Schwarz limit</i>, or <i>pink: bounded region for worst-case w</i>?&rdquo;</p><p class="reply">Neither fits. The region is the conjunction of the two inductive bounds; Cauchy&ndash;Schwarz is the step applied to it to get the cone, so that name belongs to the input. And it holds every <code>w</code> still permitted, not the worst one, which is its corner. The label became &ldquo;where w must lie after k mistakes&rdquo; &mdash; necessary rather than sufficient.</p></div><aside class="note"><h4>Naming things</h4><p>Both suggestions were reasonable and neither described the region.</p><p>Naming is where a misconception can sit for a long time, because a name repeats and the figure does not contradict it.</p><span class="did">Propose names deliberately and ask for arguments against them.</span></aside></section>
 
+
 <div class="close">
-<h2>What to take from it</h2>
+<h2>The strategy underneath</h2>
 
 <div class="box">
-<h3>The moves, roughly in the order they came up</h3>
-<ol>
-<li>Ask for a distribution with a tolerance and a trial count, rather than confirmation.</li>
-<li>Ask for the derivation and the measurement, whichever one arrives first.</li>
-<li>Re-read the words on the figure after each change to the figure.</li>
-<li>Ask what set the theorem constrains, and draw that set.</li>
-<li>State predictions before checking them, and follow up the near-misses.</li>
-<li>Render both options when the choice is hard and rendering is cheap.</li>
-<li>Ask what a change makes worse.</li>
-<li>Ask for the enumeration before the implementation, where a request is ambiguous.</li>
-</ol>
+<h3>What the questions were drawn from</h3>
+<p><b>The statement of the theorem, held next to the picture.</b> Nearly every question that changed
+something traces back to a specific clause. &ldquo;What&rsquo;s it bounding?&rdquo; comes from knowing
+the theorem bounds <code>w</code>. &ldquo;Reason from the structure of the proof&rdquo; comes from
+knowing the conclusion is about a ratio. The figure gets compared against the sentence, not against
+taste.</p>
+<p><b>Shape sense that runs ahead of the algebra.</b> &ldquo;Is it a parallelogram?&rdquo;
+&ldquo;Maybe it touches the corner.&rdquo; &ldquo;Shouldn&rsquo;t those be half-lines?&rdquo; None of
+these were verified before being asked. Half-seeing a structure and naming it is enough, and the
+naming is what makes the answer checkable.</p>
+<p><b>The room.</b> &ldquo;So we can talk about it out loud in class unambiguously.&rdquo; Imagining
+saying a thing to thirty people is a constraint the mathematics does not supply, and it caught both a
+stale label and two wrong names.</p>
+<p><b>The ends of the range.</b> What should this show at k = 0, where the theorem says nothing? What
+happens when the margin goes to zero? Degenerate cases are cheap to ask about and the answers are
+unambiguous.</p>
+<p><b>Looking.</b> Several turns are just the rendering arriving and the understanding changing:
+&ldquo;now that you&rsquo;ve drawn it, I see.&rdquo; That is a use of the model as a rendering
+surface rather than as a source of answers, and it is the fastest thing in either transcript.</p>
 </div>
 
 <div class="box">
-<h3>When the model agrees</h3>
-<p>Several turns here were agreements: building the raw-x spray on request, choosing a reading of the
-green dot and verifying it, taking a framing and running with it. At the time each looked like
-progress.</p>
-<p>What made them recoverable was structural rather than conversational. Changes were one commit
-each. Claims arrived with numbers attached. The figure got looked at again afterwards.</p>
-<p>The model also disagreed a few times: about two proposed names, about the premise of the question
-on the spray, and about its own earlier drawing, which it reported had placed the worst-case path
-outside the feasible region. Those turns moved the understanding more than the agreements did.</p>
-<p>A question worth asking of a long session: when did it last disagree.</p>
+<h3>Where to press, and where to let it run</h3>
+<p>The pressure is not applied evenly. Layout, colour and wording were handed over with almost no
+argument &mdash; say what you want, look at the result, adjust. What got interrogated was every claim
+about what a drawn thing <i>means</i>.</p>
+<p>The sharpest moment to press is when the model narrates significance. The violet-wedge problem
+happened exactly where the reply said, in effect, here is the convergence argument made visible.
+Adjacency to a proof is not a role in it, and a figure placed beside an argument will be read as part
+of it.</p>
+<p>Openness is cheapest where building is cheap. &ldquo;Switch to raw x&rdquo; cost three minutes and
+settled a question that discussion had not. When a change is one commit, rendering beats reasoning
+about what the rendering would look like.</p>
+<p>The model is also worth using as a source of structure and not only as a draftsman. Kaczmarz, the
+standard-basis construction that saturates the bound, the dimension argument for why two dimensions
+cannot realise the worst case &mdash; none of those were prompted by someone who already knew them.
+Take the mathematics, then check it.</p>
 </div>
 
 <div class="box">
-<h3>What is left at the end</h3>
-<p>A picture with a mechanism in it. A chord moving outward linearly while an arc grows as the square
-root. The corner where they meet, which is the only point saturating both bounds at once. A wedge
-whose width is what remains of 180&deg; once the data has had its say.</p>
-<p>Each came from a question that started in confusion. The
-<a href="../demos/perceptron.html">finished demo</a> shows none of that, which is the reason for
-keeping this record.</p>
+<h3>What agreement looks like from the inside</h3>
+<p>Across both conversations the model opened replies with &ldquo;Fair&rdquo;, &ldquo;Good
+catch&rdquo;, &ldquo;Good instinct&rdquo;, &ldquo;You&rsquo;re right, and the fault is mine.&rdquo;
+Those phrases attach equally to the turns that fixed something real and the turns that built the
+wrong thing well. The warmth carries no information.</p>
+<p>The failure mode here was never flattery. It was unearned significance: a correct object given a
+role it did not have. The model&rsquo;s own description afterwards is exact &mdash; <i>I put it next
+to the proof talk and made it look load-bearing</i>. Nothing in the conversation could have surfaced
+that, because the conversation was about what the wedge showed, and it did show that.</p>
+<p>What surfaced it was leaving the conversation and looking at the screen with the theorem in mind.
+The check is mechanical: for each element, what object does it constrain, and is that object where
+the element says it should be. Run it after every change. It caught two separate defects in the same
+sitting, and both times the answer was available in one glance once the question was asked.</p>
+<p>The signals worth noticing run the other way. The model refused two proposed names, contradicted
+the premise of a question about the spray, volunteered that the extremal path needs dimension at
+least k and so cannot occur in the figure being drawn, and said plainly that it did not know the
+worst case in fixed small dimension and would want to check. Those turns moved the understanding
+more than any of the agreements.</p>
+</div>
+
+<div class="box">
+<h3>The shape of it</h3>
+<p>No part of this was specified in advance. The sequence is: ask for something, look at what
+arrives, find the one element that does not fit, ask what it means, and trace the answer to its cause
+rather than patching where it showed.</p>
+<p>Two conversations and about forty rounds produced a figure whose parts each do a job: a chord
+moving outward linearly while an arc grows as the square root, the corner where they meet, the only
+point saturating both bounds at once, and a wedge whose width is what remains of 180&deg; once the
+data has had its say.</p>
+<p>Each of those came from a question that started in confusion, and the
+<a href="../demos/perceptron.html">finished demo</a> shows none of it.</p>
 </div>
 </div>
 
