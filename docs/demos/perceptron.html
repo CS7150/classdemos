@@ -146,8 +146,7 @@ function setk(v){
  anim();}
 function setwc(v){WC=v;anim();}
 function setz(v){Z0=v;boot();}
-function startMsg(){return Z0?'w starts at zero: every point ties, so every point counts as a mistake, and the cone constrains nothing.'
- :'w starts pointed the wrong way. The amber line is its separating plane: most of the points land on the wrong side.';}
+function startMsg(){return Z0?'w starts at zero: every point ties, so every point counts as a mistake, and the cone constrains nothing.':'';}
 function para(F,rc,lab){var cr=corr(),pv=[w[0]+cr[0],w[1]+cr[1]],s='';
  s+=ln(F(0,0),F(cr[0],cr[1]),rc,'stroke="#D85A30" stroke-width="2.5"',0,1);
  s+=ln(F(w[0],w[1]),F(pv[0],pv[1]),rc,'stroke="#D85A30" stroke-width="1" stroke-dasharray="6 5"',0);
@@ -218,8 +217,8 @@ function render(){
  document.getElementById('stage').innerHTML=s;
  var ang=n>0?(Math.acos(Math.max(-1,Math.min(1,(W[0]*w[0]+W[1]*w[1])/n)))*180/Math.PI).toFixed(1)+'&#176;':'&#8212;';
  var cone=imp?'empty':(vac?'unbounded':(th*180/Math.PI).toFixed(1)+'&#176;');
- document.getElementById('readout').innerHTML=msg+
-  '<br>step <b>'+ci+'</b>'+(BEY?' (run ended at '+head()+')':' of '+head())+' &#183; misclassified <b>'+nb+' of '+P.length+'</b> &#183; |w| = <b>'+n.toFixed(2)+'</b> &#183; angle to w* <b>'+ang+'</b>'+
+ document.getElementById('readout').innerHTML=(msg?msg+'<br>':'')+
+  'step <b>'+ci+'</b>'+(BEY?' (run ended at '+head()+')':' of '+head())+' &#183; misclassified <b>'+nb+' of '+P.length+'</b> &#183; |w| = <b>'+n.toFixed(2)+'</b> &#183; angle to w* <b>'+ang+'</b>'+
   '<br>&#947;/R = '+(G/RAD).toFixed(3)+' &#183; cone here: <b>'+cone+'</b> &#183; wedge '+(WEDGE*180/Math.PI).toFixed(1)+'&#176; &#183; bound: at most <b>'+KB+'</b> mistakes';
  caption(n);
 }
