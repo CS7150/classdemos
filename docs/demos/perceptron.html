@@ -66,7 +66,7 @@ table.bt tr.now td{color:var(--text-primary);font-weight:500}
 </div>
 <div class="rd" id="readout"></div>
 <div class="cap" id="caption"></div>
-<div class="lg">Amber line: the model's separating plane, perpendicular to w. Blue cone: where w must lie after k mistakes. Green wedge: every w that classifies every point correctly. Pink zigzag: the extremal run, riding the cone edge. Each step picks adversarially: among the mistakes available, one of the two whose update leaves w at the widest angle to w*.</div>
+<div class="lg">Amber line: the model's separating plane, perpendicular to w. Blue half-plane: where the model says +. Pink cone: where w must lie after k mistakes. Green wedge: every w that classifies every point correctly. Pink zigzag: the extremal run, riding the cone's edge. Each step picks adversarially: among the mistakes available, one of the two whose update leaves w at the widest angle to w*.</div>
 <script>
 var LX=261,LY=228,RX=779,RY=228,LR=[12,44,510,432],RRc=[530,44,1028,432],ST=0.0012,WR=196;
 var W,U,XS,P,G,RAD,KB,p0,A1,A2,WEDGE,W0,S0=0,N0=0;
@@ -177,9 +177,9 @@ function render(){
  else if(ci>0&&ci<=head()&&HITS[ci-1]!=null){var hf=P[HITS[ci-1]],pf=L(hf[0],hf[1]);
   if(ins(pf,LR))s+='<circle cx="'+pf[0].toFixed(1)+'" cy="'+pf[1].toFixed(1)+'" r="13" fill="none" stroke="#1D9E75" stroke-width="2.5"/>';}
  var th=coneAngle(ci),imp=shad(ci)>rad(ci),vac=th>=Math.PI-1e-9;
- if(vac){s+='<circle cx="'+RX+'" cy="'+RY+'" r="'+WR+'" fill="#378ADD" opacity="0.13"/>';
-  s+='<text class="ts" x="'+RX+'" y="'+(RY-WR+20)+'" text-anchor="middle" fill="#185FA5">cone: every direction</text>';}
- else if(!imp)s+=wedge(p0-th,p0+th,WR,'#378ADD',0.17);
+ if(vac){s+='<circle cx="'+RX+'" cy="'+RY+'" r="'+WR+'" fill="#D4537E" opacity="0.13"/>';
+  s+='<text class="ts" x="'+RX+'" y="'+(RY-WR+20)+'" text-anchor="middle" fill="#993556">cone: every direction</text>';}
+ else if(!imp)s+=wedge(p0-th,p0+th,WR,'#D4537E',0.15);
  s+=wedge(A1,A2,WR,'#1D9E75',0.34);
  var hc=(hs==='bad'&&hit!=null)?corr():null;
  for(var j=0;j<XS.length;j++){var x=XS[j],nn=Math.hypot(x[0],x[1]),pp=[-x[1]/nn,x[0]/nn],
