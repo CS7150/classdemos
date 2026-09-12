@@ -205,8 +205,9 @@ function render(){
  if(WC){var lim=Math.min(ci,200),wp='';
   for(var q=0;q<=lim;q++){var tp=Rp(wcTip(q)[0],wcTip(q)[1]);wp+=tp[0].toFixed(1)+','+tp[1].toFixed(1)+' ';}
   s+='<polyline points="'+wp+'" fill="none" stroke="#D4537E" stroke-width="0.8" stroke-dasharray="1 3.5" stroke-linecap="round" opacity="0.45"/>';
-  for(var q2=1;q2<=lim;q2++){var t2=wcTip(q2),tp2=Rp(t2[0],t2[1]);
-   if(ins(tp2,RRc))s+='<circle cx="'+tp2[0].toFixed(1)+'" cy="'+tp2[1].toFixed(1)+'" r="4" fill="#D4537E"/>';}
+  // only the corner for the current k is the live one; the rest are where it has been
+  for(var q2=1;q2<=lim;q2++){var t2=wcTip(q2),tp2=Rp(t2[0],t2[1]),nw=q2===lim;
+   if(ins(tp2,RRc))s+='<circle cx="'+tp2[0].toFixed(1)+'" cy="'+tp2[1].toFixed(1)+'" r="'+(nw?4:2.1)+'" fill="#D4537E"'+(nw?'':' opacity="0.4"')+'/>';}
   var lt=Rp(wcTip(lim)[0],wcTip(lim)[1]);
   if(ins(lt,RRc))s+='<text class="ts" x="'+(lt[0]+12).toFixed(1)+'" y="'+(lt[1]-10).toFixed(1)+'" fill="#993556">worst case</text>';}
  var hh=Math.min(ci,head()),pts='';for(var t3=0;t3<=hh;t3++){var tp3=Rp(HIST[t3][0],HIST[t3][1]);pts+=tp3[0].toFixed(1)+','+tp3[1].toFixed(1)+' ';}
