@@ -4,307 +4,351 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Matrix times vector</title>
-<meta name="description" content="A matrix-vector product is a weighted sum of the matrix's columns, animated leg by leg.">
+<meta name="description" content="A matrix-vector product as a weighted sum of columns, animated in algebra and geometry at once.">
 <link rel="stylesheet" href="../demo.css">
 <style>
-body{gap:8px}
-#alg{display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap}
-.mgroup{display:flex;align-items:center;gap:7px}
-.mlab{font-size:18px;font-style:italic;color:var(--text-secondary)}
-.mx{display:inline-grid;gap:1px;position:relative;padding:5px 11px}
-.mx:before,.mx:after{content:"";position:absolute;top:0;bottom:0;width:8px;border:2px solid var(--border-strong)}
-.mx:before{left:0;border-right:0;border-radius:4px 0 0 4px}
-.mx:after{right:0;border-left:0;border-radius:0 4px 4px 0}
-.mx input,.mx .cell{width:42px;height:28px;text-align:center;font-size:16px;font-variant-numeric:tabular-nums;
- border:1px solid transparent;border-radius:6px;background:transparent;color:var(--text-primary);font-family:inherit;padding:0}
-.mx input:hover{border-color:var(--border);cursor:ns-resize}
-.mx input:focus{outline:none;border-color:var(--blue);background:var(--surface)}
-.mx input::-webkit-outer-spin-button,.mx input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-.mx input[type=number]{-moz-appearance:textfield}
-.cell{display:flex;align-items:center;justify-content:center}
-.mx .hi{background:var(--surface-1);border-color:var(--border)}
-.res .cell{font-weight:500}
-.eq{font-size:20px;color:var(--text-secondary)}
-#wrap{position:relative}
-#wrap svg{position:absolute;inset:0;width:100%;height:100%}
+#stagewrap{flex:1;min-height:0;display:flex;gap:10px;align-items:stretch}
+#alg{position:relative;flex:0 0 430px;min-width:260px}
+#geo{position:relative;flex:1 1 auto;min-width:280px}
+#geo svg{position:absolute;inset:0;width:100%;height:100%}
+.cel{position:absolute;left:0;top:0;width:44px;height:30px;display:flex;align-items:center;justify-content:center;
+ font-size:17px;font-variant-numeric:tabular-nums;transform-origin:22px 15px;white-space:nowrap}
+input.cel{border:1px solid transparent;border-radius:6px;background:transparent;text-align:center;
+ font-family:inherit;padding:0;color:inherit}
+input.cel:hover{border-color:var(--border);cursor:ns-resize}
+input.cel:focus{outline:none;border-color:var(--blue);background:var(--surface)}
+input.cel::-webkit-outer-spin-button,input.cel::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+input.cel[type=number]{-moz-appearance:textfield}
+.op{position:absolute;left:0;top:0;font-size:20px;color:var(--text-muted);transform-origin:0 0}
+.lbl{position:absolute;left:0;top:0;font-size:17px;font-style:italic;color:var(--text-secondary);transform-origin:0 0}
+.brk{position:absolute;left:0;top:0;pointer-events:none;color:var(--border-strong);transform-origin:0 0}
+.brk:before,.brk:after{content:"";position:absolute;top:0;bottom:0;width:7px;border:2px solid currentColor}
+.brk:before{left:0;border-right:0;border-radius:3px 0 0 3px}
+.brk:after{right:0;border-left:0;border-radius:0 3px 3px 0}
+.phases{display:flex;gap:0;font-size:13.5px;color:var(--text-muted);margin-top:-2px}
+.phases span{flex:1;text-align:center;padding:2px 0;border-top:2px solid var(--border)}
+.phases span.on{color:var(--text-primary);border-top-color:var(--blue)}
+.dim{font-size:15px;color:var(--text-secondary)}
+select.sm{height:34px;padding:0 6px;font-size:15px}
+@media (max-width:820px){#stagewrap{flex-direction:column}#alg{flex:0 0 190px}#geo{min-height:220px}}
 </style>
 </head>
 <body>
 <div class="nav"><a href="./">&larr; Quiz 0, worked</a> &middot; <a href="../../">CS7150 class demos</a></div>
 <h1>Matrix &times; vector<span>: a weighted sum of the columns</span></h1>
-<p class="quiz">Quiz 0, question 1(a). <b>Multiply by hand.</b> Drag any number up or down to change it.</p>
+<p class="quiz">Quiz 0, question 1(a). <b>Multiply by hand.</b> Edit any number, or change the shape, and press play.</p>
 
-<div id="alg">
-  <div class="mgroup"><span class="mlab">A</span><div class="mx" id="mA" style="grid-template-columns:repeat(3,auto)"></div></div>
-  <div class="mgroup"><span class="mlab">x</span><div class="mx" id="mX" style="grid-template-columns:auto"></div></div>
-  <div class="eq">=</div>
-  <div class="mgroup"><div class="mx res" id="mY" style="grid-template-columns:auto"></div></div>
-</div>
-<div id="wrap">
-<svg viewBox="0 0 1040 420" role="img" preserveAspectRatio="xMidYMid meet">
-<title>A matrix-vector product built up one column at a time</title>
-<desc>Column view: the three columns of A drawn as arrows in the plane, each stretched by its entry of x and laid tip to tail, ending at Ax. Row view: the same six products as two waterfall accumulations, one per output entry.</desc>
-<defs><marker id="ar" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
-<g id="stage"></g>
-</svg>
+<div id="stagewrap">
+  <div id="alg"><div id="algin"></div></div>
+  <div id="geo">
+    <svg viewBox="0 0 560 420" role="img" preserveAspectRatio="xMidYMid meet">
+    <title>The columns of A as vectors, scaled and then added</title>
+    <desc>The columns of A leave the origin together as a spray of arrows. Each is stretched by its entry of x at the same time as the others, and then all of them slide into a chain laid tip to tail whose end is Ax.</desc>
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+    <g id="stage"></g>
+    </svg>
+  </div>
 </div>
 
 <div class="row">
 <button class="main" id="play" onclick="toggle()">Play</button>
-<span class="seg"><button id="mcol" class="on" onclick="setmode('col')">columns</button><button id="mrow" onclick="setmode('row')">rows</button></span>
+<span class="dim">shape</span>
+<select class="sm" id="rows" onchange="setdim()"><option>1</option><option selected>2</option><option>3</option></select>
+<span class="dim">&#215;</span>
+<select class="sm" id="cols" onchange="setdim()"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select>
 <button onclick="quiz()">Quiz values</button>
 <button onclick="rnd()">Random</button>
+<span id="orb" style="display:none;align-items:center;gap:8px"><span class="dim">turn</span>
+<input type="range" id="az" min="-180" max="180" step="1" value="32" oninput="draw()" style="min-width:110px"></span>
 </div>
 <div class="row">
 <span class="klab">build</span>
-<input type="range" id="ts" min="0" max="300" step="1" value="0" oninput="setT(+this.value/100,1)">
+<input type="range" id="ts" min="0" max="400" step="1" value="0" oninput="setT(+this.value/100,1)">
 <span class="knum" id="tv">0.00</span>
 </div>
+<div class="phases" id="ph">
+ <span>transpose</span><span>split</span><span>scale</span><span>add</span></div>
 <div class="rd" id="readout"></div>
 <div class="cap" id="caption"></div>
 
 <script>
-var A=[[1,2,-1],[0,1,0]],X=[3,4,5];
-var QA=[[1,2,-1],[0,1,0]],QX=[3,4,5];
-var C=['#378ADD','#BA7517','#7F77DD'],CI=['var(--blue-ink)','var(--warm-ink)','var(--violet-ink)'];
-var SUB=['₁','₂','₃'];
-var t=0,mode='col',playing=false,last=0,raf=null;
-var VW=1040,VH=420;
-var sc=40,mx=0,my=0,tsc=40,tmx=0,tmy=0,firstFit=true;
+var R=2,C=3,A=[[1,2,-1],[0,1,0]],X=[3,4,5];
+var COL=['#378ADD','#BA7517','#7F77DD','#D85A30','#A0518F'];
+var INK=['var(--blue-ink)','var(--warm-ink)','var(--violet-ink)','var(--orange-ink)','#8A3F7B'];
+var SUB=['₁','₂','₃','₄','₅'];
+var CW=44,CH=30,SG=40,GX=40;
+var t=0,playing=false,raf=null,last=0;
+var els={};
 
-function col(j){return [A[0][j],A[1][j]];}
-function term(i,j){return A[i][j]*X[j];}
-function res(){return [tot(0),tot(1)];}
-function tot(i){return term(i,0)+term(i,1)+term(i,2);}
-function part(k){var p=[0,0];for(var j=0;j<k;j++){p[0]+=X[j]*A[0][j];p[1]+=X[j]*A[1][j];}return p;}
-function fmt(v){var a=Math.abs(v),b=Math.abs(a-Math.round(a))<1e-9?String(Math.round(a)):a.toFixed(2);
- return (v<0?'\u2212':'')+b;}
+function cl(v){return Math.max(0,Math.min(1,v));}
+function ease(f){return f<0.5?2*f*f:1-Math.pow(-2*f+2,2)/2;}
+function smooth(a,b,x){var u=cl((x-a)/(b-a));return u*u*(3-2*u);}
+function lerp(a,b,f){return a+(b-a)*f;}
+function fmt(v){var a=Math.abs(v),b=Math.abs(a-Math.round(a))<1e-9?String(Math.round(a)):a.toFixed(1);
+ return (v<0?'−':'')+b;}
 function par(v){return v<0?'('+fmt(v)+')':fmt(v);}
-function sgn(v){return (v<0?'−':'+')+' '+fmt(Math.abs(v));}
+function colv(j){var v=[];for(var i=0;i<R;i++)v.push(A[i][j]);return v;}
+function scaled(j){return colv(j).map(function(v){return v*X[j];});}
+function partial(k){var p=new Array(R).fill(0);
+ for(var j=0;j<k;j++)for(var i=0;i<R;i++)p[i]+=X[j]*A[i][j];return p;}
+function result(){return partial(C);}
 
-/* ---------- the editable matrices ---------- */
+/* ---------- the algebra panel ---------- */
+// Every cell is an absolutely positioned element whose transform is recomputed
+// each frame from the timeline, so the matrix can split, hand a coefficient to
+// each column and merge again without any of it being a separate picture.
 function build(){
- var a='';for(var i=0;i<2;i++)for(var j=0;j<3;j++)
-  a+='<input type="number" step="1" id="a'+i+j+'" value="'+A[i][j]+'" aria-label="A row '+(i+1)+' column '+(j+1)+'">';
- document.getElementById('mA').innerHTML=a;
- var x='';for(var j2=0;j2<3;j2++)
-  x+='<input type="number" step="1" id="x'+j2+'" value="'+X[j2]+'" aria-label="x entry '+(j2+1)+'">';
- document.getElementById('mX').innerHTML=x;
- document.getElementById('mY').innerHTML='<div class="cell" id="y0"></div><div class="cell" id="y1"></div>';
- for(var i3=0;i3<2;i3++)for(var j3=0;j3<3;j3++)hook(document.getElementById('a'+i3+j3),i3,j3,'a');
- for(var j4=0;j4<3;j4++)hook(document.getElementById('x'+j4),0,j4,'x');
+ var h='',i,j;
+ h+='<div class="brk" id="bA"></div><div class="brk" id="bX"></div><div class="brk" id="bR"></div>';
+ for(j=0;j<C;j++)h+='<div class="brk" id="bC'+j+'" style="color:'+COL[j%5]+'"></div>';
+ h+='<div class="lbl" id="lA">A</div><div class="lbl" id="lX">x</div><div class="lbl" id="lR">Ax</div>';
+ for(i=0;i<R;i++)for(j=0;j<C;j++)
+  h+='<input class="cel" type="number" step="1" id="a'+i+'_'+j+'" style="color:'+INK[j%5]+
+     '" aria-label="A row '+(i+1)+' column '+(j+1)+'">';
+ for(j=0;j<C;j++)
+  h+='<input class="cel" type="number" step="1" id="x'+j+'" style="color:'+INK[j%5]+
+     '" aria-label="x entry '+(j+1)+'">';
+ for(i=0;i<R;i++)h+='<div class="cel" id="r'+i+'" style="color:var(--green-ink);font-weight:500"></div>';
+ for(j=0;j<C-1;j++)h+='<div class="op" id="p'+j+'">+</div>';
+ document.getElementById('algin').innerHTML=h;
+ els={};
+ ['bA','bX','bR','lA','lX','lR'].forEach(function(k){els[k]=document.getElementById(k);});
+ for(j=0;j<C;j++){els['bC'+j]=document.getElementById('bC'+j);els['x'+j]=document.getElementById('x'+j);
+  if(j<C-1)els['p'+j]=document.getElementById('p'+j);}
+ for(i=0;i<R;i++){els['r'+i]=document.getElementById('r'+i);
+  for(j=0;j<C;j++)els['a'+i+'_'+j]=document.getElementById('a'+i+'_'+j);}
+ for(i=0;i<R;i++)for(j=0;j<C;j++)hook(els['a'+i+'_'+j],i,j,1);
+ for(j=0;j<C;j++){els['x'+j].value=X[j];hook(els['x'+j],0,j,0);}
 }
-// Typing works, and so does dragging a cell up and down, which is faster at the
-// board than selecting a field and retyping it.
-function hook(el,i,j,kind){
+// Typing works, and so does dragging a cell up and down.  Either way the timeline
+// rewinds, because a half-scaled cell is not a number anyone meant to edit.
+function hook(el,i,j,isA){
  function put(v){v=Math.max(-9,Math.min(9,Math.round(v)));
-  if(kind==='a')A[i][j]=v;else X[j]=v;el.value=v;fit();draw();}
- el.oninput=function(){var v=parseFloat(el.value);if(!isNaN(v))put(v);};
- el.onpointerdown=function(e){
-  var y0=e.clientY,v0=(kind==='a'?A[i][j]:X[j]),moved=false;
+  if(isA)A[i][j]=v;else{X[j]=v;el.value=v;}
+  t=0;pause();fitGeo();draw();}
+ el.addEventListener('input',function(){var v=parseFloat(el.value);if(!isNaN(v))put(v);});
+ el.addEventListener('pointerdown',function(e){
+  var y0=e.clientY,v0=isA?A[i][j]:X[j],moved=false;
   el.setPointerCapture(e.pointerId);
   el.onpointermove=function(ev){var d=Math.round((y0-ev.clientY)/16);
-   if(d!==0)moved=true;if(moved)put(v0+d);};
+   if(d)moved=true;if(moved)put(v0+d);};
   el.onpointerup=function(ev){el.onpointermove=null;el.onpointerup=null;
-   try{el.releasePointerCapture(ev.pointerId);}catch(_){}};
- };
+   try{el.releasePointerCapture(ev.pointerId);}catch(_){}};});
 }
-function hilite(k){
- for(var i=0;i<2;i++)for(var j=0;j<3;j++)
-  document.getElementById('a'+i+j).classList.toggle('hi',j===k);
- for(var j2=0;j2<3;j2++)document.getElementById('x'+j2).classList.toggle('hi',j2===k);
+function place(el,x,y,op,sc){
+ if(!el)return;
+ el.style.transform='translate('+x.toFixed(1)+'px,'+y.toFixed(1)+'px)'+(sc!==1?' scale('+sc.toFixed(3)+')':'');
+ el.style.opacity=op.toFixed(3);
+ el.style.pointerEvents=op>0.5?'auto':'none';
+}
+function brk(el,x,y,w,h,op){
+ if(!el)return;
+ el.style.width=(w+14)+'px';el.style.height=(h+10)+'px';
+ el.style.transform='translate('+(x-7).toFixed(1)+'px,'+(y-5).toFixed(1)+'px)';
+ el.style.opacity=op.toFixed(3);
+}
+function layoutAlg(){
+ var e1=ease(cl(t)),e2=ease(cl(t-1)),e3=ease(cl(t-2)),e4=ease(cl(t-3)),i,j;
+ var gap=SG*e2,cw=CW+gap,MX=((C-1)*cw)/2,
+     AW=C*CW,BH=R*CH,fade=1-smooth(0.55,1,e4);
+ function cx(j){return lerp(j*cw,MX,e4);}
+ // where the content sits, so the block stays centred as it spreads and regathers
+ var right=Math.max(cx(C-1)+CW,(e1<1?AW+GX+CW:0)),
+     box=document.getElementById('alg'),
+     ox=Math.max(6,(box.clientWidth-right)/2),
+     oy=Math.max(CH*1.9,(box.clientHeight-BH)/2+6);
+ // A, splitting into columns and then scaling
+ for(j=0;j<C;j++)for(i=0;i<R;i++){
+  var v=A[i][j]*lerp(1,X[j],e3),el=els['a'+i+'_'+j];
+  if(document.activeElement!==el)el.value=(Math.abs(v-Math.round(v))<1e-9?Math.round(v):v.toFixed(1));
+  place(el,ox+cx(j),oy+i*CH,fade,1);}
+ // x rises, turns on its side, and deals one entry to each column
+ var ey=ease(cl(t*1.4)),ex=ease(cl((t-0.3)/0.7)),
+     xoff=(R*CH-C*CH)/2;
+ for(j=0;j<C;j++){
+  var rx=AW+GX,ry=j*CH+xoff,
+      px=lerp(rx,cx(j),ex),py=lerp(ry,-CH*1.6,ey);
+  place(els['x'+j],ox+px,oy+py+e3*CH*1.1,(1-e3)*(j<C?1:0),lerp(1,0.55,e3));}
+ // the running sum the columns are merging into
+ var res=result();
+ for(i=0;i<R;i++){els['r'+i].textContent=fmt(res[i]*e4);
+  place(els['r'+i],ox+MX,oy+i*CH,smooth(0.3,0.9,e4),1);}
+ for(j=0;j<C-1;j++)place(els['p'+j],ox+cx(j)+CW+gap/2-6,oy+BH/2-13,e2*fade*(gap>18?1:0),1);
+ brk(els.bA,ox,oy,AW,BH,1-smooth(0,0.35,e2));
+ brk(els.bX,ox+AW+GX,oy+xoff,CW,C*CH,1-smooth(0,0.5,e1));
+ for(j=0;j<C;j++)brk(els['bC'+j],ox+cx(j),oy,CW,BH,smooth(0.25,0.8,e2)*fade);
+ brk(els.bR,ox+MX,oy,CW,BH,smooth(0.3,0.9,e4));
+ place(els.lA,ox-30,oy+BH/2-12,1-smooth(0,0.35,e2),1);
+ place(els.lX,ox+AW+GX-27,oy+xoff+C*CH/2-12,1-smooth(0,0.5,e1),1);
+ place(els.lR,ox+MX+CW/2-11,oy+BH+16,smooth(0.3,0.9,e4),1);
 }
 
-/* ---------- fitting the plane to whatever the numbers are ---------- */
-function fit(){
- var pts=[[0,0]],j;
- for(j=1;j<=3;j++)pts.push(part(j));
- for(j=0;j<3;j++){var p=part(j),c=col(j);pts.push([p[0]+c[0],p[1]+c[1]]);pts.push(c);}
- var x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
- for(var i=0;i<pts.length;i++){x0=Math.min(x0,pts[i][0]);x1=Math.max(x1,pts[i][0]);
-  y0=Math.min(y0,pts[i][1]);y1=Math.max(y1,pts[i][1]);}
- var pad=0.9;x0-=pad;x1+=pad;y0-=pad;y1+=pad;
- var w=Math.max(x1-x0,3),h=Math.max(y1-y0,3);
- tsc=Math.min((VW-120)/w,(VH-78)/h);tmx=(x0+x1)/2;tmy=(y0+y1)/2;
- if(firstFit){sc=tsc;mx=tmx;my=tmy;firstFit=false;return;}
- kick();  // fit only sets the target; the frame loop is what walks the view to it
+/* ---------- the geometry panel ---------- */
+var VW=560,VH=420,gb=null;
+function pr(v){
+ var a=[v[0]||0,v[1]||0,v[2]||0];
+ if(R<=2)return [a[0],-a[1]];
+ var az=+document.getElementById('az').value*Math.PI/180,el=22*Math.PI/180;
+ return [a[0]*Math.cos(az)+a[1]*Math.sin(az),
+        -(-a[0]*Math.sin(az)*Math.sin(el)+a[1]*Math.cos(az)*Math.sin(el)+a[2]*Math.cos(el))];
 }
-function M(a,b){return [VW/2+sc*(a-mx),VH/2-sc*(b-my)];}
-function ease(f){return f<0.5?2*f*f:1-Math.pow(-2*f+2,2)/2;}
-
-function arrow(p,q,c,w,extra){
+// Two fits, not one: close on the bare columns while they are all that is drawn,
+// then widen to the whole journey over the stretch, so nothing is ever a speck
+// and nothing ever jumps.
+var gbA=null,gbB=null;
+function fitOne(pts){
+ var a=1e9,b=1e9,c=-1e9,d=-1e9,j;
+ for(j=0;j<pts.length;j++){var r=pr(pts[j]);
+  a=Math.min(a,r[0]);c=Math.max(c,r[0]);b=Math.min(b,r[1]);d=Math.max(d,r[1]);}
+ var w=Math.max(c-a,1.7),h=Math.max(d-b,1.7),pad=54,
+     s=Math.min((VW-2*pad)/w,(VH-2*pad)/h);
+ return {s:s,ox:VW/2-s*(a+c)/2,oy:VH/2-s*(b+d)/2};
+}
+function fitGeo(){
+ var near=[new Array(R).fill(0)],far=[new Array(R).fill(0)],i,j;
+ for(j=0;j<C;j++){
+  near.push(colv(j));
+  far.push(colv(j));far.push(scaled(j));far.push(partial(j+1));
+  var p=partial(j),sc=scaled(j),q=[];
+  for(i=0;i<R;i++)q.push(p[i]+sc[i]);
+  far.push(q);}
+ gbA=fitOne(near);gbB=fitOne(far);
+}
+function gbNow(){var z=ease(cl((t-1.8)/1.1));
+ return {s:lerp(gbA.s,gbB.s,z),ox:lerp(gbA.ox,gbB.ox,z),oy:lerp(gbA.oy,gbB.oy,z)};}
+function M(v){var r=pr(v);return [gb.ox+gb.s*r[0],gb.oy+gb.s*r[1]];}
+function TXT(x,y,s,c,anc,cls){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+
+ '" fill="'+c+'"'+(anc?' text-anchor="'+anc+'"':'')+'>'+s+'</text>';}
+function ARR(p,q,c,w,op,dash){
+ if(Math.hypot(q[0]-p[0],q[1]-p[1])<1.6)return '';
  return '<line x1="'+p[0].toFixed(1)+'" y1="'+p[1].toFixed(1)+'" x2="'+q[0].toFixed(1)+'" y2="'+q[1].toFixed(1)+
-  '" stroke="'+c+'" stroke-width="'+w+'" stroke-linecap="round" marker-end="url(#ar)"'+(extra||'')+'/>';
-}
-function txt(x,y,s,c,anc,cls){
- y=Math.max(17,Math.min(VH-7,y));
- return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" fill="'+c+'"'+
-  (anc?' text-anchor="'+anc+'"':'')+'>'+s+'</text>';
-}
-
-/* ---------- column view: walk along each column, x says how far ---------- */
-function drawCols(){
- var s='',i,j,o=M(0,0);
- var gx0=Math.ceil(mx-(VW/2)/sc),gx1=Math.floor(mx+(VW/2)/sc),
-     gy0=Math.ceil(my-(VH/2)/sc),gy1=Math.floor(my+(VH/2)/sc);
- if(gx1-gx0<60)for(i=gx0;i<=gx1;i++){var g=M(i,0);
-  s+='<line x1="'+g[0].toFixed(1)+'" y1="0" x2="'+g[0].toFixed(1)+'" y2="'+VH+'" stroke="var(--border)" stroke-width="'+(i===0?1.4:0.6)+'" opacity="'+(i===0?1:0.55)+'"/>';}
- if(gy1-gy0<60)for(i=gy0;i<=gy1;i++){var g2=M(0,i);
-  s+='<line x1="0" y1="'+g2[1].toFixed(1)+'" x2="'+VW+'" y2="'+g2[1].toFixed(1)+'" stroke="var(--border)" stroke-width="'+(i===0?1.4:0.6)+'" opacity="'+(i===0?1:0.55)+'"/>';}
-
- // The columns of A, at the origin, as the reference we walk along.  A column
- // retires once its own leg is laid, so the origin declutters as the walk proceeds
- // and the finished figure is just the three legs.
- for(j=0;j<3;j++){var c=col(j);if((c[0]===0&&c[1]===0)||t>=j+1)continue;
-  var q=M(c[0],c[1]);s+=arrow(o,q,C[j],2,' opacity="0.42"');
-  s+=txt(q[0]+(c[0]<0?-9:9),q[1]-7,'a'+SUB[j],CI[j],c[0]<0?'end':'start','tn');}
-
- var K=Math.min(2,Math.floor(t)),frac=t>=3?1:ease(t-Math.floor(t));
- for(j=0;j<3;j++){
-  if(t<=j)continue;
-  var f=(j<Math.floor(t))?1:frac,p=part(j),c2=col(j),
-      tip=[p[0]+f*X[j]*c2[0],p[1]+f*X[j]*c2[1]],P=M(p[0],p[1]),T=M(tip[0],tip[1]);
-  if(Math.hypot(T[0]-P[0],T[1]-P[1])>1.5)s+=arrow(P,T,C[j],3.2);
-  // Tick the leg once per copy of the column.  A dashed unscaled ghost would lie
-  // along the leg and vanish underneath it; ticks say the same thing -- this leg is
-  // |x_j| copies of a_j -- and stay visible.
-  var n=Math.abs(X[j]),sg=X[j]<0?-1:1;
-  if(n>1&&n<=14&&(c2[0]||c2[1]))for(var m=1;m<n&&m<=f*n;m++){
-   var q=M(p[0]+sg*m*c2[0],p[1]+sg*m*c2[1]),
-       dx=T[0]-P[0],dy=T[1]-P[1],dn=Math.hypot(dx,dy)||1;
-   s+='<line x1="'+(q[0]-dy/dn*5).toFixed(1)+'" y1="'+(q[1]+dx/dn*5).toFixed(1)+
-      '" x2="'+(q[0]+dy/dn*5).toFixed(1)+'" y2="'+(q[1]-dx/dn*5).toFixed(1)+
-      '" stroke="var(--bg)" stroke-width="2.6" stroke-linecap="round"/>';}
-  s+='<circle cx="'+P[0].toFixed(1)+'" cy="'+P[1].toFixed(1)+'" r="3.2" fill="'+C[j]+'"/>';
-  if(f>0.28){var mxp=(P[0]+T[0])/2,myp=(P[1]+T[1])/2,dx=T[0]-P[0],dy=T[1]-P[1],L=Math.hypot(dx,dy)||1;
-   s+=txt(mxp-dy/L*14,myp+dx/L*14+5,fmt(X[j])+'·a'+SUB[j],CI[j],'middle');}
+  '" stroke="'+c+'" stroke-width="'+w+'" stroke-linecap="round" opacity="'+op.toFixed(2)+
+  '"'+(dash?' stroke-dasharray="'+dash+'"':'')+' marker-end="url(#ar)"/>';}
+function drawGeo(){
+ var e1=ease(cl(t)),e3=ease(cl(t-2)),e4=ease(cl(t-3)),s='',i,j;
+ gb=gbNow();
+ var O=M(new Array(R).fill(0));
+ if(R<=2){
+  var lo=[Math.floor((0-gb.ox)/gb.s),Math.floor((0-gb.oy)/gb.s)],step=1,
+      x0=Math.ceil((0-gb.ox)/gb.s),x1=Math.floor((VW-gb.ox)/gb.s),
+      y0=Math.ceil((gb.oy-VH)/gb.s),y1=Math.floor(gb.oy/gb.s);
+  if(x1-x0<70)for(i=x0;i<=x1;i++){var gx=gb.ox+gb.s*i;
+   s+='<line x1="'+gx.toFixed(1)+'" y1="0" x2="'+gx.toFixed(1)+'" y2="'+VH+'" stroke="var(--border)" stroke-width="'+(i?0.6:1.3)+'" opacity="'+(i?0.5:1)+'"/>';}
+  if(R===2&&y1-y0<70)for(i=y0;i<=y1;i++){var gy=gb.oy-gb.s*i;
+   s+='<line x1="0" y1="'+gy.toFixed(1)+'" x2="'+VW+'" y2="'+gy.toFixed(1)+'" stroke="var(--border)" stroke-width="'+(i?0.6:1.3)+'" opacity="'+(i?0.5:1)+'"/>';}
+ }else{
+  // three axes, so the isometric view has something to read depth against
+  var L=1.35*Math.max.apply(null,[1].concat(result().map(Math.abs)));
+  for(j=0;j<3;j++){var e=[0,0,0];e[j]=L;var q=M(e);
+   s+='<line x1="'+O[0].toFixed(1)+'" y1="'+O[1].toFixed(1)+'" x2="'+q[0].toFixed(1)+'" y2="'+q[1].toFixed(1)+
+      '" stroke="var(--border-strong)" stroke-width="0.9" opacity="0.6"/>';}
  }
- var y=res(),cur=(t>=3)?y:part(Math.floor(t));
- if(t>0&&t<3){var pc=M(cur[0],cur[1]);
-  s+='<circle cx="'+pc[0].toFixed(1)+'" cy="'+pc[1].toFixed(1)+'" r="3.2" fill="var(--text-secondary)"/>';}
- if(t>=3){var E=M(y[0],y[1]),lp=part(2),LP=M(lp[0],lp[1]),
-      ddx=E[0]-LP[0],ddy=E[1]-LP[1],dl=Math.hypot(ddx,ddy);
-  if(dl<2){ddx=1;ddy=-0.6;dl=Math.hypot(ddx,ddy);}
-  s+='<circle cx="'+E[0].toFixed(1)+'" cy="'+E[1].toFixed(1)+'" r="7" fill="var(--green)" stroke="var(--green-ink)" stroke-width="1.5"/>';
-  s+=txt(E[0]+ddx/dl*17,E[1]+ddy/dl*17+5,'Ax = ('+fmt(y[0])+', '+fmt(y[1])+')','var(--green-ink)',ddx<0?'end':'start');}
- s+='<circle cx="'+o[0].toFixed(1)+'" cy="'+o[1].toFixed(1)+'" r="3" fill="var(--text-primary)"/>';
+ // Every column at once: born at the origin, stretched in place, then carried
+ // out to sit on the tip of the one before it.
+ for(j=0;j<C;j++){
+  var cv=colv(j),sv=scaled(j),p0=partial(j),
+      f=lerp(1,X[j],e3),tail=[],head=[];
+  for(i=0;i<R;i++){var tl=lerp(0,p0[i],e4);tail.push(tl);head.push(tl+cv[i]*f);}
+  var Tp=M(tail),Hp=M(head);
+  if(e3>0.02&&e4<0.98){var g=M(cv);
+   s+=ARR(O,g,COL[j%5],1.6,0.3*(1-e4),'5 4');}
+  s+=ARR(Tp,Hp,COL[j%5],3.2,lerp(0.35,1,e1));
+  var mx=(Tp[0]+Hp[0])/2,my=(Tp[1]+Hp[1])/2,dx=Hp[0]-Tp[0],dy=Hp[1]-Tp[1],dl=Math.hypot(dx,dy);
+  if(dl>26)s+=TXT(mx-dy/dl*15,my+dx/dl*15+5,(e3>0.5?par(X[j])+'·':'')+'a'+SUB[j%5],INK[j%5],'middle','tn');
+ }
+ if(e4>0.05){var rp=M(result());
+  s+='<circle cx="'+rp[0].toFixed(1)+'" cy="'+rp[1].toFixed(1)+'" r="'+(6*e4).toFixed(1)+
+     '" fill="var(--green)" stroke="var(--green-ink)" stroke-width="1.5" opacity="'+e4.toFixed(2)+'"/>';
+  if(e4>0.6){var lp=M(partial(C-1)),dx=rp[0]-lp[0],dy=rp[1]-lp[1],dl=Math.hypot(dx,dy);
+   if(dl<2){dx=0;dy=-1;dl=1;}
+   s+=TXT(rp[0]+dx/dl*18,rp[1]+dy/dl*18+5,'Ax = ('+result().map(fmt).join(', ')+')','var(--green-ink)',dx<0?'end':'start');}}
+ s+='<circle cx="'+O[0].toFixed(1)+'" cy="'+O[1].toFixed(1)+'" r="3" fill="var(--text-primary)"/>';
  return s;
 }
 
-/* ---------- row view: the same six products, accumulated one entry at a time ---------- */
-function drawRows(){
- var s='',i,j,lo=0,hi=0;
- for(i=0;i<2;i++){var a=0;for(j=0;j<3;j++){a+=term(i,j);lo=Math.min(lo,a);hi=Math.max(hi,a);}}
- lo-=1.2;hi+=1.2;var L=120,R=VW-40,S=(R-L)/Math.max(hi-lo,3);
- function px(v){return L+S*(v-lo);}
- for(i=0;i<2;i++){
-  var yb=44+i*176;
-  s+='<line x1="'+L+'" y1="'+yb+'" x2="'+R+'" y2="'+yb+'" stroke="var(--border-strong)" stroke-width="1"/>';
-  for(var g=Math.ceil(lo);g<=Math.floor(hi);g++){var gp=px(g);
-   s+='<line x1="'+gp.toFixed(1)+'" y1="'+(yb-4)+'" x2="'+gp.toFixed(1)+'" y2="'+(yb+4)+'" stroke="var(--border-strong)" stroke-width="1"/>';
-   if((g%2===0||Math.abs(hi-lo)<12)&&!(t>=3&&Math.abs(gp-px(tot(i)))<20))
-    s+=txt(gp,yb-10,String(g),'var(--text-muted)','middle','tn');}
-  s+=txt(L-14,yb+6,'y'+SUB[i]+' =','var(--text-secondary)','end');
-  var acc=0;
-  for(j=0;j<3;j++){
-   if(t<=j)break;
-   var f=(j<Math.floor(t))?1:ease(t-Math.floor(t)),tm=term(i,j),yr=yb+26+j*30,
-       x0=px(acc),x1=px(acc+f*tm);
-   s+='<line x1="'+x0.toFixed(1)+'" y1="'+(yb+3)+'" x2="'+x0.toFixed(1)+'" y2="'+yr.toFixed(1)+
-      '" stroke="var(--border-strong)" stroke-width="0.8" stroke-dasharray="3 3"/>';
-   if(Math.abs(x1-x0)>1.5)s+=arrow([x0,yr],[x1,yr],C[j],3.2);
-   else s+='<circle cx="'+x0.toFixed(1)+'" cy="'+yr.toFixed(1)+'" r="2.6" fill="'+C[j]+'"/>';
-   s+=txt((x0+x1)/2,yr-8,fmt(A[i][j])+'·'+fmt(X[j])+' = '+fmt(tm),CI[j],'middle','tn');
-   acc+=f*tm;
-   if(f===1){var xe=px(acc);
-    s+='<line x1="'+xe.toFixed(1)+'" y1="'+yr.toFixed(1)+'" x2="'+xe.toFixed(1)+'" y2="'+(yr+ (j<2?18:8)).toFixed(1)+
-       '" stroke="var(--border-strong)" stroke-width="0.8" stroke-dasharray="3 3"/>';}
-  }
-  if(t>=3){var yv=tot(i),fp=px(yv);
-   s+='<line x1="'+fp.toFixed(1)+'" y1="'+(yb-13)+'" x2="'+fp.toFixed(1)+'" y2="'+(yb+13)+'" stroke="var(--green-ink)" stroke-width="2.5"/>';
-   s+='<circle cx="'+fp.toFixed(1)+'" cy="'+yb+'" r="5.5" fill="var(--green)" stroke="var(--green-ink)" stroke-width="1.5"/>';
-   s+=txt(fp,yb-22,'y'+SUB[i]+' = '+fmt(yv),'var(--green-ink)','middle');}
- }
- return s;
-}
-
+/* ---------- frame ---------- */
 function draw(){
- document.querySelector('#wrap svg').setAttribute('viewBox','0 0 '+VW+' '+(mode==='col'?VH:376));
- document.getElementById('stage').innerHTML=(mode==='col')?drawCols():drawRows();
- var y=res();
- document.getElementById('y0').textContent=fmt(y[0]);
- document.getElementById('y1').textContent=fmt(y[1]);
- hilite(t>=3?-1:Math.floor(t));
+ if(!gbA)fitGeo();
+ layoutAlg();
+ document.getElementById('stage').innerHTML=drawGeo();
  document.getElementById('tv').textContent=t.toFixed(2);
  document.getElementById('ts').value=Math.round(t*100);
+ var k=Math.min(3,Math.floor(t));
+ var sp=document.getElementById('ph').children;
+ for(var i=0;i<4;i++)sp[i].classList.toggle('on',t>0&&i===k);
  readout();caption();
 }
 function readout(){
- var k=Math.floor(t),y=res(),h;
- if(t<=0)h='<b>Ax = x'+SUB[0]+'a'+SUB[0]+' + x'+SUB[1]+'a'+SUB[1]+' + x'+SUB[2]+'a'+SUB[2]+'.</b> '+
-   'The columns of A are the directions you may walk in; x says how far to walk along each. Press play.';
- else if(t<3){var c=col(k),p=part(k);
-  h='Leg '+(k+1)+': stretch a'+SUB[k]+' = ('+fmt(c[0])+', '+fmt(c[1])+') by <b>'+fmt(X[k])+'</b> to get ('+
-   fmt(X[k]*c[0])+', '+fmt(X[k]*c[1])+')'+(X[k]<0?' — a negative weight walks backwards':'')+
-   ', laid on from ('+fmt(p[0])+', '+fmt(p[1])+').';}
- else h='<b>Ax = ('+fmt(y[0])+', '+fmt(y[1])+').</b> Three legs, tip to tail, from the origin to here.';
+ var h,k=Math.floor(t),res=result();
+ if(t<=0)h='<b>Ax is a weighted sum of the columns of A.</b> x has one entry per column, and that entry says how much of the column to take.';
+ else if(t<1)h='The vector x turns on its side and deals one entry to each column: x'+SUB[0]+' belongs to the first column, x'+SUB[1]+' to the second, and so on.';
+ else if(t<2)h='A comes apart into its '+C+' columns. Each is a vector with '+R+' entr'+(R>1?'ies':'y')+', and the geometry shows all '+C+' of them leaving the origin at once.';
+ else if(t<3){var e=[];for(var j=0;j<C;j++)e.push(par(X[j])+'a'+SUB[j%5]);
+  h='Every column is stretched by its own coefficient, all at the same time: '+e.join(', ')+'.';}
+ else if(t<4)h='The stretched columns line up tip to tail. Where the last one ends is <b>Ax</b>.';
+ else h='<b>Ax = ('+res.map(fmt).join(', ')+')</b>, reached by taking '+X.map(fmt).join(', ')+' of the '+C+' columns and adding them.';
  document.getElementById('readout').innerHTML=h;
 }
 function caption(){
- var y=res(),i,j,h='';
- var tm=[];
- for(j=0;j<3;j++)tm.push('<span style="color:'+CI[j]+'">'+par(X[j])+'('+fmt(A[0][j])+', '+fmt(A[1][j])+')</span>');
- h+='<div><b>Column picture.</b> Ax = '+tm.join(' + ')+' = <b>('+fmt(y[0])+', '+fmt(y[1])+')</b>, '+
-  'so what A can reach is whatever its columns span.</div>';
- h+='<div style="margin-top:5px"><b>Row picture.</b> The same six products gathered by output entry, '+
-  'each one a dot product of a row with x.</div>';
- for(i=0;i<2;i++){var e='';
-  for(j=0;j<3;j++)e+=(j?' '+sgn(term(i,j)):fmt(term(i,j)));
-  h+='<div style="margin-left:18px">y'+SUB[i]+' = '+par(A[i][0])+'\u00b7'+par(X[0])+' + '+par(A[i][1])+'\u00b7'+par(X[1])+
-   ' + '+par(A[i][2])+'\u00b7'+par(X[2])+' = '+e+' = <b>'+fmt(y[i])+'</b></div>';}
- h+='<div class="ans" style="margin-top:7px">A is 2&#215;3 and x has 3 entries, so Ax has <b>2</b>. '+
-  'The inner dimensions have to agree and they cancel: (2&#215;3)(3&#215;1) gives 2&#215;1.</div>';
+ var res=result(),i,j,h='',tm=[];
+ for(j=0;j<C;j++)tm.push('<span style="color:'+INK[j%5]+'">'+par(X[j])+'('+colv(j).map(fmt).join(', ')+')</span>');
+ h+='<div><b>Column picture.</b> Ax = '+tm.join(' + ')+' = <b>('+res.map(fmt).join(', ')+')</b>. '+
+  'Whatever A can produce is one of these weighted sums, so what A reaches is whatever its columns span.</div>';
+ h+='<div style="margin-top:5px"><b>Row picture.</b> The same '+(R*C)+' products gathered by output entry instead, '+
+  'each one a dot product of a row of A with x.</div>';
+ for(i=0;i<R;i++){var e=[],tt=0;
+  for(j=0;j<C;j++){e.push(par(A[i][j])+'·'+par(X[j]));tt+=A[i][j]*X[j];}
+  h+='<div style="margin-left:18px">y'+SUB[i%5]+' = '+e.join(' + ')+' = <b>'+fmt(tt)+'</b></div>';}
+ h+='<div class="ans" style="margin-top:6px">A is '+R+'&#215;'+C+' and x has '+C+' entries, so Ax has <b>'+R+'</b>. '+
+  'The inner dimensions have to agree and they cancel: ('+R+'&#215;'+C+')('+C+'&#215;1) gives '+R+'&#215;1.</div>';
  document.getElementById('caption').innerHTML=h;
 }
-function setT(v,stop){t=Math.max(0,Math.min(3,v));if(stop)pause();draw();}
+
+/* ---------- controls ---------- */
+function setT(v,stop){t=Math.max(0,Math.min(4,v));if(stop)pause();draw();}
 function step(now){
  var dt=Math.min(0.05,(now-last)/1000);last=now;
- var moving=false;
- if(playing){t+=dt*1.05;if(t>=3){t=3;pause();}moving=true;}
- if(Math.abs(tsc-sc)>0.15||Math.abs(tmx-mx)>0.01||Math.abs(tmy-my)>0.01){
-  sc+=(tsc-sc)*0.2;mx+=(tmx-mx)*0.2;my+=(tmy-my)*0.2;moving=true;}
+ if(playing){t+=dt*0.85;if(t>=4){t=4;pause();}}
  draw();
- if(moving||playing)raf=requestAnimationFrame(step);else raf=null;
+ raf=playing?requestAnimationFrame(step):null;
 }
-function kick(){if(!raf){last=performance.now();raf=requestAnimationFrame(step);}}
-function pause(){playing=false;document.getElementById('play').textContent=t>=3?'Replay':'Play';}
+function pause(){playing=false;document.getElementById('play').textContent=t>=4?'Replay':'Play';
+ if(raf){cancelAnimationFrame(raf);raf=null;}}
 function toggle(){if(playing){pause();return;}
- if(t>=3)t=0;playing=true;document.getElementById('play').textContent='Pause';kick();}
-function setmode(m){mode=m;
- document.getElementById('mcol').classList.toggle('on',m==='col');
- document.getElementById('mrow').classList.toggle('on',m==='row');
- draw();}
-function quiz(){A=[QA[0].slice(),QA[1].slice()];X=QX.slice();reset();}
-function rnd(){
- // small integers, at least one negative, and no all-zero column: the picture is
- // only interesting if every leg goes somewhere
- function d(){return Math.floor(Math.random()*7)-3;}
- for(var j=0;j<3;j++){var a,b;do{a=d();b=d();}while(a===0&&b===0);A[0][j]=a;A[1][j]=b;
-  X[j]=Math.floor(Math.random()*7)-3||2;}
- if(X[0]>0&&X[1]>0&&X[2]>0)X[Math.floor(Math.random()*3)]*=-1;
+ if(t>=4)t=0;playing=true;document.getElementById('play').textContent='Pause';
+ last=performance.now();raf=requestAnimationFrame(step);}
+function setdim(){
+ var nr=+document.getElementById('rows').value,nc=+document.getElementById('cols').value,i,j;
+ var B=[];
+ for(i=0;i<nr;i++){B.push([]);for(j=0;j<nc;j++)B[i].push(i<R&&j<C?A[i][j]:(i===j%nr?1:0));}
+ var Y=[];for(j=0;j<nc;j++)Y.push(j<C?X[j]:2);
+ R=nr;C=nc;A=B;X=Y;
+ document.getElementById('orb').style.display=(R===3)?'flex':'none';
  reset();
 }
-function reset(){build();fit();t=0;pause();draw();kick();}
+function quiz(){R=2;C=3;A=[[1,2,-1],[0,1,0]];X=[3,4,5];
+ document.getElementById('rows').value='2';document.getElementById('cols').value='3';
+ document.getElementById('orb').style.display='none';reset();}
+function rnd(){
+ // small integers, no all-zero column, and at least one negative weight: a column
+ // that walks backwards is the part people get wrong by hand
+ var i,j;
+ for(j=0;j<C;j++){var z=true;
+  while(z){z=true;for(i=0;i<R;i++){A[i][j]=Math.floor(Math.random()*7)-3;if(A[i][j])z=false;}}
+  X[j]=Math.floor(Math.random()*7)-3||2;}
+ if(X.every(function(v){return v>0;}))X[Math.floor(Math.random()*C)]*=-1;
+ reset();
+}
+function reset(){build();fitGeo();t=0;pause();draw();}
+window.addEventListener('resize',function(){fitGeo();draw();});
 document.addEventListener('keydown',function(e){
  if(e.target.tagName==='INPUT'&&e.target.type==='number')return;
  if(e.key===' '||e.key==='Enter'){e.preventDefault();toggle();}
- else if(e.key==='ArrowLeft'){setT(t-0.1,1);}
- else if(e.key==='ArrowRight'){setT(t+0.1,1);}
- else if(e.key==='c'||e.key==='C'){setmode('col');}
- else if(e.key==='r'||e.key==='R'){setmode('row');}
- else if(e.key==='n'||e.key==='N'){rnd();}
+ else if(e.key==='ArrowLeft')setT(t-0.1,1);
+ else if(e.key==='ArrowRight')setT(t+0.1,1);
+ else if(e.key==='n'||e.key==='N')rnd();
 });
-build();fit();draw();
+reset();
 </script>
 </body>
 </html>
