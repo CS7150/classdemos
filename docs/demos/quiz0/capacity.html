@@ -162,6 +162,14 @@ function caption(){
   '<tr><td>Bias</td><td><b>decreases</b></td><td>a more flexible model can get closer to the truth on average</td></tr>'+
   '<tr><td>Variance</td><td><b>increases</b></td><td>it also follows the noise of whichever sample it is given, so fits to different samples disagree more</td></tr>'+
   '<tr><td>Training error</td><td><b>decreases</b></td><td>it always fits its own sample better; with enough flexibility it can pass through every point</td></tr></table></div>';
+ h+='<div style="margin-top:6px"><b>How the curves are computed.</b> Fix a degree d. Draw R = 50 samples, each of '+NP+' noisy points, '+
+  'and fit a polynomial f&#770;<sub>r</sub>(x) to each. Their average at every x is the mean fit, f&#772;(x) = (1/R) &#931;<sub>r</sub> f&#770;<sub>r</sub>(x), '+
+  'the dashed pink curve once there are ghosts. Then, averaging over x in the middle of the range, with f the true curve:</div>';
+ h+='<div style="margin-left:18px">bias&#178;(d) = mean<sub>x</sub> ( f&#772;(x) &#8722; f(x) )&#178;, how far the average fit is from the truth;</div>';
+ h+='<div style="margin-left:18px">variance(d) = mean<sub>x</sub> (1/R) &#931;<sub>r</sub> ( f&#770;<sub>r</sub>(x) &#8722; f&#772;(x) )&#178;, how far the fits scatter around their average;</div>';
+ h+='<div style="margin-left:18px">training error(d) = (1/R) &#931;<sub>r</sub> mean<sub>i</sub> ( y<sub>i</sub> &#8722; f&#770;<sub>r</sub>(x<sub>i</sub>) )&#178;, each fit&rsquo;s squared error on its own sample;</div>';
+ h+='<div style="margin-left:18px">test error(d) = bias&#178;(d) + variance(d) + &#963;&#178;, the expected squared error on a fresh noisy point, which is what the decomposition says it is.</div>';
+ h+='<div>Bias and variance are properties of the <i>procedure</i>, not of one fit: you need many samples to see either, which is why the ghosts are there.</div>';
  h+='<div style="margin-top:6px"><b>What the ghosts show.</b> Resample a few times at degree 1 and the fits pile up in almost the same place, all of them '+
   'missing the curve the same way: low variance, high bias. Do it at degree 10 and the fits scatter wildly between the points while their average '+
   'hugs the truth: low bias, high variance.</div>';
