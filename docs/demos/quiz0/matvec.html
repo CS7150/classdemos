@@ -67,7 +67,7 @@ select.sm{height:34px;padding:0 6px;font-size:15px}
 <span class="knum" id="tv">0.00</span>
 </div>
 <div class="phases" id="ph">
- <span>transpose</span><span>split</span><span>scale</span><span>add</span></div>
+ <span>split</span><span>transpose</span><span>scale</span><span>add</span></div>
 <div class="rd" id="readout"></div>
 <div class="cap" id="caption"></div>
 
@@ -148,38 +148,48 @@ function brk(el,x,y,w,h,op){
  el.style.opacity=op.toFixed(3);
 }
 function layoutAlg(){
- var e1=ease(cl(t)),e2=ease(cl(t-1)),e3=ease(cl(t-2)),e4=ease(cl(t-3)),i,j;
- var gap=SG*e2,cw=CW+gap,MX=((C-1)*cw)/2,
-     AW=C*CW,BH=R*CH,fade=1-smooth(0.55,1,e4);
+ // Beat 1 splits A into columns.  Beat 2 is three motions of x: it rises as a
+ // block, turns a quarter turn into a row, and its entries fly out to sit over
+ // their columns.  Beat 3 scales, beat 4 adds.
+ var e1=ease(cl(t)),e2=cl(t-1),e3=ease(cl(t-2)),e4=ease(cl(t-3)),i,j;
+ var sa=smooth(0,0.34,e2),sb=smooth(0.34,0.68,e2),sc=smooth(0.68,1,e2);
+ var gap=SG*e1,cw=CW+gap,MX=((C-1)*cw)/2,AWs=(C-1)*cw+CW,BH=R*CH,fade=1-smooth(0.55,1,e4);
  function cx(j){return lerp(j*cw,MX,e4);}
- // where the content sits, so the block stays centred as it spreads and regathers
- var right=Math.max(cx(C-1)+CW,(e1<1?AW+GX+CW:0)),
+ var XR=AWs+GX,xoff=(R*CH-C*CH)/2,
+     rc=[XR+CW/2,xoff+C*CH/2],                 // x block centre, at rest
+     st=[AWs/2,-(C*CH)/2-CH*0.6],              // clear of the matrix, even while turning
+     cc=[lerp(rc[0],st[0],sb),lerp(rc[1],st[1],sa)], // straight up first, then across as it turns
+     th=-Math.PI/2*sb,sn=Math.sin(th),cs=Math.cos(th);
+ var right=lerp(XR+CW,cx(C-1)+CW,sa),
      box=document.getElementById('alg'),
      ox=Math.max(6,(box.clientWidth-right)/2),
-     oy=Math.max(CH*1.9,(box.clientHeight-BH)/2+6);
+     oy=Math.max(C*CH+CH*1.8,(box.clientHeight-BH)/2+6);
  // A, splitting into columns and then scaling
  for(j=0;j<C;j++)for(i=0;i<R;i++){
   var v=A[i][j]*lerp(1,X[j],e3),el=els['a'+i+'_'+j];
   if(document.activeElement!==el)el.value=(Math.abs(v-Math.round(v))<1e-9?Math.round(v):v.toFixed(1));
   place(el,ox+cx(j),oy+i*CH,fade,1);}
- // x rises, turns on its side, and deals one entry to each column
- var ey=ease(cl(t*1.4)),ex=ease(cl((t-0.3)/0.7)),
-     xoff=(R*CH-C*CH)/2;
+ // x: rise, quarter turn, deal out
  for(j=0;j<C;j++){
-  var rx=AW+GX,ry=j*CH+xoff,
-      px=lerp(rx,cx(j),ex),py=lerp(ry,-CH*1.6,ey);
-  place(els['x'+j],ox+px,oy+py+e3*CH*1.1,(1-e3)*(j<C?1:0),lerp(1,0.55,e3));}
+  var y=(j-(C-1)/2)*CH,rx=cc[0]-y*sn-CW/2,ry=cc[1]+y*cs-CH/2,
+      px=lerp(rx,cx(j),sc),py=lerp(ry,-CH*1.6,sc);
+  place(els['x'+j],ox+px,oy+py+e3*CH*1.1,1-e3,lerp(1,0.55,e3));}
  // the running sum the columns are merging into
  var res=result();
  for(i=0;i<R;i++){els['r'+i].textContent=fmt(res[i]*e4);
   place(els['r'+i],ox+MX,oy+i*CH,smooth(0.3,0.9,e4),1);}
- for(j=0;j<C-1;j++)place(els['p'+j],ox+cx(j)+CW+gap/2-6,oy+BH/2-13,e2*fade*(gap>18?1:0),1);
- brk(els.bA,ox,oy,AW,BH,1-smooth(0,0.35,e2));
- brk(els.bX,ox+AW+GX,oy+xoff,CW,C*CH,1-smooth(0,0.5,e1));
- for(j=0;j<C;j++)brk(els['bC'+j],ox+cx(j),oy,CW,BH,smooth(0.25,0.8,e2)*fade);
+ for(j=0;j<C-1;j++)place(els['p'+j],ox+cx(j)+CW+gap/2-6,oy+BH/2-13,e1*fade*(gap>18?1:0),1);
+ brk(els.bA,ox,oy,AWs,BH,1-smooth(0,0.35,e1));
+ for(j=0;j<C;j++)brk(els['bC'+j],ox+cx(j),oy,CW,BH,smooth(0.25,0.8,e1)*fade);
  brk(els.bR,ox+MX,oy,CW,BH,smooth(0.3,0.9,e4));
- place(els.lA,ox-30,oy+BH/2-12,1-smooth(0,0.35,e2),1);
- place(els.lX,ox+AW+GX-27,oy+xoff+C*CH/2-12,1-smooth(0,0.5,e1),1);
+ // the x bracket rides up with the block and turns with it, then lets go
+ var bxw=CW+14,bxh=C*CH+10;
+ els.bX.style.width=bxw+'px';els.bX.style.height=bxh+'px';
+ els.bX.style.transformOrigin='50% 50%';
+ els.bX.style.transform='translate('+(ox+cc[0]-bxw/2).toFixed(1)+'px,'+(oy+cc[1]-bxh/2).toFixed(1)+'px) rotate('+(th*180/Math.PI).toFixed(1)+'deg)';
+ els.bX.style.opacity=(1-smooth(0.3,1,sb)).toFixed(3);
+ place(els.lA,ox-30,oy+BH/2-12,1-smooth(0,0.35,e1),1);
+ place(els.lX,ox+cc[0]-CW/2-27,oy+cc[1]-12,1-smooth(0,0.6,sb),1);
  place(els.lR,ox+MX+CW/2-11,oy+BH+16,smooth(0.3,0.9,e4),1);
 }
 
@@ -281,8 +291,8 @@ function draw(){
 function readout(){
  var h,k=Math.floor(t),res=result();
  if(t<=0)h='<b>Ax is a weighted sum of the columns of A.</b> x has one entry per column, and that entry says how much of the column to take.';
- else if(t<1)h='The vector x turns on its side and deals one entry to each column: x'+SUB[0]+' belongs to the first column, x'+SUB[1]+' to the second, and so on.';
- else if(t<2)h='A comes apart into its '+C+' columns. Each is a vector with '+R+' entr'+(R>1?'ies':'y')+', and the geometry shows all '+C+' of them leaving the origin at once.';
+ else if(t<1)h='A comes apart into its '+C+' columns. Each is a vector with '+R+' entr'+(R>1?'ies':'y')+', and the geometry shows all '+C+' of them leaving the origin at once.';
+ else if(t<2)h='The vector x rises, turns a quarter turn into a row, and deals one entry to each column: x'+SUB[0]+' to the first, x'+SUB[1]+' to the second, and so on.';
  else if(t<3){var e=[];for(var j=0;j<C;j++)e.push(par(X[j])+'a'+SUB[j%5]);
   h='Every column is stretched by its own coefficient, all at the same time: '+e.join(', ')+'.';}
  else if(t<4)h='The stretched columns line up tip to tail. Where the last one ends is <b>Ax</b>.';

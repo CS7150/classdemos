@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Expectation and variance</title>
+<meta name="description" content="The mean of a coin as a balance point and its variance as an area, with samples to check both.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+#wrap{position:relative}
+#wrap svg{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Quiz 0, worked</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Expectation and variance<span>: the balance point, and the spread</span></h1>
+<p class="quiz">Quiz 0, question 4. <b>X is 1 with probability p and 0 otherwise. E[X] = ? Var(X) = ?</b> Drag the fulcrum.</p>
+
+<div id="wrap">
+<svg viewBox="0 0 1040 430" role="img" preserveAspectRatio="xMidYMid meet">
+<title>A Bernoulli variable's mean as a balance point and its variance as an area</title>
+<desc>Left: a beam from 0 to 1 with mass 1 minus p at 0 and mass p at 1, balanced on a fulcrum at p. Below it, the squared deviations of each outcome drawn as squares, each shrunk by its probability, which leaves two rectangles of the same height, p times 1 minus p, tiling the unit width. Right: the variance against p, a parabola peaking at one half, and a strip of sampled flips with the running mean and variance.</desc>
+<g id="stage"></g>
+</svg>
+</div>
+
+<div class="row">
+<span class="klab">p</span>
+<input type="range" id="ps" min="0" max="1000" step="1" value="300" oninput="setp(+this.value/1000)">
+<span class="knum" id="pv">0.300</span>
+<button onclick="flip(1)">Flip once</button>
+<button onclick="flip(100)">Flip 100</button>
+<button class="main" id="auto" onclick="toggle()">Keep flipping</button>
+<button onclick="clr()">Clear</button>
+</div>
+<div class="rd" id="readout"></div>
+<div class="cap" id="caption"></div>
+
+<script>
+var p=0.3,S=[],ones=0,run=false,raf=null,dragging=false;
+var BLUE='#378ADD',PINK='#D4537E',GREEN='#1D9E75';
+var L0=60,L1=470,BY=96,SQ0=140;  // beam from L0 to L1, squares hang from SQ0
+function U(x){return L0+(L1-L0)*x;}
+function f3(v){return v.toFixed(3);}
+function TX(x,y,t,c,anc,cls){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+
+ '" fill="'+c+'"'+(anc?' text-anchor="'+anc+'"':'')+'>'+t+'</text>';}
+
+function draw(){
+ var q=1-p,v=p*q,s='',i;
+ // --- the beam: mass q at 0, mass p at 1, fulcrum at p.  It balances because
+ //     E[X] is exactly the point where the two moments cancel.
+ s+=TX((L0+L1)/2,22,'E[X]: where the beam balances','var(--text-secondary)','middle');
+ s+='<line x1="'+L0+'" y1="'+BY+'" x2="'+L1+'" y2="'+BY+'" stroke="var(--text-secondary)" stroke-width="3" stroke-linecap="round"/>';
+ var fx=U(p);
+ s+='<polygon points="'+fx.toFixed(1)+','+(BY+2)+' '+(fx-11).toFixed(1)+','+(BY+24)+' '+(fx+11).toFixed(1)+','+(BY+24)+
+    '" fill="'+GREEN+'" stroke="var(--green-ink)" stroke-width="1.5" style="cursor:ew-resize"/>';
+ var r0=6+26*Math.sqrt(q),r1=6+26*Math.sqrt(p);
+ s+='<circle cx="'+L0+'" cy="'+(BY-r0-2).toFixed(1)+'" r="'+r0.toFixed(1)+'" fill="'+BLUE+'" fill-opacity="0.85"/>';
+ s+='<circle cx="'+L1+'" cy="'+(BY-r1-2).toFixed(1)+'" r="'+r1.toFixed(1)+'" fill="'+PINK+'" fill-opacity="0.85"/>';
+ s+=TX(L0,BY-r0*2-10,'X = 0, mass 1 &#8722; p = '+f3(q),'var(--blue-ink)','start','tn');
+ s+=TX(L1,BY-r1*2-10,'X = 1, mass p = '+f3(p),'var(--pink-ink)','end','tn');
+ s+=TX(L0,BY+40,'0','var(--text-muted)','middle','tn');
+ s+=TX(L1,BY+40,'1','var(--text-muted)','middle','tn');
+ s+=TX(fx,BY+40,'p = '+f3(p),'var(--green-ink)','middle');
+ // --- the squares.  Outcome 0 sits p away from the mean, outcome 1 sits 1-p
+ //     away; square each, then shrink each square vertically by its probability.
+ //     What is left is two rectangles of the same height, p(1-p), side by side.
+ var K=230,y0=SQ0+30;
+ s+=TX((L0+L1)/2,SQ0+8,'Var(X): squared distance from the balance point, weighted by probability','var(--text-secondary)','middle','tn');
+ if(p>0.004){
+  s+='<rect x="'+L0+'" y="'+y0+'" width="'+(U(p)-L0).toFixed(1)+'" height="'+(K*p).toFixed(1)+
+     '" fill="none" stroke="'+BLUE+'" stroke-width="1" stroke-dasharray="4 3" opacity="0.7"/>';
+  s+='<rect x="'+L0+'" y="'+y0+'" width="'+(U(p)-L0).toFixed(1)+'" height="'+(K*v).toFixed(1)+
+     '" fill="'+BLUE+'" fill-opacity="0.35"/>';}
+ if(q>0.004){
+  s+='<rect x="'+U(p).toFixed(1)+'" y="'+y0+'" width="'+(L1-U(p)).toFixed(1)+'" height="'+(K*q).toFixed(1)+
+     '" fill="none" stroke="'+PINK+'" stroke-width="1" stroke-dasharray="4 3" opacity="0.7"/>';
+  s+='<rect x="'+U(p).toFixed(1)+'" y="'+y0+'" width="'+(L1-U(p)).toFixed(1)+'" height="'+(K*v).toFixed(1)+
+     '" fill="'+PINK+'" fill-opacity="0.35"/>';}
+ s+='<line x1="'+L0+'" y1="'+(y0+K*v).toFixed(1)+'" x2="'+L1+'" y2="'+(y0+K*v).toFixed(1)+'" stroke="'+GREEN+'" stroke-width="2"/>';
+ if(p>0.12)s+=TX(U(p/2),y0+Math.max(K*p,K*v)+16,'p&#178; = '+f3(p*p)+', kept '+f3(q)+' of it','var(--blue-ink)','middle','tn');
+ if(q>0.12)s+=TX(U(p+q/2),y0+Math.max(K*q,K*v)+16,'(1&#8722;p)&#178; = '+f3(q*q)+', kept '+f3(p)+' of it','var(--pink-ink)','middle','tn');
+ s+=TX(L1+8,y0+K*v+5,'height p(1&#8722;p) = '+f3(v),'var(--green-ink)','start','tn');
+
+ // --- right, top: the variance against p
+ var RX0=560,RX1=1020,RY0=40,RY1=210;
+ function PX(x){return RX0+(RX1-RX0)*x;}function PY(y){return RY1-(RY1-RY0)*(y/0.28);}
+ s+='<rect x="'+RX0+'" y="'+RY0+'" width="'+(RX1-RX0)+'" height="'+(RY1-RY0)+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
+ s+=TX((RX0+RX1)/2,RY0-10,'Var(X) = p(1 &#8722; p), for every p at once','var(--text-secondary)','middle');
+ var pts='';for(i=0;i<=100;i++){var t=i/100;pts+=PX(t).toFixed(1)+','+PY(t*(1-t)).toFixed(1)+' ';}
+ s+='<polyline points="'+pts+'" fill="none" stroke="'+GREEN+'" stroke-width="2.4"/>';
+ s+='<line x1="'+PX(0.5)+'" y1="'+PY(0.25).toFixed(1)+'" x2="'+PX(0.5)+'" y2="'+RY1+'" stroke="var(--border-strong)" stroke-width="0.8" stroke-dasharray="3 3"/>';
+ s+=TX(PX(0.5),RY1+16,'&#189;','var(--text-muted)','middle','tn');
+ s+=TX(PX(0.5)+6,PY(0.25)-5,'&#188; at most','var(--text-muted)','start','tn');
+ s+=TX(RX0,RY1+16,'0','var(--text-muted)','middle','tn');s+=TX(RX1,RY1+16,'1','var(--text-muted)','middle','tn');
+ s+='<line x1="'+PX(p).toFixed(1)+'" y1="'+RY1+'" x2="'+PX(p).toFixed(1)+'" y2="'+PY(v).toFixed(1)+'" stroke="'+GREEN+'" stroke-width="1" opacity="0.6"/>';
+ s+='<circle cx="'+PX(p).toFixed(1)+'" cy="'+PY(v).toFixed(1)+'" r="5" fill="'+GREEN+'" stroke="var(--bg)" stroke-width="1.5"/>';
+ if(S.length>1){var m=ones/S.length,sv=m*(1-m);
+  s+='<circle cx="'+PX(m).toFixed(1)+'" cy="'+PY(sv).toFixed(1)+'" r="5" fill="none" stroke="var(--text-primary)" stroke-width="1.6"/>';}
+
+ // --- right, bottom: the flips, and what they average to
+ var FY=262,FH=150;
+ s+=TX((RX0+RX1)/2,FY-10,S.length?'the last '+Math.min(S.length,80)+' of '+S.length+' flips':'sample it: the flips land in one of two bins','var(--text-secondary)','middle');
+ var show=S.slice(-80),cw=(RX1-RX0)/80;
+ for(i=0;i<show.length;i++){var x=RX0+i*cw+cw/2;
+  s+='<rect x="'+(x-cw*0.36).toFixed(1)+'" y="'+(show[i]?FY:FY+18)+'" width="'+(cw*0.72).toFixed(1)+'" height="14" rx="2" fill="'+(show[i]?PINK:BLUE)+'" opacity="0.85"/>';}
+ s+=TX(RX0-6,FY+11,'1','var(--pink-ink)','end','tn');s+=TX(RX0-6,FY+29,'0','var(--blue-ink)','end','tn');
+ // running mean as a filled bar against the truth
+ var by=FY+56;
+ s+='<rect x="'+RX0+'" y="'+by+'" width="'+(RX1-RX0)+'" height="16" fill="var(--surface-1)" stroke="var(--border)"/>';
+ if(S.length){var mm=ones/S.length;
+  s+='<rect x="'+RX0+'" y="'+by+'" width="'+((RX1-RX0)*mm).toFixed(1)+'" height="16" fill="var(--text-primary)" opacity="0.55"/>';
+  s+=TX(RX0+(RX1-RX0)*mm+(mm>0.8?-6:6),by+12,'mean of flips = '+f3(mm),'var(--text-primary)',mm>0.8?'end':'start','tn');}
+ s+='<line x1="'+PX(p).toFixed(1)+'" y1="'+(by-5)+'" x2="'+PX(p).toFixed(1)+'" y2="'+(by+21)+'" stroke="'+GREEN+'" stroke-width="2.5"/>';
+ s+=TX(RX0,by+36,'the fraction of 1s heads for p; the spread of the flips heads for p(1 &#8722; p)','var(--text-muted)','start','tn');
+ document.getElementById('stage').innerHTML=s;
+ readout();caption();
+}
+function readout(){
+ var q=1-p,h='E[X] = <b>'+f3(p)+'</b> &#183; Var(X) = p(1 &#8722; p) = <b>'+f3(p*q)+'</b> &#183; standard deviation &#8730;Var = <b>'+f3(Math.sqrt(p*q))+'</b>';
+ if(S.length){var m=ones/S.length,sv=m*(1-m);
+  h+='<br>from '+S.length+' flip'+(S.length>1?'s':'')+': mean <b>'+f3(m)+'</b>, mean squared distance from it <b>'+f3(sv)+'</b>';}
+ document.getElementById('readout').innerHTML=h;
+}
+function caption(){
+ var q=1-p,h='';
+ h+='<div class="ans"><b>The answers.</b> E[X] = p and Var(X) = p(1 &#8722; p).</div>';
+ h+='<div style="margin-top:6px"><b>Expectation.</b> E[X] = 0&#183;(1 &#8722; p) + 1&#183;p = p. On the beam that is the balance point: '+
+  'mass 1 &#8722; p at distance p on one side, mass p at distance 1 &#8722; p on the other, and (1 &#8722; p)p = p(1 &#8722; p) so the torques match.</div>';
+ h+='<div style="margin-top:6px"><b>Variance, from the definition.</b> Var(X) = E[(X &#8722; p)&#178;] = (1 &#8722; p)&#183;p&#178; + p&#183;(1 &#8722; p)&#178; '+
+  '= p(1 &#8722; p)&#183;[p + (1 &#8722; p)] = p(1 &#8722; p). The two rectangles come out the same height because each square is scaled by the '+
+  'other outcome&rsquo;s probability.</div>';
+ h+='<div style="margin-top:6px"><b>Variance, the short way.</b> Var(X) = E[X&#178;] &#8722; E[X]&#178;, and for a 0/1 variable X&#178; = X, '+
+  'so E[X&#178;] = p and Var(X) = p &#8722; p&#178; = p(1 &#8722; p).</div>';
+ h+='<div style="margin-top:6px"><b>What it says.</b> The spread is largest at p = &#189;, where you know least about the next flip, and it is zero '+
+  'at p = 0 and p = 1, where the coin is certain. It can never exceed &#188;.</div>';
+ document.getElementById('caption').innerHTML=h;
+}
+function setp(v){p=Math.max(0,Math.min(1,v));document.getElementById('ps').value=Math.round(p*1000);
+ document.getElementById('pv').textContent=f3(p);draw();}
+function flip(n){for(var i=0;i<n;i++){var x=Math.random()<p?1:0;S.push(x);ones+=x;}
+ if(S.length>5000){var drop=S.splice(0,S.length-5000);for(var k=0;k<drop.length;k++)ones-=drop[k];}
+ draw();}
+function clr(){S=[];ones=0;draw();}
+function toggle(){run=!run;document.getElementById('auto').textContent=run?'Stop':'Keep flipping';
+ if(run)tick();else if(raf){cancelAnimationFrame(raf);raf=null;}}
+function tick(){if(!run)return;flip(3);raf=requestAnimationFrame(tick);}
+// drag the fulcrum straight along the beam
+(function(){
+ var svg=document.querySelector('#wrap svg');
+ function pt(e){var m=svg.getScreenCTM();if(!m)return null;var q=svg.createSVGPoint();q.x=e.clientX;q.y=e.clientY;return q.matrixTransform(m.inverse());}
+ svg.addEventListener('pointerdown',function(e){var q=pt(e);if(!q)return;
+  if(q.x>L0-20&&q.x<L1+20&&q.y>BY-30&&q.y<BY+40){dragging=true;svg.setPointerCapture(e.pointerId);setp((q.x-L0)/(L1-L0));}});
+ svg.addEventListener('pointermove',function(e){if(!dragging)return;var q=pt(e);if(q)setp((q.x-L0)/(L1-L0));});
+ svg.addEventListener('pointerup',function(e){dragging=false;try{svg.releasePointerCapture(e.pointerId);}catch(_){}});
+})();
+document.addEventListener('keydown',function(e){
+ if(e.key===' '||e.key==='Enter'){e.preventDefault();toggle();}
+ else if(e.key==='f'||e.key==='F')flip(1);
+ else if(e.key==='ArrowLeft')setp(p-0.01);
+ else if(e.key==='ArrowRight')setp(p+0.01);
+});
+draw();
+</script>
+</body>
+</html>
