@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conditional probability</title>
+<meta name="description" content="Bayes rule on a population of ten thousand: the positives fly out and re-sort, and the answer is the fraction of them who are actually sick.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+#wrap{position:relative}
+#wrap canvas,#wrap svg{position:absolute;inset:0;width:100%;height:100%}
+#wrap svg{pointer-events:none}
+.mini{width:62px;height:32px;text-align:center;font-size:16px;font-variant-numeric:tabular-nums;
+ border:1px solid var(--border-strong);border-radius:7px;background:var(--surface);color:var(--text-primary);
+ font-family:inherit;padding:0}
+.mini:focus{outline:none;border-color:var(--blue)}
+.mini::-webkit-outer-spin-button,.mini::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.mini[type=number]{-moz-appearance:textfield}
+.pct{font-size:15px;color:var(--text-secondary)}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Quiz 0, worked</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Conditional probability<span>: ten thousand people, and the ones who test positive</span></h1>
+<p class="quiz">Quiz 0, question 5. <b>A disease affects 1% of people. The test is positive for 99% of those who have it, and for 5% of those who do not. Someone tests positive: P(disease | positive)?</b></p>
+
+<div id="wrap">
+<canvas id="cv"></canvas>
+<svg viewBox="0 0 1040 440" preserveAspectRatio="xMidYMid meet" role="img">
+<title>The population, the positives sorted out of it, and the same counts as a tree</title>
+<desc>Left: ten thousand small squares, the sick ones in the top rows, coloured by test result. Middle: the positive squares gathered into one block, sick first, so the answer is the visible fraction of the block. Right: the same four counts as a tree.</desc>
+<g id="lab"></g>
+</svg>
+</div>
+
+<div class="row">
+<button class="main" id="go" onclick="toggle()">Sort the positives</button>
+<span class="klab">prevalence</span><input class="mini" type="number" id="pv" value="1" step="0.5" min="0.1" max="60" oninput="setup()"><span class="pct">%</span>
+<span class="klab">sensitivity</span><input class="mini" type="number" id="se" value="99" step="1" min="1" max="100" oninput="setup()"><span class="pct">%</span>
+<span class="klab">false positive rate</span><input class="mini" type="number" id="fp" value="5" step="1" min="0" max="60" oninput="setup()"><span class="pct">%</span>
+<button onclick="quiz()">Quiz values</button>
+<button onclick="pick()">Test one person</button>
+</div>
+<div class="row">
+<span class="klab">sort</span>
+<input type="range" id="ts" min="0" max="100" step="1" value="0" oninput="setT(+this.value/100,1)">
+<span class="knum" id="tv">0.00</span>
+</div>
+<div class="rd" id="readout"></div>
+<div class="cap" id="caption"></div>
+
+<script>
+var N=10000,G=100,CS=3.4,GX=28,GY=56,BX=442,BY=56;
+var prev=0.01,sens=0.99,fpr=0.05,nS,nTP,nFN,nFP,nTN,nPos,bw;
+var t=0,playing=false,raf=null,last=0,chosen=-1;
+var PINK='#D4537E',PINKF='#f0b9cb',ORANGE='#D85A30',GREY='#c9c6bb',GREYD='#4a4944';
+var cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+
+function setup(){
+ prev=Math.max(0.001,Math.min(0.6,(parseFloat(document.getElementById('pv').value)||1)/100));
+ sens=Math.max(0.01,Math.min(1,(parseFloat(document.getElementById('se').value)||99)/100));
+ fpr=Math.max(0,Math.min(0.6,(parseFloat(document.getElementById('fp').value)||0)/100));
+ nS=Math.round(prev*N);nTP=Math.round(sens*nS);nFN=nS-nTP;
+ nFP=Math.round(fpr*(N-nS));nTN=N-nS-nFP;nPos=nTP+nFP;
+ // the positives gather into a block of the same cells, as square as it can be
+ bw=Math.max(1,Math.ceil(Math.sqrt(nPos)));
+ chosen=-1;t=0;pause();draw();
+}
+function cat(i){return i<nTP?0:(i<nS?1:(i<nS+nFP?2:3));}   // TP, FN, FP, TN
+function ease(f){return f<0.5?2*f*f:1-Math.pow(-2*f+2,2)/2;}
+function gpos(i){return [GX+(i%G)*CS,GY+Math.floor(i/G)*CS];}
+function bpos(k){return [BX+(k%bw)*CS,BY+Math.floor(k/bw)*CS];}
+function fmtN(n){return n.toLocaleString('en-US');}
+function gcd(a,b){while(b){var r=a%b;a=b;b=r;}return a;}
+
+function fit(){
+ var r=cv.getBoundingClientRect(),d=window.devicePixelRatio||1;
+ if(cv.width!==Math.round(r.width*d)||cv.height!==Math.round(r.height*d)){cv.width=Math.round(r.width*d);cv.height=Math.round(r.height*d);}
+ // the same letterboxing the svg on top uses, so the two agree to the pixel
+ var s=Math.min(r.width/1040,r.height/440),ox=(r.width-1040*s)/2,oy=(r.height-440*s)/2;
+ ctx.setTransform(d*s,0,0,d*s,d*ox,d*oy);
+ ctx.clearRect(-ox/s,-oy/s,r.width/s,r.height/s);
+}
+function draw(){
+ fit();
+ var e=ease(t),i,k=0,sz=CS*0.82;
+ for(i=0;i<N;i++){
+  var c=cat(i),g=gpos(i),x=g[0],y=g[1],a=1;
+  if(c===0||c===2){var b=bpos(k++);x=g[0]+(b[0]-g[0])*e;y=g[1]+(b[1]-g[1])*e;}
+  else a=1-0.72*e;
+  ctx.globalAlpha=a;
+  ctx.fillStyle=c===0?PINK:(c===1?PINKF:(c===2?ORANGE:GREY));
+  ctx.fillRect(x,y,sz,sz);
+ }
+ ctx.globalAlpha=1;
+ if(chosen>=0){var q=gpos(chosen),cq=cat(chosen);
+  if(cq===0||cq===2){var kk=chosen<nS?chosen:nTP+(chosen-nS);var bq=bpos(kk);q=[q[0]+(bq[0]-q[0])*e,q[1]+(bq[1]-q[1])*e];}
+  ctx.strokeStyle=GREYD;ctx.lineWidth=1.6;ctx.beginPath();ctx.arc(q[0]+sz/2,q[1]+sz/2,7,0,Math.PI*2);ctx.stroke();}
+ labels(e);
+ document.getElementById('tv').textContent=t.toFixed(2);
+ document.getElementById('ts').value=Math.round(t*100);
+ readout();caption();
+}
+function TX(x,y,s,c,anc,cls){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+
+ '" fill="'+c+'"'+(anc?' text-anchor="'+anc+'"':'')+'>'+s+'</text>';}
+function labels(e){
+ var s='',gw=G*CS;
+ s+=TX(GX+gw/2,GY-30,fmtN(N)+' people','var(--text-secondary)','middle');
+ s+=TX(GX,GY-11,'<tspan fill="'+PINK+'">&#9632;</tspan> sick, positive '+fmtN(nTP)+
+   '  <tspan fill="'+PINKF+'">&#9632;</tspan> sick, negative '+fmtN(nFN),'var(--text-muted)','start','tn');
+ s+=TX(GX,GY+gw+18,'<tspan fill="'+ORANGE+'">&#9632;</tspan> well, positive '+fmtN(nFP)+
+   '  <tspan fill="'+GREY+'">&#9632;</tspan> well, negative '+fmtN(nTN),'var(--text-muted)','start','tn');
+ // the block of positives, and the answer as the visible fraction of it
+ var bh=Math.ceil(nPos/bw)*CS,bwid=bw*CS,op=Math.max(0,(e-0.55)/0.45);
+ s+='<g opacity="'+op.toFixed(2)+'">';
+ s+=TX(BX+bwid/2,BY-30,fmtN(nPos)+' tested positive','var(--text-secondary)','middle');
+ s+=TX(BX,BY-11,'the sick ones first','var(--text-muted)','start','tn');
+ s+=TX(BX,BY+bh+20,'<tspan fill="'+PINK+'">'+fmtN(nTP)+' sick</tspan> out of '+fmtN(nPos),'var(--text-secondary)','start');
+ var g=gcd(nTP,nPos)||1;
+ s+=TX(BX,BY+bh+44,'P(sick | positive)','var(--green-ink)','start');
+ s+=TX(BX,BY+bh+66,'= '+fmtN(nTP)+'/'+fmtN(nPos)+(g>1?' = '+(nTP/g)+'/'+(nPos/g):'')+' = <tspan font-weight="500">'+(nPos?(nTP/nPos).toFixed(3):'&#8212;')+'</tspan>','var(--green-ink)','start');
+ s+='</g>';
+ // the tree: the same four numbers, as the arithmetic
+ var TX0=790,TY=70;
+ s+=TX(TX0+120,TY-30,'the same counts, as a tree','var(--text-secondary)','middle');
+ function node(x,y,txt,c){return TX(x,y,txt,c||'var(--text-primary)','middle','tn');}
+ function edge(x1,y1,x2,y2,lab){return '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="var(--border-strong)" stroke-width="1"/>'+
+   TX((x1+x2)/2+(x2>x1?8:-8),(y1+y2)/2+4,lab,'var(--text-muted)',x2>x1?'start':'end','tn');}
+ s+=node(TX0+120,TY,fmtN(N));
+ s+=edge(TX0+120,TY+6,TX0+40,TY+62,(prev*100).toFixed(prev<0.01?2:1)+'%');
+ s+=edge(TX0+120,TY+6,TX0+200,TY+62,(100-prev*100).toFixed(prev<0.01?2:1)+'%');
+ s+=node(TX0+40,TY+82,fmtN(nS)+' sick',PINK);
+ s+=node(TX0+200,TY+82,fmtN(N-nS)+' well','var(--text-secondary)');
+ s+=edge(TX0+40,TY+88,TX0+10,TY+146,(sens*100).toFixed(0)+'%');
+ s+=edge(TX0+40,TY+88,TX0+80,TY+146,(100-sens*100).toFixed(0)+'%');
+ s+=edge(TX0+200,TY+88,TX0+160,TY+146,(fpr*100).toFixed(0)+'%');
+ s+=edge(TX0+200,TY+88,TX0+240,TY+146,(100-fpr*100).toFixed(0)+'%');
+ s+=node(TX0+10,TY+166,fmtN(nTP),PINK);s+=node(TX0+10,TY+182,'positive',PINK);
+ s+=node(TX0+80,TY+166,fmtN(nFN),PINKF);s+=node(TX0+80,TY+182,'negative',PINKF);
+ s+=node(TX0+160,TY+166,fmtN(nFP),ORANGE);s+=node(TX0+160,TY+182,'positive',ORANGE);
+ s+=node(TX0+240,TY+166,fmtN(nTN),'var(--text-muted)');s+=node(TX0+240,TY+182,'negative','var(--text-muted)');
+ s+='<rect x="'+(TX0-12)+'" y="'+(TY+152)+'" width="64" height="38" rx="5" fill="none" stroke="'+PINK+'" stroke-width="1" stroke-dasharray="4 3"/>';
+ s+='<rect x="'+(TX0+138)+'" y="'+(TY+152)+'" width="64" height="38" rx="5" fill="none" stroke="'+ORANGE+'" stroke-width="1" stroke-dasharray="4 3"/>';
+ s+=TX(TX0+120,TY+222,'positive = '+fmtN(nTP)+' + '+fmtN(nFP)+' = '+fmtN(nPos),'var(--text-secondary)','middle','tn');
+ s+=TX(TX0+120,TY+246,'sick among them = '+fmtN(nTP)+' / '+fmtN(nPos),'var(--green-ink)','middle','tn');
+ // a bar of the answer against 1, for scale
+ var ax=TX0-10,aw=260,ay=TY+270;
+ s+='<rect x="'+ax+'" y="'+ay+'" width="'+aw+'" height="14" fill="var(--surface-1)" stroke="var(--border)"/>';
+ if(nPos){s+='<rect x="'+ax+'" y="'+ay+'" width="'+(aw*nTP/nPos).toFixed(1)+'" height="14" fill="'+PINK+'"/>';
+  s+='<rect x="'+(ax+aw*nTP/nPos).toFixed(1)+'" y="'+ay+'" width="'+(aw*nFP/nPos).toFixed(1)+'" height="14" fill="'+ORANGE+'"/>';}
+ s+=TX(ax,ay+30,'of the positives: sick vs well','var(--text-muted)','start','tn');
+ document.getElementById('lab').innerHTML=s;
+}
+function readout(){
+ var h='P(disease | positive) = <b>'+(nPos?(nTP/nPos).toFixed(3):'&#8212;')+'</b>: of the '+fmtN(nPos)+' people who test positive, only '+fmtN(nTP)+' are sick. '+
+  'The other '+fmtN(nFP)+' are false positives from the much larger well group.';
+ if(chosen>=0){var c=cat(chosen);
+  h+='<br>Random person #'+fmtN(chosen+1)+': <b>'+(c<2?'sick':'well')+'</b>, tested <b>'+((c===0||c===2)?'positive':'negative')+'</b>. '+
+   ((c===0||c===2)?'A positive result: the odds of being sick given only that are '+fmtN(nTP)+' to '+fmtN(nFP)+'.':'A negative result: '+fmtN(nFN)+' of the '+fmtN(nFN+nTN)+' negatives are sick, so P(sick | negative) = '+(nFN/(nFN+nTN)).toFixed(4)+'.');}
+ document.getElementById('readout').innerHTML=h;
+}
+function caption(){
+ var g=gcd(nTP,nPos)||1,h='';
+ h+='<div class="ans"><b>The answer, by counting.</b> Out of '+fmtN(N)+' people, '+fmtN(nS)+' are sick and '+fmtN(nTP)+' of them test positive; '+
+  fmtN(N-nS)+' are well and '+fmtN(nFP)+' of them test positive anyway. So '+fmtN(nPos)+' test positive, of whom '+fmtN(nTP)+' are sick: '+
+  'P(disease | positive) = '+fmtN(nTP)+'/'+fmtN(nPos)+(g>1?' = '+(nTP/g)+'/'+(nPos/g):'')+' &#8776; <b>'+(nPos?(nTP/nPos).toFixed(3):'&#8212;')+'</b>.</div>';
+ h+='<div style="margin-top:6px"><b>The same thing as Bayes rule.</b> P(D | +) = P(+ | D)&#183;P(D) / P(+), and P(+) = P(+ | D)&#183;P(D) + P(+ | not D)&#183;P(not D). '+
+  'With the quiz numbers: 0.99&#215;0.01 / (0.99&#215;0.01 + 0.05&#215;0.99) = 0.0099 / 0.0594 = 1/6. The counting and the formula are the same computation; '+
+  'the counting is just harder to get wrong.</div>';
+ h+='<div style="margin-top:6px"><b>Why it is so low.</b> The test is good: it catches 99% of the sick and only trips on 5% of the well. But 5% of a huge group '+
+  'outnumbers 99% of a tiny one, five to one here. The answer is set by the base rate as much as by the test. Raise the prevalence and watch it flip.</div>';
+ document.getElementById('caption').innerHTML=h;
+}
+function setT(v,stop){t=Math.max(0,Math.min(1,v));if(stop)pause();draw();}
+function step(now){var dt=Math.min(0.05,(now-last)/1000);last=now;
+ if(playing){t+=dt*0.6;if(t>=1){t=1;pause();}}
+ draw();raf=playing?requestAnimationFrame(step):null;}
+function pause(){playing=false;document.getElementById('go').textContent=t>=1?'Put them back':'Sort the positives';
+ if(raf){cancelAnimationFrame(raf);raf=null;}}
+function toggle(){if(playing){pause();return;}
+ if(t>=1){t=0;pause();draw();return;}
+ playing=true;document.getElementById('go').textContent='Pause';last=performance.now();raf=requestAnimationFrame(step);}
+function quiz(){document.getElementById('pv').value='1';document.getElementById('se').value='99';document.getElementById('fp').value='5';setup();}
+function pick(){chosen=Math.floor(Math.random()*N);draw();}
+window.addEventListener('resize',draw);
+if(window.ResizeObserver)new ResizeObserver(function(){draw();}).observe(document.getElementById('wrap'));
+else requestAnimationFrame(draw);
+document.addEventListener('keydown',function(e){
+ if(e.target.tagName==='INPUT'&&e.target.type==='number')return;
+ if(e.key===' '||e.key==='Enter'){e.preventDefault();toggle();}
+ else if(e.key==='p'||e.key==='P')pick();
+});
+setup();
+</script>
+</body>
+</html>
