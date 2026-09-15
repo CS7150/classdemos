@@ -7,7 +7,7 @@
 <meta name="description" content="A matrix-vector product as a weighted sum of columns, animated in algebra and geometry at once.">
 <link rel="stylesheet" href="../demo.css">
 <style>
-#stagewrap{flex:1;min-height:0;display:flex;gap:10px;align-items:stretch}
+#stagewrap{flex:0 0 auto;height:clamp(240px,46vh,560px);display:flex;gap:10px;align-items:stretch}
 #alg{position:relative;flex:0 0 430px;min-width:260px}
 #geo{position:relative;flex:1 1 auto;min-width:280px}
 #geo svg{position:absolute;inset:0;width:100%;height:100%}
@@ -30,7 +30,7 @@ input.cel[type=number]{-moz-appearance:textfield}
 .phases span.on{color:var(--text-primary);border-top-color:var(--blue)}
 .dim{font-size:15px;color:var(--text-secondary)}
 select.sm{height:34px;padding:0 6px;font-size:15px}
-@media (max-width:820px){#stagewrap{flex-direction:column}#alg{flex:0 0 190px}#geo{min-height:220px}}
+@media (max-width:820px){#stagewrap{flex-direction:column;height:auto}#alg{flex:0 0 190px}#geo{min-height:220px}}
 </style>
 </head>
 <body>
@@ -58,13 +58,15 @@ select.sm{height:34px;padding:0 6px;font-size:15px}
 <select class="sm" id="cols" onchange="setdim()"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select>
 <button onclick="quiz()">Quiz values</button>
 <button onclick="rnd()">Random</button>
-<span id="orb" style="display:none;align-items:center;gap:8px"><span class="dim">turn</span>
-<input type="range" id="az" min="-180" max="180" step="1" value="32" oninput="draw()" style="min-width:110px"></span>
 </div>
 <div class="row">
 <span class="klab">build</span>
 <input type="range" id="ts" min="0" max="400" step="1" value="0" oninput="setT(+this.value/100,1)">
 <span class="knum" id="tv">0.00</span>
+<!-- the orbit control keeps its box even when hidden, so the figure is the same
+     height in two and three dimensions -->
+<span id="orb" style="visibility:hidden;display:inline-flex;align-items:center;gap:8px;margin-left:14px"><span class="dim">turn</span>
+<input type="range" id="az" min="-180" max="180" step="1" value="32" oninput="draw()" style="flex:0 0 130px;min-width:130px"></span>
 </div>
 <div class="phases" id="ph">
  <span>split</span><span>transpose</span><span>scale</span><span>add</span></div>
@@ -334,12 +336,12 @@ function setdim(){
  for(i=0;i<nr;i++){B.push([]);for(j=0;j<nc;j++)B[i].push(i<R&&j<C?A[i][j]:(i===j%nr?1:0));}
  var Y=[];for(j=0;j<nc;j++)Y.push(j<C?X[j]:2);
  R=nr;C=nc;A=B;X=Y;
- document.getElementById('orb').style.display=(R===3)?'flex':'none';
+ document.getElementById('orb').style.visibility=(R===3)?'visible':'hidden';
  reset();
 }
 function quiz(){R=2;C=3;A=[[1,2,-1],[0,1,0]];X=[3,4,5];
  document.getElementById('rows').value='2';document.getElementById('cols').value='3';
- document.getElementById('orb').style.display='none';reset();}
+ document.getElementById('orb').style.visibility='hidden';reset();}
 function rnd(){
  // small integers, no all-zero column, and at least one negative weight: a column
  // that walks backwards is the part people get wrong by hand
