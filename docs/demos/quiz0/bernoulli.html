@@ -7,7 +7,8 @@
 <meta name="description" content="The mean of a coin as a balance point and its variance as an area, with samples to check both.">
 <link rel="stylesheet" href="../demo.css">
 <style>
-#wrap{position:relative}
+.ts{font-size:19px}.tn{font-size:16px}
+#wrap{position:relative;flex:0 0 auto;height:clamp(300px,50vh,620px)}
 #wrap svg{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
 </style>
 </head>
@@ -17,7 +18,7 @@
 <p class="quiz">Quiz 0, question 4. <b>X is 1 with probability p and 0 otherwise. E[X] = ? Var(X) = ?</b> Drag the fulcrum.</p>
 
 <div id="wrap">
-<svg viewBox="0 0 1040 430" role="img" preserveAspectRatio="xMidYMid meet">
+<svg viewBox="0 0 1440 440" role="img" preserveAspectRatio="xMidYMid meet">
 <title>A Bernoulli variable's mean as a balance point and its variance as an area</title>
 <desc>Left: a beam from 0 to 1 with mass 1 minus p at 0 and mass p at 1, balanced on a fulcrum at p. Below it, the squared deviations of each outcome drawn as squares, each shrunk by its probability, which leaves two rectangles of the same height, p times 1 minus p, tiling the unit width. Right: the variance against p, a parabola peaking at one half, and a strip of sampled flips with the running mean and variance.</desc>
 <g id="stage"></g>
@@ -39,7 +40,7 @@
 <script>
 var p=0.3,S=[],ones=0,run=false,raf=null,dragging=false;
 var BLUE='#378ADD',PINK='#D4537E',GREEN='#1D9E75';
-var L0=60,L1=470,BY=108,SQ0=176;  // beam from L0 to L1, squares hang from SQ0
+var L0=90,L1=610,BY=112,SQ0=182;  // beam from L0 to L1, squares hang from SQ0
 function U(x){return L0+(L1-L0)*x;}
 function f3(v){return v.toFixed(3);}
 function TX(x,y,t,c,anc,cls){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+
@@ -54,7 +55,7 @@ function draw(){
  var fx=U(p);
  s+='<polygon points="'+fx.toFixed(1)+','+(BY+2)+' '+(fx-11).toFixed(1)+','+(BY+24)+' '+(fx+11).toFixed(1)+','+(BY+24)+
     '" fill="'+GREEN+'" stroke="var(--green-ink)" stroke-width="1.5" style="cursor:ew-resize"/>';
- var r0=5+23*Math.sqrt(q),r1=5+23*Math.sqrt(p);
+ var r0=6+26*Math.sqrt(q),r1=6+26*Math.sqrt(p);
  s+='<circle cx="'+L0+'" cy="'+(BY-r0-2).toFixed(1)+'" r="'+r0.toFixed(1)+'" fill="'+BLUE+'" fill-opacity="0.85"/>';
  s+='<circle cx="'+L1+'" cy="'+(BY-r1-2).toFixed(1)+'" r="'+r1.toFixed(1)+'" fill="'+PINK+'" fill-opacity="0.85"/>';
  s+=TX(L0-14,44,'X = 0, weight 1 &#8722; p = '+f3(q),'var(--blue-ink)','start','tn');
@@ -65,7 +66,7 @@ function draw(){
  // --- the squares.  Outcome 0 sits p away from the mean, outcome 1 sits 1-p
  //     away; square each, then shrink each square vertically by its probability.
  //     What is left is two rectangles of the same height, p(1-p), side by side.
- var K=200,y0=SQ0+26;
+ var K=190,y0=SQ0+28;
  s+=TX((L0+L1)/2,SQ0+8,'Var(X): squared distance from the balance point, weighted by probability','var(--text-secondary)','middle','tn');
  if(p>0.004){
   s+='<rect x="'+L0+'" y="'+y0+'" width="'+(U(p)-L0).toFixed(1)+'" height="'+(K*p).toFixed(1)+
@@ -83,7 +84,7 @@ function draw(){
  s+=TX(L1+7,y0+K*v+5,'= p(1&#8722;p)','var(--green-ink)','start','tn');
 
  // --- right, top: the variance against p
- var RX0=590,RX1=1020,RY0=40,RY1=210;
+ var RX0=760,RX1=1400,RY0=44,RY1=214;
  function PX(x){return RX0+(RX1-RX0)*x;}function PY(y){return RY1-(RY1-RY0)*(y/0.28);}
  s+='<rect x="'+RX0+'" y="'+RY0+'" width="'+(RX1-RX0)+'" height="'+(RY1-RY0)+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
  s+=TX((RX0+RX1)/2,RY0-10,'Var(X) = p(1 &#8722; p), for every p at once','var(--text-secondary)','middle');
@@ -99,7 +100,7 @@ function draw(){
   s+='<circle cx="'+PX(m).toFixed(1)+'" cy="'+PY(sv).toFixed(1)+'" r="5" fill="none" stroke="var(--text-primary)" stroke-width="1.6"/>';}
 
  // --- right, bottom: the flips, and what they average to
- var FY=262,FH=150;
+ var FY=268,FH=150;
  s+=TX((RX0+RX1)/2,FY-10,S.length?'the last '+Math.min(S.length,80)+' of '+S.length+' flips':'sample it: the flips land in one of two bins','var(--text-secondary)','middle');
  var show=S.slice(-80),cw=(RX1-RX0)/80;
  for(i=0;i<show.length;i++){var x=RX0+i*cw+cw/2;
@@ -111,15 +112,23 @@ function draw(){
  if(S.length){var mm=ones/S.length;
   s+='<rect x="'+RX0+'" y="'+by+'" width="'+((RX1-RX0)*mm).toFixed(1)+'" height="16" fill="var(--text-primary)" opacity="0.55"/>';
   s+=TX(RX0+(RX1-RX0)*mm,by+32,'mean of flips = '+f3(mm),'var(--text-primary)',mm>0.75?'end':(mm<0.25?'start':'middle'),'tn');}
- s+='<line x1="'+PX(p).toFixed(1)+'" y1="'+(by-5)+'" x2="'+PX(p).toFixed(1)+'" y2="'+(by+21)+'" stroke="'+GREEN+'" stroke-width="2.5"/>';
- s+=TX(RX0,by+52,'the fraction of 1s heads for p; the spread of the flips heads for p(1 &#8722; p)','var(--text-muted)','start','tn');
+ // The band is one standard error either side of p, sqrt(p(1-p)/n): the spread
+ // of an average of n flips.  It closes as n grows, and the mean stays inside it
+ // about two times in three.  This is the reason to care about the variance.
+ if(S.length){var se=Math.sqrt(p*(1-p)/S.length),bl=PX(Math.max(0,p-se)),br=PX(Math.min(1,p+se));
+  s+='<rect x="'+bl.toFixed(1)+'" y="'+(by-7)+'" width="'+Math.max(1,br-bl).toFixed(1)+'" height="30" fill="'+GREEN+'" fill-opacity="0.22"/>';
+  s+=TX(PX(p),by-13,'&#177;&#8730;(p(1&#8722;p)/n) = &#177;'+f3(se),'var(--green-ink)',p>0.8?'end':(p<0.2?'start':'middle'),'tn');}
+ s+='<line x1="'+PX(p).toFixed(1)+'" y1="'+(by-7)+'" x2="'+PX(p).toFixed(1)+'" y2="'+(by+23)+'" stroke="'+GREEN+'" stroke-width="2.5"/>';
+ s+=TX(RX0,by+52,S.length?'the mean of n flips has spread p(1 &#8722; p)/n, so the band closes and the mean settles':'the fraction of 1s heads for p; the spread of the flips heads for p(1 &#8722; p)','var(--text-muted)','start','tn');
  document.getElementById('stage').innerHTML=s;
  readout();caption();
 }
 function readout(){
  var q=1-p,h='E[X] = <b>'+f3(p)+'</b> &#183; Var(X) = p(1 &#8722; p) = <b>'+f3(p*q)+'</b> &#183; standard deviation &#8730;Var = <b>'+f3(Math.sqrt(p*q))+'</b>';
- if(S.length){var m=ones/S.length,sv=m*(1-m);
-  h+='<br>from '+S.length+' flip'+(S.length>1?'s':'')+': mean <b>'+f3(m)+'</b>, mean squared distance from it <b>'+f3(sv)+'</b>';}
+ if(S.length){var m=ones/S.length,sv=m*(1-m),se=Math.sqrt(p*q/S.length);
+  h+='<br>from '+S.length+' flip'+(S.length>1?'s':'')+': mean <b>'+f3(m)+'</b>, mean squared distance from it <b>'+f3(sv)+'</b>'+
+   ' &#183; the mean of '+S.length+' flips has variance p(1 &#8722; p)/n = <b>'+(p*q/S.length).toFixed(5)+'</b>, so it should sit within about &#177;'+f3(se)+' of p'+
+   (Math.abs(m-p)<=se?' (it does)':(Math.abs(m-p)<=2*se?' (it is a little outside, which happens one time in three)':' (it is well outside, which is rare)'));}
  document.getElementById('readout').innerHTML=h;
 }
 function caption(){
@@ -134,6 +143,15 @@ function caption(){
   'so E[X&#178;] = p and Var(X) = p &#8722; p&#178; = p(1 &#8722; p).</div>';
  h+='<div style="margin-top:6px"><b>What it says.</b> The spread is largest at p = &#189;, where you know least about the next flip, and it is zero '+
   'at p = 0 and p = 1, where the coin is certain. It can never exceed &#188;.</div>';
+ var n1=Math.ceil(p*q/0.0001)||1;
+ h+='<div style="margin-top:6px"><b>Why anyone cares.</b> Variance is the spread that adds: for independent flips, Var(X&#8321; + &middot;&middot;&middot; + X&#8342;) '+
+  '= n&#183;p(1 &#8722; p), while the absolute deviation and the standard deviation add up to nothing so clean. Divide by n and the '+
+  '<i>mean</i> of n flips has variance p(1 &#8722; p)/n. That is the green band on the right, &#177;&#8730;(p(1 &#8722; p)/n) around p, closing as '+
+  'you flip: variance is what tells you how many flips you need. To pin this p down to &#177;0.01 takes about '+
+  '<b>'+n1.toLocaleString('en-US')+'</b> flips; a poll of a thousand people is good to about &#177;3 points, and that number comes from nowhere else.</div>';
+ h+='<div style="margin-top:6px"><b>And one more.</b> If you must guess X with a single number, the guess with the smallest expected squared error is '+
+  'E[X], and the error you are left with is exactly Var(X). So variance is also the floor under any predictor that knows only the mean, '+
+  'which is the noise floor a model can never train below.</div>';
  document.getElementById('caption').innerHTML=h;
 }
 function setp(v){var np=Math.max(0,Math.min(1,v));if(np!==p){S=[];ones=0;}p=np;document.getElementById('ps').value=Math.round(p*1000);
