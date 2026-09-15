@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The chain rule</title>
+<meta name="description" content="A nudge in w travelling down a chain, picking up a stretch factor at each link.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+#wrap{position:relative}
+#wrap svg{position:absolute;inset:0;width:100%;height:100%}
+.mini{width:54px;height:32px;text-align:center;font-size:16px;font-variant-numeric:tabular-nums;
+ border:1px solid var(--border-strong);border-radius:7px;background:var(--surface);color:var(--text-primary);
+ font-family:inherit;padding:0;cursor:ns-resize}
+.mini:focus{outline:none;border-color:var(--blue)}
+.mini::-webkit-outer-spin-button,.mini::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.mini[type=number]{-moz-appearance:textfield}
+.eqn{font-size:16px;color:var(--text-secondary)}
+.eqn b{color:var(--text-primary);font-weight:500}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Quiz 0, worked</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>The chain rule<span>: a nudge, relayed</span></h1>
+<p class="quiz">Quiz 0, question 3(a). <b>u = wx + b with x and b fixed, z = g(u). Write dz/dw.</b></p>
+
+<div id="wrap">
+<svg viewBox="0 0 1040 430" role="img" preserveAspectRatio="xMidYMid meet">
+<title>A nudge in w passing through u and into z</title>
+<desc>Three panels: u against w, whose slope is x; z against u, whose slope is g prime; and z against w, whose slope is their product. Underneath, the same nudge drawn three times at a common scale, so each link's stretch factor is a visible change of length.</desc>
+<defs><marker id="ar" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<g id="stage"></g>
+</svg>
+</div>
+
+<div class="row">
+<span class="klab">w</span>
+<input type="range" id="ws" min="-300" max="300" step="1" value="80" oninput="draw()">
+<span class="knum" id="wv">0.80</span>
+<span class="klab">g</span>
+<select id="gf" onchange="draw()">
+ <option value="sig" selected>sigmoid</option><option value="tanh">tanh</option>
+ <option value="relu">ReLU</option><option value="sq">square</option><option value="sin">sin</option></select>
+<span class="klab">x</span><input class="mini" type="number" id="xi" value="2" step="0.5" oninput="draw()">
+<span class="klab">b</span><input class="mini" type="number" id="bi" value="-1" step="0.5" oninput="draw()">
+</div>
+<div class="row">
+<button class="main" onclick="shrink()">Shrink the nudge</button>
+<span class="klab">nudge &#916;w</span>
+<input type="range" id="hs" min="-300" max="0" step="1" value="-40" oninput="draw()">
+<span class="knum" id="hv">0.40</span>
+</div>
+<div class="rd" id="readout"></div>
+<div class="cap" id="caption"></div>
+
+<script>
+var W=0.8,H=0.4,X=2,B=-1,G='sig',anim=null;
+var BLUE='#378ADD',WARM='#BA7517',PINK='#D4537E',GREEN='#1D9E75';
+var P=[[14,34,330,250],[356,34,672,250],[698,34,1014,250]];
+
+function g(u){
+ if(G==='sig')return 1/(1+Math.exp(-u));
+ if(G==='tanh')return Math.tanh(u);
+ if(G==='relu')return Math.max(0,u);
+ if(G==='sq')return u*u;
+ return Math.sin(u);
+}
+function gp(u){
+ if(G==='sig'){var s=g(u);return s*(1-s);}
+ if(G==='tanh'){var t=Math.tanh(u);return 1-t*t;}
+ if(G==='relu')return u>0?1:(u<0?0:NaN);
+ if(G==='sq')return 2*u;
+ return Math.cos(u);
+}
+function gname(){return {sig:'σ',tanh:'tanh',relu:'ReLU',sq:'u²',sin:'sin'}[G];}
+function f2(v){return (Math.abs(v)<5e-5?0:v).toFixed(3);}
+function f1(v){return (Math.abs(v)<5e-4?0:v).toFixed(2);}
+
+/* ---------- plotting ---------- */
+function mk(r,x0,x1,y0,y1){
+ var sx=(r[2]-r[0])/(x1-x0),sy=(r[3]-r[1])/(y1-y0);
+ return {X:function(v){return r[0]+(v-x0)*sx;},Y:function(v){return r[3]-(v-y0)*sy;},
+         r:r,x0:x0,x1:x1,y0:y0,y1:y1};
+}
+function axes(m,xl,yl){
+ var s='<rect x="'+m.r[0]+'" y="'+m.r[1]+'" width="'+(m.r[2]-m.r[0])+'" height="'+(m.r[3]-m.r[1])+
+  '" fill="var(--surface)" opacity="0.5" stroke="var(--border)" stroke-width="1"/>';
+ if(m.y0<0&&m.y1>0)s+='<line x1="'+m.r[0]+'" y1="'+m.Y(0).toFixed(1)+'" x2="'+m.r[2]+'" y2="'+m.Y(0).toFixed(1)+'" stroke="var(--border-strong)" stroke-width="0.8"/>';
+ if(m.x0<0&&m.x1>0)s+='<line x1="'+m.X(0).toFixed(1)+'" y1="'+m.r[1]+'" x2="'+m.X(0).toFixed(1)+'" y2="'+m.r[3]+'" stroke="var(--border-strong)" stroke-width="0.8"/>';
+ s+=TX(m.r[2]-4,m.r[3]-7,xl,'var(--text-muted)','end','tn');
+ s+=TX(m.r[0]+5,m.r[1]+15,yl,'var(--text-muted)','start','tn');
+ return s;
+}
+function curve(m,f,c){
+ var pts='',n=220;
+ for(var i=0;i<=n;i++){var v=m.x0+(m.x1-m.x0)*i/n,y=f(v);
+  if(!isFinite(y))continue;
+  var yy=Math.max(m.y0-1,Math.min(m.y1+1,y));
+  pts+=m.X(v).toFixed(1)+','+m.Y(yy).toFixed(1)+' ';}
+ return '<polyline points="'+pts+'" fill="none" stroke="'+c+'" stroke-width="2.4" clip-path="url(#none)"/>';
+}
+function TX(x,y,t,c,anc,cls){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+
+ '" fill="'+c+'"'+(anc?' text-anchor="'+anc+'"':'')+'>'+t+'</text>';}
+function dot(x,y,c,r){return '<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="'+(r||4.5)+'" fill="'+c+'" stroke="var(--bg)" stroke-width="1.2"/>';}
+// the right triangle whose legs are the nudge going in and the change coming out
+function nudge(m,a,b,fa,fb,c){
+ var s='',x1=m.X(a),x2=m.X(b),y1=m.Y(fa),y2=m.Y(fb);
+ s+='<polygon points="'+x1.toFixed(1)+','+y1.toFixed(1)+' '+x2.toFixed(1)+','+y1.toFixed(1)+' '+
+    x2.toFixed(1)+','+y2.toFixed(1)+'" fill="'+c+'" fill-opacity="0.16"/>';
+ s+='<line x1="'+x1.toFixed(1)+'" y1="'+y1.toFixed(1)+'" x2="'+x2.toFixed(1)+'" y2="'+y1.toFixed(1)+
+    '" stroke="'+c+'" stroke-width="2.2"/>';
+ s+='<line x1="'+x2.toFixed(1)+'" y1="'+y1.toFixed(1)+'" x2="'+x2.toFixed(1)+'" y2="'+y2.toFixed(1)+
+    '" stroke="'+c+'" stroke-width="2.2"/>';
+ return s;
+}
+function tangent(m,a,fa,sl,c){
+ var d=(m.x1-m.x0)*0.30,p1=[a-d,fa-sl*d],p2=[a+d,fa+sl*d];
+ return '<line x1="'+m.X(p1[0]).toFixed(1)+'" y1="'+m.Y(p1[1]).toFixed(1)+'" x2="'+m.X(p2[0]).toFixed(1)+
+  '" y2="'+m.Y(p2[1]).toFixed(1)+'" stroke="'+c+'" stroke-width="1.2" stroke-dasharray="6 5" opacity="0.85"/>';
+}
+
+function draw(){
+ W=+document.getElementById('ws').value/100;
+ H=Math.pow(10,+document.getElementById('hs').value/100);
+ X=parseFloat(document.getElementById('xi').value);if(!isFinite(X))X=0;
+ B=parseFloat(document.getElementById('bi').value);if(!isFinite(B))B=0;
+ G=document.getElementById('gf').value;
+ document.getElementById('wv').textContent=W.toFixed(2);
+ document.getElementById('hv').textContent=H<0.01?H.toExponential(1):H.toFixed(3);
+
+ var u=W*X+B,u2=(W+H)*X+B,z=g(u),z2=g(u2),
+     du=u2-u,dz=z2-z,s='';
+
+ // panel 1: u against w.  A straight line, so its slope is x everywhere.
+ var wlo=-3,whi=3,ulo=1e9,uhi=-1e9,i;
+ for(i=0;i<=40;i++){var wv=wlo+(whi-wlo)*i/40,uv=wv*X+B;ulo=Math.min(ulo,uv);uhi=Math.max(uhi,uv);}
+ ulo=Math.min(ulo,u,u2);uhi=Math.max(uhi,u,u2);
+ var up=0.18*(uhi-ulo)+0.3,mA=mk(P[0],wlo,whi,ulo-up,uhi+up);
+ s+=axes(mA,'w','u = wx + b');
+ s+=curve(mA,function(v){return v*X+B;},BLUE);
+ s+=tangent(mA,W,u,X,BLUE);
+ s+=nudge(mA,W,W+H,u,u2,BLUE);
+ s+=dot(mA.X(W),mA.Y(u),BLUE);
+ s+=TX((mA.X(W)+mA.X(W+H))/2,mA.Y(u)+16,'&#916;w','var(--blue-ink)','middle','tn');
+ s+=TX(mA.X(W+H)+7,(mA.Y(u)+mA.Y(u2))/2,'&#916;u','var(--blue-ink)','start','tn');
+ s+=TX((P[0][0]+P[0][2])/2,24,'slope here is x = '+f1(X),'var(--blue-ink)','middle','tn');
+
+ // panel 2: z against u.  Its slope is g'(u), and that is the only place the
+ // shape of g gets a say.
+ var hw=Math.max(3.2,Math.abs(u)+1.6,Math.abs(u2)+0.6),
+     zlo=1e9,zhi=-1e9;
+ for(i=0;i<=80;i++){var uv2=-hw+2*hw*i/80,zv=g(uv2);if(isFinite(zv)){zlo=Math.min(zlo,zv);zhi=Math.max(zhi,zv);}}
+ var zp=0.18*(zhi-zlo)+0.15,mB=mk(P[1],-hw,hw,zlo-zp,zhi+zp);
+ s+=axes(mB,'u','z = '+gname()+'(u)');
+ s+=curve(mB,g,WARM);
+ s+=tangent(mB,u,z,gp(u),WARM);
+ s+=nudge(mB,u,u2,z,z2,WARM);
+ s+=dot(mB.X(u),mB.Y(z),WARM);
+ s+=TX((mB.X(u)+mB.X(u2))/2,mB.Y(z)+16,'&#916;u','var(--warm-ink)','middle','tn');
+ s+=TX(mB.X(u2)+7,(mB.Y(z)+mB.Y(z2))/2,'&#916;z','var(--warm-ink)','start','tn');
+ s+=TX((P[1][0]+P[1][2])/2,24,'slope here is '+gname()+'&#8242;(u) = '+f2(gp(u)),'var(--warm-ink)','middle','tn');
+
+ // panel 3: the two links composed
+ var clo=1e9,chi=-1e9;
+ for(i=0;i<=80;i++){var wv3=wlo+(whi-wlo)*i/80,zv3=g(wv3*X+B);
+  if(isFinite(zv3)){clo=Math.min(clo,zv3);chi=Math.max(chi,zv3);}}
+ var cp=0.18*(chi-clo)+0.15,mC=mk(P[2],wlo,whi,clo-cp,chi+cp);
+ s+=axes(mC,'w','z');
+ s+=curve(mC,function(v){return g(v*X+B);},PINK);
+ s+=tangent(mC,W,z,gp(u)*X,PINK);
+ s+=nudge(mC,W,W+H,z,z2,PINK);
+ s+=dot(mC.X(W),mC.Y(z),PINK);
+ s+=TX((P[2][0]+P[2][2])/2,24,'slope here is dz/dw = '+f2(gp(u)*X),'var(--pink-ink)','middle','tn');
+
+ // The relay.  Every bar is drawn against the same nudge, so its length is the
+ // stretch factor itself and shrinking the nudge leaves the lengths alone.
+ var y0=300,L=150,cx=150,rz=H!==0?dz/H:0,ru=H!==0?du/H:0;
+ function bar(y,val,c,lab,note){
+  var w=L*val,t='';
+  t+='<line x1="'+cx+'" y1="'+(y-11)+'" x2="'+cx+'" y2="'+(y+11)+'" stroke="var(--border-strong)" stroke-width="1"/>';
+  t+='<line x1="'+cx+'" y1="'+y+'" x2="'+(cx+w).toFixed(1)+'" y2="'+y+'" stroke="'+c+
+     '" stroke-width="7" stroke-linecap="round" marker-end="url(#ar)"/>';
+  t+=TX(cx-14,y+5,lab,c,'end');
+  t+=TX(cx+w+(w<0?-16:16),y+5,note,c,w<0?'end':'start','tn');
+  return t;}
+ s+=TX(cx-30,y0-26,'the same nudge, three times: each bar is the one above it, stretched','var(--text-secondary)','start','tn');
+ s+=bar(y0,1,BLUE,'&#916;w','one unit, by definition');
+ s+=bar(y0+34,ru,WARM,'&#916;u','&#215; x = '+f1(X));
+ s+=bar(y0+68,rz,PINK,'&#916;z','&#215; '+gname()+'&#8242;(u) = '+f2(rz/(ru||1))+'  so &#916;z/&#916;w = '+f2(rz));
+ s+='<line x1="'+(cx-3)+'" y1="'+(y0+12)+'" x2="'+(cx-3)+'" y2="'+(y0+58)+'" stroke="var(--border-strong)" stroke-width="0.8" stroke-dasharray="3 3"/>';
+ document.getElementById('stage').innerHTML=s;
+ readout(u,z,du,dz);caption(u,z,du,dz);
+}
+function readout(u,z,du,dz){
+ var d=gp(u),rz=H!==0?dz/H:0;
+ document.getElementById('readout').innerHTML=
+  'w = <b>'+f1(W)+'</b> &#183; u = wx + b = <b>'+f2(u)+'</b> &#183; z = '+gname()+'(u) = <b>'+f2(z)+'</b>'+
+  '<br>&#916;z/&#916;w = <b>'+f2(rz)+'</b> for this nudge, and as the nudge shrinks it settles on '+
+  gname()+'&#8242;(u)&#183;x = '+f2(d)+' &#215; '+f1(X)+' = <b>'+f2(d*X)+'</b>';
+}
+function caption(u){
+ var d=gp(u),h='';
+ h+='<div class="ans"><b>The answer.</b> dz/dw = g&#8242;(u)&#183;x, with u = wx + b. '+
+  'Here that is '+f2(d)+' &#215; '+f1(X)+' = <b>'+f2(d*X)+'</b>.</div>';
+ h+='<div style="margin-top:6px"><b>Why it is a product.</b> A derivative is a stretch factor: how much '+
+  'the output moves per unit of input, once the nudge is small enough that both curves look straight. '+
+  'The nudge is stretched by x on the way into u, then by g&#8242;(u) on the way into z, so it comes out '+
+  'stretched by both. Composing functions multiplies their stretch factors.</div>';
+ h+='<div style="margin-top:6px"><b>Two things worth noticing.</b> The x is there because u = wx + b: the '+
+  'same weight update is scaled by the input it multiplied. And dz/db = g&#8242;(u)&#183;1, so the bias gets the '+
+  'same gradient without the x.</div>';
+ if(G==='sig'&&Math.abs(u)>4)
+  h+='<div style="margin-top:6px"><b>Where the gradient goes.</b> u = '+f2(u)+' is far out on the flat tail, '+
+   'so &#963;&#8242;(u) = '+f2(d)+' and almost nothing gets through. Stack a few of these and the product of the '+
+   'stretch factors dies: this is the vanishing gradient, visible in one link.</div>';
+ if(G==='relu'&&Math.abs(u)<0.05)
+  h+='<div style="margin-top:6px"><b>Careful here.</b> u is sitting at the kink, where ReLU has no derivative: '+
+   'the stretch factor is 1 from the right and 0 from the left. Frameworks pick one and move on.</div>';
+ document.getElementById('caption').innerHTML=h;
+}
+function shrink(){
+ var sl=document.getElementById('hs'),from=+sl.value,to=-300,t0=performance.now();
+ if(anim)cancelAnimationFrame(anim);
+ (function st(now){var f=Math.min(1,(now-t0)/1400);
+  sl.value=Math.round(from+(to-from)*(f<0.5?2*f*f:1-Math.pow(-2*f+2,2)/2));
+  draw();anim=f<1?requestAnimationFrame(st):null;})(t0);
+}
+// drag the little x and b boxes as well as typing in them
+['xi','bi'].forEach(function(id){
+ var el=document.getElementById(id);
+ el.addEventListener('pointerdown',function(e){
+  var y0=e.clientY,v0=parseFloat(el.value)||0,moved=false;
+  el.setPointerCapture(e.pointerId);
+  el.onpointermove=function(ev){var d=Math.round((y0-ev.clientY)/14)*0.5;
+   if(d)moved=true;if(moved){el.value=(v0+d).toFixed(1).replace(/\.0$/,'');draw();}};
+  el.onpointerup=function(ev){el.onpointermove=null;el.onpointerup=null;
+   try{el.releasePointerCapture(ev.pointerId);}catch(_){}};});
+});
+document.addEventListener('keydown',function(e){
+ if(e.target.tagName==='INPUT'&&e.target.type==='number')return;
+ if(e.key===' '||e.key==='Enter'){e.preventDefault();shrink();}
+});
+draw();
+</script>
+</body>
+</html>
