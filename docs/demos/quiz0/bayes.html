@@ -30,7 +30,7 @@
 <canvas id="cv"></canvas>
 <svg viewBox="0 0 1440 440" preserveAspectRatio="xMidYMid meet" role="img">
 <title>The population sorted into two overlapping circles, with one conditional probability highlighted</title>
-<desc>Left: ten thousand small squares. Pink means sick, blue means well; deep colour means the test came back positive, pale means negative. Press sort and the squares rearrange, without leaving the square, into two overlapping discs: one holding everyone who is sick, one holding everyone who tested positive, with areas exactly proportional to the counts. Choosing a probability dims everyone outside its denominator, so the answer is the visible fraction of the circle that stays lit. Right: the same four counts as a tree.</desc>
+<desc>Left: ten thousand small squares. Pink means sick and positive, black means sick but missed by the test, blue means well but positive, pale means well and negative. Press sort and the squares rearrange, without leaving the square, into two overlapping discs: one holding everyone who is sick, one holding everyone who tested positive, with areas exactly proportional to the counts. Choosing a probability dims everyone outside its denominator, so the answer is the visible fraction of the circle that stays lit. Right: the same four counts as a tree.</desc>
 <g id="lab"></g>
 </svg>
 </div>
@@ -58,8 +58,10 @@ var N=10000,G=100,CS=3.5,GX=40,GY=40;
 var prev=0.01,sens=0.99,fpr=0.05,nS,nTP,nFN,nFP,nTN,nPos;
 var t=0,playing=false,raf=null,last=0,chosen=-1,SEL=0;
 var SLOT=null,VENN=null;
-// hue says sick or well, saturation says what the test said
-var C_TP='#D4537E',C_FN='#F2B9CC',C_FP='#2F7FD1',C_TN='#CBD5E0',DARK='#3a3936';
+// hue says sick or well, saturation says what the test said; the one exception is
+// the sick person the test missed, drawn black so a single cell in ten thousand
+// can still be found
+var C_TP='#D4537E',C_FN='#1f1e1b',C_FP='#2F7FD1',C_TN='#CBD5E0',DARK='#3a3936';
 var cv=document.getElementById('cv'),ctx=cv.getContext('2d');
 // the probabilities on offer: numerator and denominator as sets of the four groups
 // 0 = sick and positive, 1 = sick and negative, 2 = well and positive, 3 = well and negative
@@ -203,7 +205,7 @@ function labels(e){
  s+=edge(TX0+70,TY+104,TX0+130,TY+166,(100-sens*100).toFixed(0)+'%');
  s+=edge(TX0+330,TY+104,TX0+270,TY+166,(fpr*100).toFixed(0)+'%');
  s+=edge(TX0+330,TY+104,TX0+390,TY+166,(100-fpr*100).toFixed(0)+'%');
- var leaves=[[TX0+20,fmtN(nTP),'positive',C_TP,0],[TX0+130,fmtN(nFN),'negative','var(--pink-ink)',1],
+ var leaves=[[TX0+20,fmtN(nTP),'positive',C_TP,0],[TX0+130,fmtN(nFN),'negative','var(--text-primary)',1],
              [TX0+270,fmtN(nFP),'positive',C_FP,2],[TX0+390,fmtN(nTN),'negative','var(--text-muted)',3]];
  var inNum=[0,0,0,0],inDen=[0,0,0,0];P.num.forEach(function(c){inNum[c]=1;});P.den.forEach(function(c){inDen[c]=1;});
  for(var k=0;k<4;k++){var L=leaves[k],o=inNum[L[4]]?1:(inDen[L[4]]?0.6:0.3);
