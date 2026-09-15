@@ -102,7 +102,10 @@ function curve(m,f,c,clip){
   pts+=m.X(v).toFixed(1)+','+m.Y(y).toFixed(1)+' ';}
  return '<polyline points="'+pts+'" fill="none" stroke="'+c+'" stroke-width="2.4" clip-path="url(#'+clip+')"/>';
 }
-function zrange(){return {sig:[-0.2,1.2],tanh:[-1.25,1.25],relu:[-0.6,6.6],sq:[-3,39],sin:[-1.25,1.25]}[G];}
+// the z axis comes from the function itself: its range over the u axis, padded
+function zrange(){var lo=1e9,hi=-1e9;
+ for(var i=0;i<=120;i++){var v=g(-6+12*i/120);if(isFinite(v)){lo=Math.min(lo,v);hi=Math.max(hi,v);}}
+ var pad=0.12*(hi-lo)+0.05;return [lo-pad,hi+pad];}
 function TX(x,y,t,c,anc,cls){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+
  '" fill="'+c+'"'+(anc?' text-anchor="'+anc+'"':'')+'>'+t+'</text>';}
 function dot(x,y,c,r){return '<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="'+(r||4.5)+'" fill="'+c+'" stroke="var(--bg)" stroke-width="1.2"/>';}
