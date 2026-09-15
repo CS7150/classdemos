@@ -165,10 +165,11 @@ function layoutAlg(){
      ox=Math.max(6,(box.clientWidth-right)/2),
      oy=Math.max(C*CH+CH*1.8,(box.clientHeight-BH)/2+6);
  // A, splitting into columns and then scaling
+ var sw=e3<0.5?1-2*e3:2*e3-1;   // dip to nothing at the halfway point and come back as the product
  for(j=0;j<C;j++)for(i=0;i<R;i++){
-  var v=A[i][j]*lerp(1,X[j],e3),el=els['a'+i+'_'+j];
-  if(document.activeElement!==el)el.value=(Math.abs(v-Math.round(v))<1e-9?Math.round(v):v.toFixed(1));
-  place(el,ox+cx(j),oy+i*CH,fade,1);}
+  var v=e3<0.5?A[i][j]:A[i][j]*X[j],el=els['a'+i+'_'+j];
+  if(document.activeElement!==el)el.value=v;
+  place(el,ox+cx(j),oy+i*CH,fade*(e3>0&&e3<1?sw:1),1);}
  // x: rise, quarter turn, deal out
  for(j=0;j<C;j++){
   var y=(j-(C-1)/2)*CH,rx=cc[0]-y*sn-CW/2,ry=cc[1]+y*cs-CH/2,
@@ -351,6 +352,7 @@ function rnd(){
 }
 function reset(){build();fitGeo();t=0;pause();draw();}
 window.addEventListener('resize',function(){fitGeo();draw();});
+if(window.ResizeObserver)new ResizeObserver(function(){draw();}).observe(document.getElementById('alg'));
 document.addEventListener('keydown',function(e){
  if(e.target.tagName==='INPUT'&&e.target.type==='number')return;
  if(e.key===' '||e.key==='Enter'){e.preventDefault();toggle();}
