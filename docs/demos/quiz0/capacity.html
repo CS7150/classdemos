@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Capacity</title>
+<meta name="description" content="One true curve, many noisy samples, and a flexibility dial: bias, variance and training error as the model gets more flexible.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+#wrap{position:relative}
+#wrap svg{position:absolute;inset:0;width:100%;height:100%}
+.ans table{border-collapse:collapse;margin-top:4px;font-size:15px}
+.ans td{padding:1px 14px 1px 0;color:var(--text-secondary)}
+.ans td b{font-weight:500;color:var(--text-primary)}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Quiz 0, worked</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Capacity<span>: what happens when the model gets more flexible</span></h1>
+<p class="quiz">Quiz 0, question 6. <b>Making the model more flexible generally increases or decreases: bias, variance, training error?</b> Turn the dial, then resample.</p>
+
+<div id="wrap">
+<svg viewBox="0 0 1040 430" role="img" preserveAspectRatio="xMidYMid meet">
+<title>Fits of many flexibilities to many samples of one truth</title>
+<desc>Left: a true curve, one noisy sample of it, the current fit, and the ghosts of fits to earlier samples, whose spread is the variance and whose average's distance from the truth is the bias. Right: bias squared, variance, training error and test error against polynomial degree, on a log scale.</desc>
+<defs><clipPath id="lc"><rect x="20" y="30" width="540" height="330"/></clipPath><clipPath id="rc"><rect x="620" y="30" width="400" height="330"/></clipPath></defs>
+<g id="stage"></g>
+</svg>
+</div>
+
+<div class="row">
+<span class="klab">flexibility: degree</span>
+<input type="range" id="ds" min="0" max="10" step="1" value="3" oninput="setd(+this.value)">
+<span class="knum" id="dv">3</span>
+<button class="main" onclick="resample()">Resample</button>
+<button id="auto" onclick="toggle()">Keep resampling</button>
+<button onclick="clearGhosts()">Clear ghosts</button>
+</div>
+<div class="row">
+<span class="klab">points</span>
+<select id="np" onchange="world()"><option>10</option><option selected>20</option><option>50</option><option>200</option></select>
+<span class="klab">noise</span>
+<select id="sg" onchange="world()"><option value="0.15">low</option><option value="0.3" selected>medium</option><option value="0.6">high</option></select>
+<button onclick="world(true)">New truth</button>
+<label class="cb"><input type="checkbox" id="showt" checked onchange="draw()">show the truth</label>
+</div>
+<div class="rd" id="readout"></div>
+<div class="cap" id="caption"></div>
+
+<script>
+var D=3,NP=20,SG=0.3,PH=0.5,FR=2.2,SL=0.4,MAXD=10,run=false,raf=null;
+var XS=[],YS=[],FIT=null,GH=[],CURVES=null;
+var BLUE='#378ADD',WARM='#BA7517',PINK='#D4537E',GREEN='#1D9E75',INK='var(--text-primary)';
+var LX0=44,LX1=548,LY0=40,LY1=350,RX0=650,RX1=1020,RY0=40,RY1=340;
+var GRID=[];for(var gi=0;gi<=60;gi++)GRID.push(-1+2*gi/60);
+var MG=[];for(var mi=0;mi<=40;mi++)MG.push(-0.85+1.7*mi/40);
+
+function truth(x){return Math.sin(FR*x+PH)+SL*x;}
+function gauss(){var u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+function sample(){var xs=[],ys=[];for(var i=0;i<NP;i++){var x=-1+2*Math.random();xs.push(x);ys.push(truth(x)+SG*gauss());}return [xs,ys];}
+// Chebyshev basis: the same polynomials, in a basis the normal equations can cope with
+function cheb(x,d){var t=[1];if(d>0)t.push(x);for(var k=2;k<=d;k++)t.push(2*x*t[k-1]-t[k-2]);return t;}
+function solveLin(M,b,n){
+ var A=[],i,j,k;for(i=0;i<n;i++){A.push(M[i].slice());A[i].push(b[i]);}
+ for(i=0;i<n;i++){var pv=i;for(k=i+1;k<n;k++)if(Math.abs(A[k][i])>Math.abs(A[pv][i]))pv=k;
+  var tmp=A[i];A[i]=A[pv];A[pv]=tmp;if(Math.abs(A[i][i])<1e-14)A[i][i]=1e-14;
+  for(k=i+1;k<n;k++){var f=A[k][i]/A[i][i];for(j=i;j<=n;j++)A[k][j]-=f*A[i][j];}}
+ var x=new Array(n);for(i=n-1;i>=0;i--){var s=A[i][n];for(j=i+1;j<n;j++)s-=A[i][j]*x[j];x[i]=s/A[i][i];}return x;}
+function fit(xs,ys,d){
+ var n=d+1,M=[],b=[],i,j,k;
+ for(j=0;j<n;j++){M.push(new Array(n).fill(0));b.push(0);}
+ for(i=0;i<xs.length;i++){var r=cheb(xs[i],d);for(j=0;j<n;j++){b[j]+=r[j]*ys[i];for(k=0;k<n;k++)M[j][k]+=r[j]*r[k];}}
+ for(j=0;j<n;j++)M[j][j]+=1e-9;
+ return solveLin(M,b,n);
+}
+function ev(c,x){var t=cheb(x,c.length-1),s=0;for(var k=0;k<c.length;k++)s+=c[k]*t[k];return s;}
+function mse(c,xs,ys){var s=0;for(var i=0;i<xs.length;i++){var e=ys[i]-ev(c,xs[i]);s+=e*e;}return s/xs.length;}
+
+// The right panel is a Monte Carlo over many samples per degree, redone whenever
+// the world changes: bias^2 is the average fit's distance from the truth,
+// variance the spread of the fits around their average.
+function curves(){
+ var R=50,out=[],d,r,g,i;
+ for(d=0;d<=MAXD;d++){
+  var preds=[],tr=0;
+  for(r=0;r<R;r++){var s=sample(),c=fit(s[0],s[1],d);tr+=mse(c,s[0],s[1]);
+   var p=[];for(g=0;g<MG.length;g++)p.push(ev(c,MG[g]));preds.push(p);}
+  var b2=0,va=0;
+  for(g=0;g<MG.length;g++){var m=0;for(r=0;r<R;r++)m+=preds[r][g];m/=R;
+   var t=truth(MG[g]);b2+=(m-t)*(m-t);
+   var v=0;for(r=0;r<R;r++)v+=(preds[r][g]-m)*(preds[r][g]-m);va+=v/R;}
+  b2/=MG.length;va/=MG.length;
+  out.push({b2:b2,va:va,tr:tr/R,te:b2+va+SG*SG});}
+ return out;
+}
+
+/* ---------- drawing ---------- */
+function LX(x){return LX0+(x+1)/2*(LX1-LX0);}function LY(y){return (LY0+LY1)/2-y*(LY1-LY0)/4.4;}
+function TX(x,y,s,c,anc,cls){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+
+ '" fill="'+c+'"'+(anc?' text-anchor="'+anc+'"':'')+'>'+s+'</text>';}
+function path(c,col,w,op,dash){var s='';
+ for(var g=0;g<GRID.length;g++){var y=Math.max(-40,Math.min(40,ev(c,GRID[g])));s+=(g?'L':'M')+LX(GRID[g]).toFixed(1)+' '+LY(y).toFixed(1)+' ';}
+ return '<path d="'+s+'" fill="none" stroke="'+col+'" stroke-width="'+w+'" opacity="'+op+'"'+(dash?' stroke-dasharray="'+dash+'"':'')+' clip-path="url(#lc)"/>';}
+function fpath(f,col,w,op,dash){var s='';
+ for(var g=0;g<GRID.length;g++)s+=(g?'L':'M')+LX(GRID[g]).toFixed(1)+' '+LY(f(GRID[g])).toFixed(1)+' ';
+ return '<path d="'+s+'" fill="none" stroke="'+col+'" stroke-width="'+w+'" opacity="'+op+'"'+(dash?' stroke-dasharray="'+dash+'"':'')+' clip-path="url(#lc)"/>';}
+function RXd(d){return RX0+d/MAXD*(RX1-RX0);}
+function RYv(v){var lv=Math.log10(Math.max(1e-3,Math.min(1000,v)));return RY1-(lv+3)/6*(RY1-RY0);}
+
+function draw(){
+ var s='',i,g,showT=document.getElementById('showt').checked;
+ // left: the fits
+ s+='<rect x="'+LX0+'" y="'+LY0+'" width="'+(LX1-LX0)+'" height="'+(LY1-LY0)+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
+ s+=TX((LX0+LX1)/2,24,'one truth, many samples, degree-'+D+' fits','var(--text-secondary)','middle');
+ for(i=0;i<GH.length;i++)s+=path(GH[i],WARM,1.1,0.22);
+ if(GH.length>1){var mean=[];
+  for(g=0;g<GRID.length;g++){var m=0;for(i=0;i<GH.length;i++)m+=Math.max(-40,Math.min(40,ev(GH[i],GRID[g])));mean.push(m/GH.length);}
+  var mp='';for(g=0;g<GRID.length;g++)mp+=(g?'L':'M')+LX(GRID[g]).toFixed(1)+' '+LY(mean[g]).toFixed(1)+' ';
+  s+='<path d="'+mp+'" fill="none" stroke="'+PINK+'" stroke-width="2.2" stroke-dasharray="7 5" clip-path="url(#lc)"/>';}
+ if(showT)s+=fpath(truth,GREEN,2.4,0.9,'8 5');
+ if(FIT)s+=path(FIT,WARM,2.8,1);
+ for(i=0;i<XS.length;i++)s+='<circle cx="'+LX(XS[i]).toFixed(1)+'" cy="'+LY(YS[i]).toFixed(1)+'" r="'+(NP>60?2.6:4)+'" fill="'+BLUE+'" stroke="var(--blue-ink)" stroke-width="1" clip-path="url(#lc)"/>';
+ var ly=LY1+18;
+ s+=TX(LX0,ly,'<tspan fill="'+GREEN+'">&#8211; &#8211;</tspan> the truth   <tspan fill="'+BLUE+'">&#9679;</tspan> this sample   <tspan fill="'+WARM+'">&#9644;</tspan> fit to it   '+
+   '<tspan fill="'+WARM+'" opacity="0.5">&#9644;</tspan> fits to earlier samples ('+GH.length+')   <tspan fill="'+PINK+'">&#8211; &#8211;</tspan> their average','var(--text-muted)','start','tn');
+ s+=TX(LX0,ly+20,'spread of the ghosts = variance; gap between their average and the truth = bias','var(--text-muted)','start','tn');
+ // right: the curves
+ s+='<rect x="'+RX0+'" y="'+RY0+'" width="'+(RX1-RX0)+'" height="'+(RY1-RY0)+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
+ s+=TX((RX0+RX1)/2,24,'against flexibility: 50 samples, measured over the middle of the range','var(--text-secondary)','middle');
+ var tk=[0.001,0.01,0.1,1,10,100,1000];
+ for(i=0;i<tk.length;i++){var ty=RYv(tk[i]);
+  s+='<line x1="'+RX0+'" y1="'+ty.toFixed(1)+'" x2="'+RX1+'" y2="'+ty.toFixed(1)+'" stroke="var(--border)" stroke-width="0.6"/>';
+  s+=TX(RX0-6,ty+4,String(tk[i]),'var(--text-muted)','end','tn');}
+ for(i=0;i<=MAXD;i+=2)s+=TX(RXd(i),RY1+16,String(i),'var(--text-muted)','middle','tn');
+ s+=TX((RX0+RX1)/2,RY1+34,'polynomial degree','var(--text-muted)','middle','tn');
+ s+='<line x1="'+RX0+'" y1="'+RYv(SG*SG).toFixed(1)+'" x2="'+RX1+'" y2="'+RYv(SG*SG).toFixed(1)+'" stroke="var(--text-muted)" stroke-width="0.8" stroke-dasharray="2 4"/>';
+ s+=TX(RX1-4,RYv(SG*SG)-5,'noise floor &#963;&#178; = '+(SG*SG).toFixed(3),'var(--text-muted)','end','tn');
+ function cpath(key,col,w,dash){var p='';for(var d=0;d<=MAXD;d++)p+=(d?'L':'M')+RXd(d).toFixed(1)+' '+RYv(CURVES[d][key]).toFixed(1)+' ';
+  return '<path d="'+p+'" fill="none" stroke="'+col+'" stroke-width="'+w+'"'+(dash?' stroke-dasharray="'+dash+'"':'')+' clip-path="url(#rc)"/>';}
+ s+=cpath('te',INK,2.6);s+=cpath('b2',BLUE,2.2);s+=cpath('va',PINK,2.2);s+=cpath('tr',WARM,2.2,'6 4');
+ s+='<line x1="'+RXd(D).toFixed(1)+'" y1="'+RY0+'" x2="'+RXd(D).toFixed(1)+'" y2="'+RY1+'" stroke="var(--text-secondary)" stroke-width="1" stroke-dasharray="4 3"/>';
+ var c=CURVES[D],lab=[['te','test error',INK],['b2','bias&#178;',BLUE],['va','variance',PINK],['tr','training error',WARM]];
+ for(i=0;i<lab.length;i++){var y=RYv(c[lab[i][0]]);
+  s+='<circle cx="'+RXd(D).toFixed(1)+'" cy="'+y.toFixed(1)+'" r="4" fill="'+lab[i][2]+'" stroke="var(--bg)" stroke-width="1.2"/>';}
+ // legend, in the corner the curves leave empty
+ var lx=RX0+10,lyy=RY0+20;
+ for(i=0;i<lab.length;i++)s+=TX(lx,lyy+i*18,'<tspan fill="'+lab[i][2]+'">&#9644;</tspan> '+lab[i][1],'var(--text-secondary)','start','tn');
+ document.getElementById('stage').innerHTML=s;
+ readout();caption();
+}
+function f3(v){return v.toFixed(3);}
+function readout(){
+ var c=CURVES[D],own=FIT?mse(FIT,XS,YS):0;
+ document.getElementById('readout').innerHTML='degree <b>'+D+'</b> &#183; this fit&rsquo;s training error <b>'+f3(own)+'</b> &#183; '+
+  'over many samples: bias&#178; <b>'+f3(c.b2)+'</b>, variance <b>'+f3(c.va)+'</b>, training error <b>'+f3(c.tr)+'</b>, test error <b>'+f3(c.te)+'</b>'+
+  (c.va>50?' (off the chart: the fits are wild between the points)':'');
+}
+function caption(){
+ var best=0;for(var d=1;d<=MAXD;d++)if(CURVES[d].te<CURVES[best].te)best=d;
+ var h='';
+ h+='<div class="ans"><b>The answers.</b><table>'+
+  '<tr><td>Bias</td><td><b>decreases</b></td><td>a more flexible model can get closer to the truth on average</td></tr>'+
+  '<tr><td>Variance</td><td><b>increases</b></td><td>it also follows the noise of whichever sample it is given, so fits to different samples disagree more</td></tr>'+
+  '<tr><td>Training error</td><td><b>decreases</b></td><td>it always fits its own sample better; with enough flexibility it can pass through every point</td></tr></table></div>';
+ h+='<div style="margin-top:6px"><b>What the ghosts show.</b> Resample a few times at degree 1 and the fits pile up in almost the same place, all of them '+
+  'missing the curve the same way: low variance, high bias. Do it at degree 10 and the fits scatter wildly between the points while their average '+
+  'hugs the truth: low bias, high variance.</div>';
+ h+='<div style="margin-top:6px"><b>What nobody asked, but everybody should see.</b> Test error = bias&#178; + variance + noise, so it is U-shaped: '+
+  'here it is lowest at degree '+best+'. Training error keeps falling past that point, which is why training error is the wrong thing to choose a model by.</div>';
+ document.getElementById('caption').innerHTML=h;
+}
+function setd(d){D=d;document.getElementById('dv').textContent=d;GH=[];FIT=fit(XS,YS,D);draw();}
+function resample(){if(FIT){GH.push(FIT);if(GH.length>40)GH.shift();}
+ var s=sample();XS=s[0];YS=s[1];FIT=fit(XS,YS,D);draw();}
+function clearGhosts(){GH=[];draw();}
+function toggle(){run=!run;document.getElementById('auto').textContent=run?'Stop':'Keep resampling';
+ if(run)tick();else if(raf){clearTimeout(raf);raf=null;}}
+function tick(){if(!run)return;resample();raf=setTimeout(tick,260);}
+function world(newTruth){
+ NP=+document.getElementById('np').value;SG=+document.getElementById('sg').value;
+ if(newTruth){PH=Math.random()*6.28;FR=1.6+Math.random()*1.6;SL=(Math.random()-0.5)*1.2;}
+ CURVES=curves();GH=[];var s=sample();XS=s[0];YS=s[1];FIT=fit(XS,YS,D);draw();
+}
+document.addEventListener('keydown',function(e){
+ if(e.key===' '||e.key==='Enter'){e.preventDefault();resample();}
+ else if(e.key==='ArrowLeft'){if(D>0){document.getElementById('ds').value=D-1;setd(D-1);}}
+ else if(e.key==='ArrowRight'){if(D<MAXD){document.getElementById('ds').value=D+1;setd(D+1);}}
+});
+world();
+</script>
+</body>
+</html>
