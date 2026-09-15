@@ -191,8 +191,9 @@ function layoutAlg(){
  els.bX.style.transformOrigin='50% 50%';
  els.bX.style.transform='translate('+(ox+cc[0]-bxw/2).toFixed(1)+'px,'+(oy+cc[1]-bxh/2).toFixed(1)+'px) rotate('+(th*180/Math.PI).toFixed(1)+'deg)';
  els.bX.style.opacity=(1-smooth(0.3,1,sb)).toFixed(3);
- place(els.lA,ox-30,oy+BH/2-12,1-smooth(0,0.35,e1),1);
- place(els.lX,ox+cc[0]-CW/2-27,oy+cc[1]-12,1-smooth(0,0.6,sb),1);
+ // names sit under their brackets, like the Ax label does, and x's rides with it
+ place(els.lA,ox+AWs/2-7,oy+BH+16,1-smooth(0,0.35,e1),1);
+ place(els.lX,ox+cc[0]-6,oy+cc[1]+C*CH/2+16,1-smooth(0,0.6,sb),1);
  place(els.lR,ox+MX+CW/2-11,oy+BH+16,smooth(0.3,0.9,e4),1);
 }
 
