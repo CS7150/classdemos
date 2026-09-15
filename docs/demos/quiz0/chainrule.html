@@ -7,7 +7,8 @@
 <meta name="description" content="A nudge in w travelling down a chain, picking up a stretch factor at each link.">
 <link rel="stylesheet" href="../demo.css">
 <style>
-#wrap{position:relative}
+.ts{font-size:20px}.tn{font-size:17px}
+#wrap{position:relative;flex:0 0 auto;height:clamp(300px,50vh,640px)}
 #wrap svg{position:absolute;inset:0;width:100%;height:100%}
 .mini{width:54px;height:32px;text-align:center;font-size:16px;font-variant-numeric:tabular-nums;
  border:1px solid var(--border-strong);border-radius:7px;background:var(--surface);color:var(--text-primary);
@@ -25,7 +26,7 @@
 <p class="quiz">Quiz 0, question 3(a). <b>u = wx + b with x and b fixed, z = g(u). Write dz/dw.</b></p>
 
 <div id="wrap">
-<svg viewBox="0 0 1040 460" role="img" preserveAspectRatio="xMidYMid meet">
+<svg viewBox="0 0 1440 440" role="img" preserveAspectRatio="xMidYMid meet">
 <title>A nudge in w passing through u and into z</title>
 <desc>Three panels: u against w, whose slope is x; z against u, whose slope is g prime; and z against w, whose slope is their product. Underneath, the same computation as a graph: w and x into a multiply node, plus b into an add node, then g, then z, with the forward values written on the edges and the derivative of z with respect to each edge written beneath it, filled in from right to left by backpropagation.</desc>
 <defs><marker id="ar" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
@@ -57,7 +58,7 @@
 <script>
 var W=0.8,H=0.4,X=2,B=-1,G='sig',anim=null,BP=4,bpanim=null;
 var BLUE='#378ADD',WARM='#BA7517',PINK='#D4537E',GREEN='#1D9E75';
-var P=[[14,34,330,212],[356,34,672,212],[698,34,1014,212]];
+var P=[[20,34,470,198],[495,34,945,198],[970,34,1420,198]];
 
 function g(u){
  if(G==='sig')return 1/(1+Math.exp(-u));
@@ -144,7 +145,7 @@ function draw(){
  s+=dot(mA.X(W),mA.Y(u),BLUE);
  s+=TX((mA.X(W)+mA.X(W+H))/2,mA.Y(u)+16,'&#916;w','var(--blue-ink)','middle','tn');
  s+=TX(mA.X(W+H)+7,(mA.Y(u)+mA.Y(u2))/2,'&#916;u','var(--blue-ink)','start','tn');
- s+=TX((P[0][0]+P[0][2])/2,24,'slope here is x = '+f1(X),'var(--blue-ink)','middle','tn');
+ s+=TX((P[0][0]+P[0][2])/2,23,'slope here is x = '+f1(X),'var(--blue-ink)','middle','tn');
 
  // panel 2: z against u.  Its slope is g'(u), and that is the only place the
  // shape of g gets a say.
@@ -181,56 +182,56 @@ function draw(){
  document.getElementById('stage').innerHTML=s;
  readout(u,z,du,dz);caption(u,z,du,dz);
 }
-function box(x,y,lab){return '<rect x="'+(x-23)+'" y="'+(y-17)+'" width="46" height="34" rx="7" fill="var(--surface)" stroke="var(--border-strong)" stroke-width="1.4"/>'+
- TX(x,y+6,lab,'var(--text-primary)','middle');}
+function box(x,y,lab){return '<rect x="'+(x-27)+'" y="'+(y-20)+'" width="54" height="40" rx="8" fill="var(--surface)" stroke="var(--border-strong)" stroke-width="1.5"/>'+
+ TX(x,y+7,lab,'var(--text-primary)','middle');}
 function edge(x1,y1,x2,y2){return '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="var(--text-secondary)" stroke-width="1.6" marker-end="url(#ar)"/>';}
 function graph(u,z){
- var s='',Y=318,gpu=gp(u),
-     NX=[118,318,540,762,962],   // w, times, plus, g, z
+ var s='',Y=312,gpu=gp(u),
+     NX=[120,420,720,1020,1330],   // w, times, plus, g, z
      lit=function(k){return BP>=k;},
      GC='var(--pink-ink)',VC='var(--blue-ink)',MC='var(--text-muted)';
- s+=TX(520,246,'the same chain as a computation graph: values forward along the top of each edge, derivatives of z back along the bottom','var(--text-secondary)','middle','tn');
+ s+=TX(720,236,'the same chain as a computation graph: values forward along the top of each edge, derivatives of z back along the bottom','var(--text-secondary)','middle','tn');
  // main line: w -> x -> + -> g -> z
  s+=TX(NX[0],Y+6,'w','var(--text-primary)','middle');
- s+=edge(NX[0]+16,Y,NX[1]-25,Y);
+ s+=edge(NX[0]+18,Y,NX[1]-29,Y);
  s+=box(NX[1],Y,'&#215;');
- s+=edge(NX[1]+23,Y,NX[2]-25,Y);
+ s+=edge(NX[1]+27,Y,NX[2]-29,Y);
  s+=box(NX[2],Y,'+');
- s+=edge(NX[2]+23,Y,NX[3]-25,Y);
+ s+=edge(NX[2]+27,Y,NX[3]-29,Y);
  s+=box(NX[3],Y,gname());
- s+=edge(NX[3]+23,Y,NX[4]-14,Y);
+ s+=edge(NX[3]+27,Y,NX[4]-16,Y);
  s+=TX(NX[4],Y+6,'z','var(--text-primary)','middle');
  // side inputs, from below left
- var XY=Y+84;
- s+=TX(NX[1]-92,XY+6,'x','var(--text-primary)','middle');
- s+=edge(NX[1]-80,XY-8,NX[1]-16,Y+19);
- s+=TX(NX[2]-92,XY+6,'b','var(--text-primary)','middle');
- s+=edge(NX[2]-80,XY-8,NX[2]-16,Y+19);
+ var XY=Y+86;
+ s+=TX(NX[1]-100,XY+7,'x','var(--text-primary)','middle');
+ s+=edge(NX[1]-86,XY-9,NX[1]-18,Y+22);
+ s+=TX(NX[2]-100,XY+7,'b','var(--text-primary)','middle');
+ s+=edge(NX[2]-86,XY-9,NX[2]-18,Y+22);
  // forward values, above the edges
- function fv(x,t){return TX(x,Y-12,t,VC,'middle','tn');}
+ function fv(x,t){return TX(x,Y-14,t,VC,'middle','tn');}
  s+=fv((NX[0]+NX[1])/2,'w = '+f1(W));
  s+=fv((NX[1]+NX[2])/2,'wx = '+f2(W*X));
  s+=fv((NX[2]+NX[3])/2,'u = '+f2(u));
  s+=fv((NX[3]+NX[4])/2,'z = '+f2(z));
- s+=TX(NX[1]-104,XY+6,'x = '+f1(X),VC,'end','tn');
- s+=TX(NX[2]-104,XY+6,'b = '+f1(B),VC,'end','tn');
+ s+=TX(NX[1]-114,XY+7,'x = '+f1(X),VC,'end','tn');
+ s+=TX(NX[2]-114,XY+7,'b = '+f1(B),VC,'end','tn');
  // local derivatives, above each node: what that node alone contributes
- s+=TX(NX[1],Y-34,'&#8706;(wx)/&#8706;w = x','var(--text-muted)','middle','tn');
- s+=TX(NX[2],Y-34,'&#8706;u/&#8706;(wx) = 1','var(--text-muted)','middle','tn');
- s+=TX(NX[3],Y-34,gname()+'&#8242;(u) = '+f2(gpu),'var(--text-muted)','middle','tn');
+ s+=TX(NX[1],Y-38,'&#8706;(wx)/&#8706;w = x','var(--text-muted)','middle','tn');
+ s+=TX(NX[2],Y-38,'&#8706;u/&#8706;(wx) = 1','var(--text-muted)','middle','tn');
+ s+=TX(NX[3],Y-38,gname()+'&#8242;(u) = '+f2(gpu),'var(--text-muted)','middle','tn');
  // gradients under the edges, lit from the right, each the one to its right
  // times the local derivative of the node between them
- function gv(x,k,t,t2){if(!lit(k))return TX(x,Y+19,'&#8706;z/&#8706;? &nbsp;&middot;&middot;&middot;',MC,'middle','tn');
-  return TX(x,Y+19,t,GC,'middle','tn')+(t2?TX(x,Y+37,t2,GC,'middle','tn'):'');}
+ function gv(x,k,t,t2){if(!lit(k))return TX(x,Y+22,'&#8706;z/&#8706;? &nbsp;&middot;&middot;&middot;',MC,'middle','tn');
+  return TX(x,Y+22,t,GC,'middle','tn')+(t2?TX(x,Y+42,t2,GC,'middle','tn'):'');}
  s+=gv((NX[3]+NX[4])/2,1,'&#8706;z/&#8706;z = 1','start here');
  s+=gv((NX[2]+NX[3])/2,2,'&#8706;z/&#8706;u = '+f2(gpu),'= 1 &#215; '+gname()+'&#8242;(u)');
  s+=gv((NX[1]+NX[2])/2,3,'&#8706;z/&#8706;(wx) = '+f2(gpu),'= '+f2(gpu)+' &#215; 1');
  s+=gv((NX[0]+NX[1])/2,4,'&#8706;z/&#8706;w = '+f2(gpu*X),'= '+f2(gpu)+' &#215; '+f1(X));
- if(lit(4))s+=TX(NX[1]-104,XY+24,'&#8706;z/&#8706;x = '+f2(gpu*W),GC,'end','tn');
- if(lit(3))s+=TX(NX[2]-104,XY+24,'&#8706;z/&#8706;b = '+f2(gpu),GC,'end','tn');
+ if(lit(4))s+=TX(NX[1]-114,XY+28,'&#8706;z/&#8706;x = '+f2(gpu*W),GC,'end','tn');
+ if(lit(3))s+=TX(NX[2]-114,XY+28,'&#8706;z/&#8706;b = '+f2(gpu),GC,'end','tn');
  // the chain, read straight off the graph
- if(lit(4))s+=TX(NX[4],Y+84,'dz/dw = '+gname()+'&#8242;(u) &#183; 1 &#183; x = <tspan font-weight="500">'+f2(gpu*X)+'</tspan>',GC,'end');
- else s+=TX(NX[4],Y+84,'press backpropagate',MC,'end','tn');
+ if(lit(4))s+=TX(NX[4]+16,Y+96,'dz/dw = '+gname()+'&#8242;(u) &#183; 1 &#183; x = <tspan font-weight="500">'+f2(gpu*X)+'</tspan>',GC,'end');
+ else s+=TX(NX[4]+16,Y+96,'press backpropagate',MC,'end','tn');
  return s;
 }
 function backprop(){
