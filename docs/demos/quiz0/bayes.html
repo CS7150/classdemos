@@ -4,10 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Conditional probability</title>
-<meta name="description" content="Bayes rule on a population of ten thousand: the positives fly out and re-sort, and the answer is the fraction of them who are actually sick.">
+<meta name="description" content="Bayes rule on a population of ten thousand: the people sort themselves into two overlapping circles, and each conditional probability is a fraction of one circle.">
 <link rel="stylesheet" href="../demo.css">
 <style>
-#wrap{position:relative}
+.ts{font-size:19px}.tn{font-size:16px}
+#wrap{position:relative;flex:0 0 auto;height:clamp(300px,50vh,620px)}
 #wrap canvas,#wrap svg{position:absolute;inset:0;width:100%;height:100%}
 #wrap svg{pointer-events:none}
 .mini{width:62px;height:32px;text-align:center;font-size:16px;font-variant-numeric:tabular-nums;
@@ -17,24 +18,25 @@
 .mini::-webkit-outer-spin-button,.mini::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .mini[type=number]{-moz-appearance:textfield}
 .pct{font-size:15px;color:var(--text-secondary)}
+.seg button{font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
 <div class="nav"><a href="./">&larr; Quiz 0, worked</a> &middot; <a href="../../">CS7150 class demos</a></div>
-<h1>Conditional probability<span>: ten thousand people, and the ones who test positive</span></h1>
+<h1>Conditional probability<span>: ten thousand people, two circles, and a fraction of one of them</span></h1>
 <p class="quiz">Quiz 0, question 5. <b>A disease affects 1% of people. The test is positive for 99% of those who have it, and for 5% of those who do not. Someone tests positive: P(disease | positive)?</b></p>
 
 <div id="wrap">
 <canvas id="cv"></canvas>
-<svg viewBox="0 0 1040 440" preserveAspectRatio="xMidYMid meet" role="img">
-<title>The population, the positives sorted out of it, and the same counts as a tree</title>
-<desc>Left: ten thousand small squares, the sick ones in the top rows, coloured by test result. Middle: the positive squares gathered into one block, sick first, so the answer is the visible fraction of the block. Right: the same four counts as a tree.</desc>
+<svg viewBox="0 0 1440 440" preserveAspectRatio="xMidYMid meet" role="img">
+<title>The population sorted into two overlapping circles, with one conditional probability highlighted</title>
+<desc>Left: ten thousand small squares. Pink means sick, blue means well; deep colour means the test came back positive, pale means negative. Press sort and the squares rearrange, without leaving the square, into two overlapping discs: one holding everyone who is sick, one holding everyone who tested positive, with areas exactly proportional to the counts. Choosing a probability dims everyone outside its denominator, so the answer is the visible fraction of the circle that stays lit. Right: the same four counts as a tree.</desc>
 <g id="lab"></g>
 </svg>
 </div>
 
 <div class="row">
-<button class="main" id="go" onclick="toggle()">Sort the positives</button>
+<button class="main" id="go" onclick="toggle()">Sort into circles</button>
 <span class="klab">prevalence</span><input class="mini" type="number" id="pv" value="1" step="0.5" min="0.1" max="60" oninput="setup()"><span class="pct">%</span>
 <span class="klab">sensitivity</span><input class="mini" type="number" id="se" value="99" step="1" min="1" max="100" oninput="setup()"><span class="pct">%</span>
 <span class="klab">false positive rate</span><input class="mini" type="number" id="fp" value="5" step="1" min="0" max="60" oninput="setup()"><span class="pct">%</span>
@@ -43,18 +45,31 @@
 </div>
 <div class="row">
 <span class="klab">sort</span>
-<input type="range" id="ts" min="0" max="100" step="1" value="0" oninput="setT(+this.value/100,1)">
+<input type="range" id="ts" min="0" max="100" step="1" value="0" oninput="setT(+this.value/100,1)" style="max-width:260px">
 <span class="knum" id="tv">0.00</span>
+<span class="klab" style="margin-left:10px">highlight</span>
+<span class="seg" id="probs"></span>
 </div>
 <div class="rd" id="readout"></div>
 <div class="cap" id="caption"></div>
 
 <script>
-var N=10000,G=100,CS=3.4,GX=28,GY=56,BX=442,BY=56;
-var prev=0.01,sens=0.99,fpr=0.05,nS,nTP,nFN,nFP,nTN,nPos,bw;
-var t=0,playing=false,raf=null,last=0,chosen=-1;
-var PINK='#D4537E',PINKF='#f0b9cb',ORANGE='#D85A30',GREY='#c9c6bb',GREYD='#4a4944';
+var N=10000,G=100,CS=3.5,GX=40,GY=40;
+var prev=0.01,sens=0.99,fpr=0.05,nS,nTP,nFN,nFP,nTN,nPos;
+var t=0,playing=false,raf=null,last=0,chosen=-1,SEL=0;
+var SLOT=null,VENN=null;
+// hue says sick or well, saturation says what the test said
+var C_TP='#D4537E',C_FN='#F2B9CC',C_FP='#2F7FD1',C_TN='#CBD5E0',DARK='#3a3936';
 var cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+// the probabilities on offer: numerator and denominator as sets of the four groups
+// 0 = sick and positive, 1 = sick and negative, 2 = well and positive, 3 = well and negative
+var PROBS=[
+ {lab:'P(sick | positive)',num:[0],den:[0,2],words:'of everyone who tested positive, the fraction who are sick'},
+ {lab:'P(positive | sick)',num:[0],den:[0,1],words:'of everyone who is sick, the fraction the test catches: the sensitivity'},
+ {lab:'P(sick | negative)',num:[1],den:[1,3],words:'of everyone who tested negative, the fraction who are sick anyway'},
+ {lab:'P(positive | well)',num:[2],den:[2,3],words:'of everyone who is well, the fraction the test flags anyway: the false positive rate'},
+ {lab:'P(sick)',num:[0,1],den:[0,1,2,3],words:'of everyone, the fraction who are sick: the prevalence'},
+ {lab:'P(positive)',num:[0,2],den:[0,1,2,3],words:'of everyone, the fraction who test positive'}];
 
 function setup(){
  prev=Math.max(0.001,Math.min(0.6,(parseFloat(document.getElementById('pv').value)||1)/100));
@@ -62,101 +77,148 @@ function setup(){
  fpr=Math.max(0,Math.min(0.6,(parseFloat(document.getElementById('fp').value)||0)/100));
  nS=Math.round(prev*N);nTP=Math.round(sens*nS);nFN=nS-nTP;
  nFP=Math.round(fpr*(N-nS));nTN=N-nS-nFP;nPos=nTP+nFP;
- // the positives gather into a block of the same cells, as square as it can be
- bw=Math.max(1,Math.ceil(Math.sqrt(nPos)));
- chosen=-1;t=0;pause();draw();
+ layoutVenn();chosen=-1;t=0;pause();draw();
 }
-function cat(i){return i<nTP?0:(i<nS?1:(i<nS+nFP?2:3));}   // TP, FN, FP, TN
+function cat(i){return i<nTP?0:(i<nS?1:(i<nS+nFP?2:3));}
 function ease(f){return f<0.5?2*f*f:1-Math.pow(-2*f+2,2)/2;}
 function gpos(i){return [GX+(i%G)*CS,GY+Math.floor(i/G)*CS];}
-function bpos(k){return [BX+(k%bw)*CS,BY+Math.floor(k/bw)*CS];}
 function fmtN(n){return n.toLocaleString('en-US');}
 function gcd(a,b){while(b){var r=a%b;a=b;b=r;}return a;}
+function fv(v){return v>=0.001||v===0?v.toFixed(3):v.toFixed(5);}
+function count(set){var s=0;for(var k=0;k<set.length;k++)s+=[nTP,nFN,nFP,nTN][set[k]];return s;}
 
+// Two discs whose areas are the counts, overlapping by exactly the count of
+// people in both, laid out on the same 100 x 100 grid the population already
+// occupies.  Every group gets exactly as many grid slots as it has people: the
+// sick disc is the nS slots nearest one centre, the overlap is the nTP of those
+// nearest the other centre, and the positive-only crescent is the nFP nearest
+// slots that are left.  So the picture is exact, not a sketch with circles.
+function lens(r1,r2,d){
+ if(d>=r1+r2)return 0;if(d<=Math.abs(r1-r2))return Math.PI*Math.min(r1,r2)*Math.min(r1,r2);
+ var a=r1*r1*Math.acos((d*d+r1*r1-r2*r2)/(2*d*r1)),b=r2*r2*Math.acos((d*d+r2*r2-r1*r1)/(2*d*r2)),
+     c=0.5*Math.sqrt((-d+r1+r2)*(d+r1-r2)*(d-r1+r2)*(d+r1+r2));
+ return a+b-c;
+}
+function layoutVenn(){
+ var rA=Math.sqrt(nS/Math.PI),rB=Math.sqrt(Math.max(nPos,1)/Math.PI),lo=Math.abs(rA-rB),hi=rA+rB,d;
+ if(nTP>=Math.min(nS,nPos))d=lo;
+ else{for(var k=0;k<50;k++){d=(lo+hi)/2;if(lens(rA,rB,d)>nTP)lo=d;else hi=d;}d=(lo+hi)/2;}
+ var cBx=50+d*rA/(rA+rB),cAx=cBx-d,cy=50;
+ VENN={rA:rA,rB:rB,cA:[cAx,cy],cB:[cBx,cy]};
+ var idx=[],i;for(i=0;i<N;i++)idx.push(i);
+ function dist(i,c){var x=(i%G)+0.5,y=Math.floor(i/G)+0.5;return (x-c[0])*(x-c[0])+(y-c[1])*(y-c[1]);}
+ var byA=idx.slice().sort(function(a,b){return dist(a,VENN.cA)-dist(b,VENN.cA);}),
+     inA=new Uint8Array(N),A=byA.slice(0,nS);
+ for(i=0;i<A.length;i++)inA[A[i]]=1;
+ var Ab=A.slice().sort(function(a,b){return dist(a,VENN.cB)-dist(b,VENN.cB);}),
+     lensS=Ab.slice(0,nTP).sort(function(a,b){return a-b;}),
+     fnS=Ab.slice(nTP).sort(function(a,b){return a-b;});
+ var rest=idx.filter(function(i){return !inA[i];}),
+     byB=rest.slice().sort(function(a,b){return dist(a,VENN.cB)-dist(b,VENN.cB);}),
+     fpS=byB.slice(0,nFP).sort(function(a,b){return a-b;}),
+     inB=new Uint8Array(N);
+ for(i=0;i<fpS.length;i++)inB[fpS[i]]=1;
+ var tnS=rest.filter(function(i){return !inB[i];});
+ SLOT=new Int32Array(N);var k=0;
+ for(i=0;i<lensS.length;i++)SLOT[k++]=lensS[i];
+ for(i=0;i<fnS.length;i++)SLOT[k++]=fnS[i];
+ for(i=0;i<fpS.length;i++)SLOT[k++]=fpS[i];
+ for(i=0;i<tnS.length;i++)SLOT[k++]=tnS[i];
+}
 function fit(){
  var r=cv.getBoundingClientRect(),d=window.devicePixelRatio||1;
  if(cv.width!==Math.round(r.width*d)||cv.height!==Math.round(r.height*d)){cv.width=Math.round(r.width*d);cv.height=Math.round(r.height*d);}
- // the same letterboxing the svg on top uses, so the two agree to the pixel
- var s=Math.min(r.width/1040,r.height/440),ox=(r.width-1040*s)/2,oy=(r.height-440*s)/2;
+ var s=Math.min(r.width/1440,r.height/440),ox=(r.width-1440*s)/2,oy=(r.height-440*s)/2;
  ctx.setTransform(d*s,0,0,d*s,d*ox,d*oy);
  ctx.clearRect(-ox/s,-oy/s,r.width/s,r.height/s);
 }
 function draw(){
  fit();
- var e=ease(t),i,k=0,sz=CS*0.82;
+ var e=ease(t),i,sz=CS*0.8,P=PROBS[SEL],inNum=[0,0,0,0],inDen=[0,0,0,0];
+ P.num.forEach(function(c){inNum[c]=1;});P.den.forEach(function(c){inDen[c]=1;});
+ var cols=[C_TP,C_FN,C_FP,C_TN];
  for(i=0;i<N;i++){
-  var c=cat(i),g=gpos(i),x=g[0],y=g[1],a=1;
-  if(c===0||c===2){var b=bpos(k++);x=g[0]+(b[0]-g[0])*e;y=g[1]+(b[1]-g[1])*e;}
-  else a=1-0.72*e;
-  ctx.globalAlpha=a;
-  ctx.fillStyle=c===0?PINK:(c===1?PINKF:(c===2?ORANGE:GREY));
+  var c=cat(i),g=gpos(i),q=gpos(SLOT[i]),x=g[0]+(q[0]-g[0])*e,y=g[1]+(q[1]-g[1])*e;
+  ctx.globalAlpha=inNum[c]?1:(inDen[c]?0.5:0.13);
+  ctx.fillStyle=cols[c];
   ctx.fillRect(x,y,sz,sz);
  }
  ctx.globalAlpha=1;
- if(chosen>=0){var q=gpos(chosen),cq=cat(chosen);
-  if(cq===0||cq===2){var kk=chosen<nS?chosen:nTP+(chosen-nS);var bq=bpos(kk);q=[q[0]+(bq[0]-q[0])*e,q[1]+(bq[1]-q[1])*e];}
-  ctx.strokeStyle=GREYD;ctx.lineWidth=1.6;ctx.beginPath();ctx.arc(q[0]+sz/2,q[1]+sz/2,7,0,Math.PI*2);ctx.stroke();}
+ if(chosen>=0){var g2=gpos(chosen),q2=gpos(SLOT[chosen]),px=g2[0]+(q2[0]-g2[0])*e,py=g2[1]+(q2[1]-g2[1])*e;
+  ctx.strokeStyle=DARK;ctx.lineWidth=1.8;ctx.beginPath();ctx.arc(px+sz/2,py+sz/2,8,0,Math.PI*2);ctx.stroke();}
  labels(e);
  document.getElementById('tv').textContent=t.toFixed(2);
  document.getElementById('ts').value=Math.round(t*100);
  readout();caption();
 }
-function TX(x,y,s,c,anc,cls){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+
- '" fill="'+c+'"'+(anc?' text-anchor="'+anc+'"':'')+'>'+s+'</text>';}
+function TX(x,y,s,c,anc,cls,extra){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+
+ '" fill="'+c+'"'+(anc?' text-anchor="'+anc+'"':'')+(extra||'')+'>'+s+'</text>';}
 function labels(e){
- var s='',gw=G*CS;
- s+=TX(GX+gw/2,GY-30,fmtN(N)+' people','var(--text-secondary)','middle');
- s+=TX(GX,GY-11,'<tspan fill="'+PINK+'">&#9632;</tspan> sick, positive '+fmtN(nTP)+
-   '  <tspan fill="'+PINKF+'">&#9632;</tspan> sick, negative '+fmtN(nFN),'var(--text-muted)','start','tn');
- s+=TX(GX,GY+gw+18,'<tspan fill="'+ORANGE+'">&#9632;</tspan> well, positive '+fmtN(nFP)+
-   '  <tspan fill="'+GREY+'">&#9632;</tspan> well, negative '+fmtN(nTN),'var(--text-muted)','start','tn');
- // the block of positives, and the answer as the visible fraction of it
- var bh=Math.ceil(nPos/bw)*CS,bwid=bw*CS,op=Math.max(0,(e-0.55)/0.45);
- s+='<g opacity="'+op.toFixed(2)+'">';
- s+=TX(BX+bwid/2,BY-30,fmtN(nPos)+' tested positive','var(--text-secondary)','middle');
- s+=TX(BX,BY-11,'the sick ones first','var(--text-muted)','start','tn');
- s+=TX(BX,BY+bh+20,'<tspan fill="'+PINK+'">'+fmtN(nTP)+' sick</tspan> out of '+fmtN(nPos),'var(--text-secondary)','start');
- var g=gcd(nTP,nPos)||1;
- s+=TX(BX,BY+bh+44,'P(sick | positive)','var(--green-ink)','start');
- s+=TX(BX,BY+bh+66,'= '+fmtN(nTP)+'/'+fmtN(nPos)+(g>1?' = '+(nTP/g)+'/'+(nPos/g):'')+' = <tspan font-weight="500">'+(nPos?(nTP/nPos).toFixed(3):'&#8212;')+'</tspan>','var(--green-ink)','start');
- s+='</g>';
- // the tree: the same four numbers, as the arithmetic
- var TX0=790,TY=70;
- s+=TX(TX0+120,TY-30,'the same counts, as a tree','var(--text-secondary)','middle');
+ var s='',gw=G*CS,P=PROBS[SEL],nn=count(P.num),dd=count(P.den),g=gcd(nn,dd)||1;
+ s+=TX(GX+gw/2,GY-24,fmtN(N)+' people','var(--text-secondary)','middle');
+ s+='<rect x="'+(GX-2)+'" y="'+(GY-2)+'" width="'+(gw+4)+'" height="'+(gw+4)+'" fill="none" stroke="var(--border)" stroke-width="1"/>';
+ // the circles, drawn once the cells have mostly arrived
+ var op=Math.max(0,(e-0.45)/0.55);
+ if(op>0){
+  function cx(v){return GX+v*CS;}function cy(v){return GY+v*CS;}
+  var A=VENN.cA,B=VENN.cB,rA=VENN.rA*CS,rB=VENN.rB*CS;
+  s+='<g opacity="'+op.toFixed(2)+'">';
+  s+='<circle cx="'+cx(A[0]).toFixed(1)+'" cy="'+cy(A[1]).toFixed(1)+'" r="'+rA.toFixed(1)+'" fill="none" stroke="'+C_TP+'" stroke-width="2"/>';
+  s+='<circle cx="'+cx(B[0]).toFixed(1)+'" cy="'+cy(B[1]).toFixed(1)+'" r="'+rB.toFixed(1)+'" fill="none" stroke="'+C_FP+'" stroke-width="2"/>';
+  var by=cy(B[1])+rB+21,axl=cx(A[0])-rA-8;
+  if(axl>GX+70)s+=TX(axl,cy(A[1])+5,'sick: '+fmtN(nS),'var(--pink-ink)','end','tn');
+  else s+=TX(cx(A[0]),cy(A[1])-Math.max(rA,rB)-9,'sick: '+fmtN(nS),'var(--pink-ink)','middle','tn');
+  s+=TX(cx(B[0]),by,'tested positive: '+fmtN(nPos),'var(--blue-ink)','middle','tn');
+  s+='</g>';}
+ // legend under the square
+ var ly=GY+gw+22;
+ s+=TX(GX,ly,'<tspan fill="'+C_TP+'">&#9632;</tspan> sick, positive '+fmtN(nTP)+'   <tspan fill="'+C_FN+'">&#9632;</tspan> sick, negative '+fmtN(nFN),'var(--text-muted)','start','tn');
+ s+=TX(GX,ly+19,'<tspan fill="'+C_FP+'">&#9632;</tspan> well, positive '+fmtN(nFP)+'   <tspan fill="'+C_TN+'">&#9632;</tspan> well, negative '+fmtN(nTN),'var(--text-muted)','start','tn');
+ // the chosen probability, as a fraction of one region
+ var FX=470,FY=70;
+ s+=TX(FX,FY-30,'the highlighted fraction','var(--text-secondary)','start');
+ s+=TX(FX,FY+6,P.lab,'var(--text-primary)','start','ts',' font-size="26px" font-weight="500"');
+ s+=TX(FX,FY+36,P.words,'var(--text-secondary)','start','tn');
+ s+=TX(FX,FY+78,'= '+fmtN(nn)+' / '+fmtN(dd)+(g>1&&dd/g<1000?' = '+(nn/g)+'/'+(dd/g):'')+' = <tspan font-weight="500">'+(dd?fv(nn/dd):'&#8212;')+'</tspan>','var(--green-ink)','start','ts',' font-size="22px"');
+ // a bar of it, lit part over dim part
+ var bx=FX,bw=400,bh=16,byy=FY+100;
+ s+='<rect x="'+bx+'" y="'+byy+'" width="'+bw+'" height="'+bh+'" fill="var(--surface-1)" stroke="var(--border)"/>';
+ if(dd)s+='<rect x="'+bx+'" y="'+byy+'" width="'+(bw*nn/dd).toFixed(1)+'" height="'+bh+'" fill="var(--green)"/>';
+ s+=TX(bx,byy+36,'bright cells / all lit cells on the left','var(--text-muted)','start','tn');
+
+ s+=TX(FX,FY+178,'Every conditional probability is the same move:','var(--text-muted)','start','tn');
+ s+=TX(FX,FY+200,'pick a circle, look inside it. The quiz asks the first one.','var(--text-muted)','start','tn');
+ // the tree
+ var TX0=960,TY=64;
+ s+=TX(TX0+200,TY-24,'the same counts, as a tree','var(--text-secondary)','middle');
  function node(x,y,txt,c){return TX(x,y,txt,c||'var(--text-primary)','middle','tn');}
  function edge(x1,y1,x2,y2,lab){return '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="var(--border-strong)" stroke-width="1"/>'+
-   TX((x1+x2)/2+(x2>x1?8:-8),(y1+y2)/2+4,lab,'var(--text-muted)',x2>x1?'start':'end','tn');}
- s+=node(TX0+120,TY,fmtN(N));
- s+=edge(TX0+120,TY+6,TX0+40,TY+62,(prev*100).toFixed(prev<0.01?2:1)+'%');
- s+=edge(TX0+120,TY+6,TX0+200,TY+62,(100-prev*100).toFixed(prev<0.01?2:1)+'%');
- s+=node(TX0+40,TY+82,fmtN(nS)+' sick',PINK);
- s+=node(TX0+200,TY+82,fmtN(N-nS)+' well','var(--text-secondary)');
- s+=edge(TX0+40,TY+88,TX0+10,TY+146,(sens*100).toFixed(0)+'%');
- s+=edge(TX0+40,TY+88,TX0+80,TY+146,(100-sens*100).toFixed(0)+'%');
- s+=edge(TX0+200,TY+88,TX0+160,TY+146,(fpr*100).toFixed(0)+'%');
- s+=edge(TX0+200,TY+88,TX0+240,TY+146,(100-fpr*100).toFixed(0)+'%');
- s+=node(TX0+10,TY+166,fmtN(nTP),PINK);s+=node(TX0+10,TY+182,'positive',PINK);
- s+=node(TX0+80,TY+166,fmtN(nFN),PINKF);s+=node(TX0+80,TY+182,'negative',PINKF);
- s+=node(TX0+160,TY+166,fmtN(nFP),ORANGE);s+=node(TX0+160,TY+182,'positive',ORANGE);
- s+=node(TX0+240,TY+166,fmtN(nTN),'var(--text-muted)');s+=node(TX0+240,TY+182,'negative','var(--text-muted)');
- s+='<rect x="'+(TX0-12)+'" y="'+(TY+152)+'" width="64" height="38" rx="5" fill="none" stroke="'+PINK+'" stroke-width="1" stroke-dasharray="4 3"/>';
- s+='<rect x="'+(TX0+138)+'" y="'+(TY+152)+'" width="64" height="38" rx="5" fill="none" stroke="'+ORANGE+'" stroke-width="1" stroke-dasharray="4 3"/>';
- s+=TX(TX0+120,TY+222,'positive = '+fmtN(nTP)+' + '+fmtN(nFP)+' = '+fmtN(nPos),'var(--text-secondary)','middle','tn');
- s+=TX(TX0+120,TY+246,'sick among them = '+fmtN(nTP)+' / '+fmtN(nPos),'var(--green-ink)','middle','tn');
- // a bar of the answer against 1, for scale
- var ax=TX0-10,aw=260,ay=TY+270;
- s+='<rect x="'+ax+'" y="'+ay+'" width="'+aw+'" height="14" fill="var(--surface-1)" stroke="var(--border)"/>';
- if(nPos){s+='<rect x="'+ax+'" y="'+ay+'" width="'+(aw*nTP/nPos).toFixed(1)+'" height="14" fill="'+PINK+'"/>';
-  s+='<rect x="'+(ax+aw*nTP/nPos).toFixed(1)+'" y="'+ay+'" width="'+(aw*nFP/nPos).toFixed(1)+'" height="14" fill="'+ORANGE+'"/>';}
- s+=TX(ax,ay+30,'of the positives: sick vs well','var(--text-muted)','start','tn');
+   TX((x1+x2)/2+(x2>x1?8:-8),(y1+y2)/2+5,lab,'var(--text-muted)',x2>x1?'start':'end','tn');}
+ s+=node(TX0+200,TY+6,fmtN(N));
+ s+=edge(TX0+200,TY+12,TX0+70,TY+74,(prev*100).toFixed(prev<0.01?2:1)+'%');
+ s+=edge(TX0+200,TY+12,TX0+330,TY+74,(100-prev*100).toFixed(prev<0.01?2:1)+'%');
+ s+=node(TX0+70,TY+96,fmtN(nS)+' sick','var(--pink-ink)');
+ s+=node(TX0+330,TY+96,fmtN(N-nS)+' well','var(--blue-ink)');
+ s+=edge(TX0+70,TY+104,TX0+20,TY+166,(sens*100).toFixed(0)+'%');
+ s+=edge(TX0+70,TY+104,TX0+130,TY+166,(100-sens*100).toFixed(0)+'%');
+ s+=edge(TX0+330,TY+104,TX0+270,TY+166,(fpr*100).toFixed(0)+'%');
+ s+=edge(TX0+330,TY+104,TX0+390,TY+166,(100-fpr*100).toFixed(0)+'%');
+ var leaves=[[TX0+20,fmtN(nTP),'positive',C_TP,0],[TX0+130,fmtN(nFN),'negative','var(--pink-ink)',1],
+             [TX0+270,fmtN(nFP),'positive',C_FP,2],[TX0+390,fmtN(nTN),'negative','var(--text-muted)',3]];
+ var inNum=[0,0,0,0],inDen=[0,0,0,0];P.num.forEach(function(c){inNum[c]=1;});P.den.forEach(function(c){inDen[c]=1;});
+ for(var k=0;k<4;k++){var L=leaves[k],o=inNum[L[4]]?1:(inDen[L[4]]?0.6:0.3);
+  s+='<g opacity="'+o+'">'+node(L[0],TY+190,L[1],L[3])+node(L[0],TY+210,L[2],L[3])+'</g>';
+  if(inDen[L[4]])s+='<rect x="'+(L[0]-34)+'" y="'+(TY+174)+'" width="68" height="44" rx="6" fill="none" stroke="'+(inNum[L[4]]?'var(--green)':'var(--border-strong)')+'" stroke-width="'+(inNum[L[4]]?2:1)+'" stroke-dasharray="'+(inNum[L[4]]?'':'4 3')+'"/>';}
+ s+=TX(TX0+200,TY+252,'solid box: the numerator &#183; dashed: the rest of the denominator','var(--text-muted)','middle','tn');
  document.getElementById('lab').innerHTML=s;
 }
 function readout(){
- var h='P(disease | positive) = <b>'+(nPos?(nTP/nPos).toFixed(3):'&#8212;')+'</b>: of the '+fmtN(nPos)+' people who test positive, only '+fmtN(nTP)+' are sick. '+
-  'The other '+fmtN(nFP)+' are false positives from the much larger well group.';
+ var P=PROBS[SEL],nn=count(P.num),dd=count(P.den),
+     h='<b>'+P.lab+' = '+(dd?fv(nn/dd):'&#8212;')+'</b>: '+P.words+', '+fmtN(nn)+' of '+fmtN(dd)+'.';
+ if(SEL===0)h+=' The other '+fmtN(nFP)+' positives are false alarms from the much larger well group.';
  if(chosen>=0){var c=cat(chosen);
   h+='<br>Random person #'+fmtN(chosen+1)+': <b>'+(c<2?'sick':'well')+'</b>, tested <b>'+((c===0||c===2)?'positive':'negative')+'</b>. '+
-   ((c===0||c===2)?'A positive result: the odds of being sick given only that are '+fmtN(nTP)+' to '+fmtN(nFP)+'.':'A negative result: '+fmtN(nFN)+' of the '+fmtN(nFN+nTN)+' negatives are sick, so P(sick | negative) = '+(nFN/(nFN+nTN)).toFixed(4)+'.');}
+   ((c===0||c===2)?'Given only a positive result, the odds of being sick are '+fmtN(nTP)+' to '+fmtN(nFP)+'.':'Given only a negative result, P(sick | negative) = '+fmtN(nFN)+'/'+fmtN(nFN+nTN)+' = '+(nFN/(nFN+nTN)).toFixed(4)+'.');}
  document.getElementById('readout').innerHTML=h;
 }
 function caption(){
@@ -164,31 +226,39 @@ function caption(){
  h+='<div class="ans"><b>The answer, by counting.</b> Out of '+fmtN(N)+' people, '+fmtN(nS)+' are sick and '+fmtN(nTP)+' of them test positive; '+
   fmtN(N-nS)+' are well and '+fmtN(nFP)+' of them test positive anyway. So '+fmtN(nPos)+' test positive, of whom '+fmtN(nTP)+' are sick: '+
   'P(disease | positive) = '+fmtN(nTP)+'/'+fmtN(nPos)+(g>1?' = '+(nTP/g)+'/'+(nPos/g):'')+' &#8776; <b>'+(nPos?(nTP/nPos).toFixed(3):'&#8212;')+'</b>.</div>';
+ h+='<div style="margin-top:6px"><b>What &ldquo;conditional&rdquo; means in the picture.</b> P(A | B) is the fraction of circle B that is also inside circle A. '+
+  'Every conditional probability is the same move with a different circle as the denominator: P(sick | positive) looks inside the positive circle, '+
+  'P(positive | sick) looks inside the sick circle, and they are different numbers ('+(nPos?(nTP/nPos).toFixed(3):'&#8212;')+' and '+(nS?(nTP/nS).toFixed(3):'&#8212;')+') '+
+  'even though both are about the same '+fmtN(nTP)+' people in the overlap. Confusing the two is the most common mistake there is with this question.</div>';
  h+='<div style="margin-top:6px"><b>The same thing as Bayes rule.</b> P(D | +) = P(+ | D)&#183;P(D) / P(+), and P(+) = P(+ | D)&#183;P(D) + P(+ | not D)&#183;P(not D). '+
-  'With the quiz numbers: 0.99&#215;0.01 / (0.99&#215;0.01 + 0.05&#215;0.99) = 0.0099 / 0.0594 = 1/6. The counting and the formula are the same computation; '+
-  'the counting is just harder to get wrong.</div>';
- h+='<div style="margin-top:6px"><b>Why it is so low.</b> The test is good: it catches 99% of the sick and only trips on 5% of the well. But 5% of a huge group '+
+  'With the quiz numbers: 0.99&#215;0.01 / (0.99&#215;0.01 + 0.05&#215;0.99) = 0.0099 / 0.0594 = 1/6. The formula is the overlap divided by the positive circle, '+
+  'written in probabilities instead of people; the counting is the same computation and harder to get wrong.</div>';
+ h+='<div style="margin-top:6px"><b>Why it is so low.</b> The test is good: it catches 99% of the sick and only trips on 5% of the well. But 5% of a huge circle '+
   'outnumbers 99% of a tiny one, five to one here. The answer is set by the base rate as much as by the test. Raise the prevalence and watch it flip.</div>';
  document.getElementById('caption').innerHTML=h;
 }
 function setT(v,stop){t=Math.max(0,Math.min(1,v));if(stop)pause();draw();}
 function step(now){var dt=Math.min(0.05,(now-last)/1000);last=now;
- if(playing){t+=dt*0.6;if(t>=1){t=1;pause();}}
+ if(playing){t+=dt*0.55;if(t>=1){t=1;pause();}}
  draw();raf=playing?requestAnimationFrame(step):null;}
-function pause(){playing=false;document.getElementById('go').textContent=t>=1?'Put them back':'Sort the positives';
+function pause(){playing=false;document.getElementById('go').textContent=t>=1?'Put them back':'Sort into circles';
  if(raf){cancelAnimationFrame(raf);raf=null;}}
 function toggle(){if(playing){pause();return;}
  if(t>=1){t=0;pause();draw();return;}
  playing=true;document.getElementById('go').textContent='Pause';last=performance.now();raf=requestAnimationFrame(step);}
 function quiz(){document.getElementById('pv').value='1';document.getElementById('se').value='99';document.getElementById('fp').value='5';setup();}
 function pick(){chosen=Math.floor(Math.random()*N);draw();}
+function setsel(k){SEL=k;var bs=document.getElementById('probs').children;
+ for(var i=0;i<bs.length;i++)bs[i].classList.toggle('on',i===k);draw();}
+(function(){var h='';for(var k=0;k<PROBS.length;k++)h+='<button'+(k===0?' class="on"':'')+' onclick="setsel('+k+')">'+PROBS[k].lab.replace('positive','+').replace('negative','&#8722;')+'</button>';
+ document.getElementById('probs').innerHTML=h;})();
 window.addEventListener('resize',draw);
 if(window.ResizeObserver)new ResizeObserver(function(){draw();}).observe(document.getElementById('wrap'));
-else requestAnimationFrame(draw);
 document.addEventListener('keydown',function(e){
  if(e.target.tagName==='INPUT'&&e.target.type==='number')return;
  if(e.key===' '||e.key==='Enter'){e.preventDefault();toggle();}
  else if(e.key==='p'||e.key==='P')pick();
+ else if(e.key>='1'&&e.key<='6')setsel(+e.key-1);
 });
 setup();
 </script>
