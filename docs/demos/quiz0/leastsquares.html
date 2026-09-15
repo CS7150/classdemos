@@ -174,9 +174,16 @@ function drawAlg(){
  var c=coefFromH(),s='',i,j,rows=[],RH=27,y0=76;
  if(N<=10)for(i=0;i<N;i++)rows.push(i);
  else{for(i=0;i<6;i++)rows.push(i);rows.push(-1);rows.push(N-2);rows.push(N-1);}
- // columns: y, the fitted values, then A and the coefficients that made them
- var XY=70,XF=178,XA=[266,326,386],BW=28,XX=XA[P-1]+BW+8+52;
- s+=T(240,26,'the same fit, as numbers','var(--text-secondary)','middle');
+ // columns: y, the fitted values, then A and the coefficients that made them.
+ // Laid out relative to a left edge, then the whole thing is centred in the
+ // pane, so three columns of A fit as comfortably as one.
+ var BW=26,CSP=56,AX0=194,XA=[],j0;
+ for(j0=0;j0<P;j0++)XA.push(AX0+34+CSP*j0);
+ var ARt=XA[P-1]+34,XX=ARt+52,WID=XX+56,
+     ox=Math.max(8,(OFF+12-WID)/2),XY=ox+62,XF=ox+160;
+ for(j0=0;j0<P;j0++)XA[j0]+=ox;
+ ARt+=ox;XX+=ox;
+ s+=T((OFF+12)/2,26,'the same fit, as numbers','var(--text-secondary)','middle');
  var heads=['1','x','x\u00b2'];
  s+=T(XY,y0-18,'y','var(--text-muted)','end','tn');
  s+=T(XF,y0-18,'Ax','var(--text-muted)','end','tn');
@@ -193,18 +200,18 @@ function drawAlg(){
  var h=rows.length*RH,top=y0-17;
  function brk(x0,x1,t,hh){return '<path d="M'+(x0+7)+' '+t+' H'+x0+' V'+(t+hh)+' H'+(x0+7)+' M'+(x1-7)+' '+t+' H'+x1+' V'+(t+hh)+' H'+(x1-7)+
   '" fill="none" stroke="var(--border-strong)" stroke-width="1.5"/>';}
- s+=brk(XY-60,XY+10,top,h);
- s+=brk(XF-60,XF+10,top,h);
- s+=brk(XA[0]-BW-8,XA[P-1]+BW+8,top,h);
- s+=T((XY+10+XF-60)/2,top+h/2+6,'\u2248','var(--text-secondary)','middle');
- s+=T((XF+10+XA[0]-BW-8)/2,top+h/2+6,'=','var(--text-secondary)','middle');
+ s+=brk(XY-58,XY+10,top,h);
+ s+=brk(XF-58,XF+10,top,h);
+ s+=brk(XA[0]-34,ARt,top,h);
+ s+=T((XY+10+XF-58)/2,top+h/2+6,'\u2248','var(--text-secondary)','middle');
+ s+=T((XF+10+XA[0]-34)/2,top+h/2+6,'=','var(--text-secondary)','middle');
  // the coefficient vector, centred beside A: these are what the handles move
  var names=['a','b','c'],ph=P*RH,pt=top+h/2-ph/2;
- s+=brk(XX-34,XX+34,pt,ph);
+ s+=brk(XX-32,XX+32,pt,ph);
  for(j=0;j<P;j++)s+=T(XX,pt+18+j*RH,f2(c[j]),'var(--warm-ink)','middle','tn');
- for(j=0;j<P;j++)s+=T(XX+42,pt+18+j*RH,names[j],'var(--text-muted)','start','tn');
- s+=T(240,top+h+28,'A is '+N+' \u00d7 '+P+': a row per point, a column per parameter','var(--text-muted)','middle','tn');
- s+=T(240,top+h+48,'y \u2248 '+(P===1?'a':(P===2?'a + bx':'a + bx + cx\u00b2'))+'; the middle column is what that predicts','var(--text-muted)','middle','tn');
+ for(j=0;j<P;j++)s+=T(XX+40,pt+18+j*RH,names[j],'var(--text-muted)','start','tn');
+ s+=T((OFF+12)/2,top+h+28,'A is '+N+' \u00d7 '+P+': a row per point, a column per parameter','var(--text-muted)','middle','tn');
+ s+=T((OFF+12)/2,top+h+48,'y \u2248 '+(P===1?'a':(P===2?'a + bx':'a + bx + cx\u00b2'))+'; the middle column is what that predicts','var(--text-muted)','middle','tn');
  return s;
 }
 
