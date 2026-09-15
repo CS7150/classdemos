@@ -46,6 +46,10 @@
 <script>
 var P=2,N=14,XS=[],YS=[],H=[],AN=[],OPT=[],dragging=-1,anim=null;
 var OFF=470,LX0=60+OFF,LX1=490+OFF,LY0=52,LY1=372,AZ=26,EL=20,spin=null;
+// what the middle plot is showing: the fit, one column of A, or one term of the fit
+var VIEW={kind:'fit',j:0},HIT=[];
+var BAS=['#7A7873','#378ADD','#7F77DD'],BASI=['var(--text-secondary)','var(--blue-ink)','var(--violet-ink)'];
+var BNAME=['1','x','x\u00b2'],CNAME=['a','b','c'];
 var GREEN='#1D9E75',PINK='#D4537E',BLUE='#378ADD',WARM='#BA7517';
 
 /* ---------- data ---------- */
@@ -183,6 +187,7 @@ function drawAlg(){
      ox=Math.max(8,(OFF+12-WID)/2),XY=ox+62,XF=ox+160;
  for(j0=0;j0<P;j0++)XA[j0]+=ox;
  ARt+=ox;XX+=ox;
+ HIT=[];
  s+=T((OFF+12)/2,26,'the same fit, as numbers','var(--text-secondary)','middle');
  var heads=['1','x','x\u00b2'];
  s+=T(XY,y0-18,'y','var(--text-muted)','end','tn');
@@ -198,6 +203,13 @@ function drawAlg(){
   var r=row(XS[i]);
   for(j=0;j<P;j++)s+=T(XA[j],yy,f2(r[j]),'var(--text-secondary)','middle','tn');}
  var h=rows.length*RH,top=y0-17;
+ // selection tints, and the regions a click lands in
+ function sel(x0,x1,t,hh,on,col){HIT.push({x0:x0,y0:t,x1:x1,y1:t+hh,v:col});
+  return on?'<rect x="'+x0+'" y="'+t+'" width="'+(x1-x0)+'" height="'+hh+'" rx="5" fill="'+(col.kind==='fit'?WARM:BAS[col.j])+'" fill-opacity="0.13"/>':'';}
+ var tint='';
+ tint+=sel(XF-56,XF+12,top-4,h+8,VIEW.kind==='fit',{kind:'fit',j:0});
+ for(j=0;j<P;j++)tint+=sel(XA[j]-26,XA[j]+26,top-4,h+8,VIEW.kind==='col'&&VIEW.j===j,{kind:'col',j:j});
+ s=tint+s;
  function brk(x0,x1,t,hh){return '<path d="M'+(x0+7)+' '+t+' H'+x0+' V'+(t+hh)+' H'+(x0+7)+' M'+(x1-7)+' '+t+' H'+x1+' V'+(t+hh)+' H'+(x1-7)+
   '" fill="none" stroke="var(--border-strong)" stroke-width="1.5"/>';}
  s+=brk(XY-58,XY+10,top,h);
@@ -206,20 +218,25 @@ function drawAlg(){
  s+=T((XY+10+XF-58)/2,top+h/2+6,'\u2248','var(--text-secondary)','middle');
  s+=T((XF+10+XA[0]-34)/2,top+h/2+6,'=','var(--text-secondary)','middle');
  // the coefficient vector, centred beside A: these are what the handles move
- var names=['a','b','c'],ph=P*RH,pt=top+h/2-ph/2;
+ var names=['a','b','c'],ph=P*RH,pt=top+h/2-ph/2,ct='';
+ for(j=0;j<P;j++)ct+=sel(XX-30,XX+52,pt+j*RH-2,RH,VIEW.kind==='coef'&&VIEW.j===j,{kind:'coef',j:j});
+ s=ct+s;
  s+=brk(XX-32,XX+32,pt,ph);
  for(j=0;j<P;j++)s+=T(XX,pt+18+j*RH,f2(c[j]),'var(--warm-ink)','middle','tn');
  for(j=0;j<P;j++)s+=T(XX+40,pt+18+j*RH,names[j],'var(--text-muted)','start','tn');
  s+=T((OFF+12)/2,top+h+28,'A is '+N+' \u00d7 '+P+': a row per point, a column per parameter','var(--text-muted)','middle','tn');
- s+=T((OFF+12)/2,top+h+48,'y \u2248 '+(P===1?'a':(P===2?'a + bx':'a + bx + cx\u00b2'))+'; the middle column is what that predicts','var(--text-muted)','middle','tn');
+ s+=T((OFF+12)/2,top+h+48,'click a column of A, a coefficient, or the Ax column to plot it','var(--text-muted)','middle','tn');
  return s;
 }
 
 /* ---------- middle panel: the squares ---------- */
 function drawData(){
- var s='',i,c=coefFromH(),r=resid(c),showSq=document.getElementById('sq').checked;
+ var s='',i,j,c=coefFromH(),r=resid(c),showSq=document.getElementById('sq').checked&&VIEW.kind==='fit';
  s+='<rect x="'+(42+OFF)+'" y="34" width="462" height="352" fill="var(--surface)" opacity="0.45"/>';
- s+=T(271+OFF,24,'the data, and one fit','var(--text-secondary)','middle');
+ var title=VIEW.kind==='fit'?'the data, and one fit':
+  (VIEW.kind==='col'?'column '+(VIEW.j+1)+' of A: the basis function '+BNAME[VIEW.j]:
+   CNAME[VIEW.j]+' \u00b7 '+BNAME[VIEW.j]+' = '+f2(c[VIEW.j])+' \u00b7 '+BNAME[VIEW.j]+', one term of the fit');
+ s+=T(271+OFF,24,title,VIEW.kind==='fit'?'var(--text-secondary)':BASI[VIEW.j],'middle');
  s+='<g clip-path="url(#dclip)">';
  // the squares first, so points and the curve sit on top of them
  if(showSq)for(i=0;i<N;i++){
@@ -228,16 +245,27 @@ function drawData(){
   var top=Math.min(DY(YS[i]),DY(evalc(c,XS[i])));
   s+='<rect x="'+DX(XS[i]).toFixed(1)+'" y="'+top.toFixed(1)+'" width="'+side.toFixed(1)+'" height="'+side.toFixed(1)+
      '" fill="'+PINK+'" fill-opacity="0.17" stroke="'+PINK+'" stroke-opacity="0.45" stroke-width="0.8"/>';}
- for(i=0;i<N;i++)s+=LN([DX(XS[i]),DY(YS[i])],[DX(XS[i]),DY(evalc(c,XS[i]))],PINK,1.4);
- var pts='';
- for(var x=0;x<=10.001;x+=0.1){var px=DX(x),py=DY(evalc(c,x));pts+=px.toFixed(1)+','+py.toFixed(1)+' ';}
- s+='<polyline points="'+pts+'" fill="none" stroke="'+WARM+'" stroke-width="2.6"/>';
+ if(VIEW.kind==='fit')for(i=0;i<N;i++)s+=LN([DX(XS[i]),DY(YS[i])],[DX(XS[i]),DY(evalc(c,XS[i]))],PINK,1.4);
+ function pl(f,col,w,op,dash){var pts='';
+  for(var x=0;x<=10.001;x+=0.1)pts+=DX(x).toFixed(1)+','+DY(f(x)).toFixed(1)+' ';
+  return '<polyline points="'+pts+'" fill="none" stroke="'+col+'" stroke-width="'+w+'" opacity="'+op+'"'+(dash?' stroke-dasharray="'+dash+'"':'')+'/>';}
+ var fitf=function(x){return evalc(c,x);};
+ if(VIEW.kind==='fit')s+=pl(fitf,WARM,2.6,1);
+ else if(VIEW.kind==='col'){
+  // the bare basis function, with the fit behind it for reference
+  s+=pl(fitf,WARM,1.4,0.35);
+  s+=pl(function(x){return Math.pow(x,VIEW.j);},BAS[VIEW.j],2.8,1);}
+ else{
+  // every term of the fit, faint, with the chosen one bold: the fit is their sum
+  for(j=0;j<P;j++)if(j!==VIEW.j)s+=pl((function(k){return function(x){return c[k]*Math.pow(x,k);};})(j),BAS[j],1.4,0.4,'6 5');
+  s+=pl(fitf,WARM,1.4,0.5);
+  s+=pl(function(x){return c[VIEW.j]*Math.pow(x,VIEW.j);},BAS[VIEW.j],2.8,1);}
  for(i=0;i<N;i++)s+='<circle cx="'+DX(XS[i]).toFixed(1)+'" cy="'+DY(YS[i]).toFixed(1)+
-  '" r="'+(N>60?3:4.2)+'" fill="'+BLUE+'" stroke="var(--blue-ink)" stroke-width="1"/>';
+  '" r="'+(N>60?3:4.2)+'" fill="'+BLUE+'" stroke="var(--blue-ink)" stroke-width="1" opacity="'+(VIEW.kind==='fit'?1:0.55)+'"/>';
  s+='</g>';
  for(i=0;i<P;i++){var hx=DX(AN[i]),hy=DY(H[i]);
   s+='<circle cx="'+hx.toFixed(1)+'" cy="'+hy.toFixed(1)+'" r="'+(dragging===i?9:7.5)+
-     '" fill="var(--surface)" stroke="'+WARM+'" stroke-width="3"/>';}
+     '" fill="var(--surface)" stroke="'+WARM+'" stroke-width="3" opacity="'+(VIEW.kind==='col'?0.35:1)+'"/>';}
  s+='<rect x="'+(42+OFF)+'" y="34" width="462" height="352" fill="none" stroke="var(--border)" stroke-width="1"/>';
  // the running total, with the floor marked: you can slide left to the tick, never past it
  var cur=sse(c),best=sse(OPT),T0=62+OFF,T1=490+OFF,ty=414,
@@ -247,6 +275,7 @@ function drawData(){
  s+=LN([tick,ty-9],[tick,ty+9],'var(--green-ink)',2.5);
  s+=T(T0,ty+26,'total area &#931;r&#178; = '+f2(cur),'var(--pink-ink)','start','tn');
  s+=T(tick+7,ty-14,'smallest it can be: '+f2(best),'var(--green-ink)','start','tn');
+ if(VIEW.kind==='col')s+=T(271+OFF,ty+26,'','var(--text-muted)','middle','tn');
  return s;
 }
 
@@ -323,6 +352,10 @@ function caption(){
   '&#8214;y &#8722; Ax&#8214;&#178; = <b class="f">'+f2(Math.max(0,cur-best))+'</b> + <b class="f">'+f2(best)+'</b>.</div>';
  h+='<div>The second term is the part of y pointing out of the region, which no choice of x can touch. '+
   'All you control is the first, and it is zero exactly when Ax = Ax&#770;.</div>';
+ h+='<div style="margin-top:6px"><b>What the columns are.</b> Each column of A is a function of x evaluated at every data point: '+
+  'the column of ones, the column of x, the column of x&#178;. Click one and the plot shows that function. The fit is a weighted sum of those '+
+  'columns, with the coefficients as the weights: click a coefficient and the plot shows its term, with the others faint, and their sum is '+
+  'the fit. That is what &ldquo;linear&rdquo; in linear least squares means: linear in the coefficients, whatever the columns are.</div>';
  h+='<div style="margin-top:6px"><b>The normal equations.</b> &ldquo;Perpendicular to the region&rdquo; means '+
   'perpendicular to every column of A, which is A<sup>T</sup>(y &#8722; Ax&#770;) = 0, so A<sup>T</sup>Ax&#770; = A<sup>T</sup>y. '+
   'With A 100&#215;3 that is three equations in three unknowns however many data points you have: '+
@@ -349,10 +382,14 @@ function bindDrag(){
   var p=svgPt(e);if(!p)return;
   if(spin){AZ=Math.max(-80,Math.min(80,spin.az+(p.x-spin.x)*0.45));
    EL=Math.max(10,Math.min(70,spin.el+(p.y-spin.y)*0.35));draw();return;}
-  if(dragging<0){svg.classList.toggle('grab',nearest(p)>=0||inGeom(p));return;}
+  if(dragging<0){var over=false;for(var k=0;k<HIT.length;k++){var hh=HIT[k];if(p.x>=hh.x0&&p.x<=hh.x1&&p.y>=hh.y0&&p.y<=hh.y1)over=true;}
+   svg.classList.toggle('grab',nearest(p)>=0||inGeom(p)||over);return;}
   H[dragging]=invY(p.y);draw();});
  svg.addEventListener('pointerdown',function(e){
-  var p=svgPt(e);if(!p)return;var i=nearest(p);
+  var p=svgPt(e);if(!p)return;
+  for(var k=0;k<HIT.length;k++){var hh=HIT[k];
+   if(p.x>=hh.x0&&p.x<=hh.x1&&p.y>=hh.y0&&p.y<=hh.y1){VIEW=hh.v;draw();return;}}
+  var i=nearest(p);
   if(i<0){if(inGeom(p)){spin={x:p.x,y:p.y,az:AZ,el:EL};svg.setPointerCapture(e.pointerId);}return;}
   if(anim){cancelAnimationFrame(anim);anim=null;}
   dragging=i;svg.setPointerCapture(e.pointerId);draw();});
@@ -374,7 +411,7 @@ function solve(){
 function setp(p){
  P=p;
  ['m1','m2','m3'].forEach(function(id,k){document.getElementById(id).classList.toggle('on',k+1===p);});
- AN=anchors();OPT=normalEq();
+ AN=anchors();OPT=normalEq();if(VIEW.j>=P)VIEW={kind:'fit',j:0};
  // start somewhere visibly wrong, so there is something to drag away from
  setHfrom(OPT);for(var i=0;i<P;i++)H[i]+=(i%2?-1:1)*1.6;
  draw();
