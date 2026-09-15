@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Least squares</title>
+<meta name="description" content="What least squares minimizes: the total area of the squared residuals, and the same thing as a projection onto the column space.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+#wrap{position:relative}
+#wrap svg{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+#wrap svg.grab{cursor:grab}
+.cap b.f{font-weight:500;color:var(--text-primary);font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Quiz 0, worked</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Least squares<span>: what exactly is being minimized</span></h1>
+<p class="quiz">Quiz 0, question 2(a). <b>You want to fit y &asymp; Ax.</b> Drag the handles on the fit and watch the total area.</p>
+
+<div id="wrap">
+<svg viewBox="0 0 1040 470" role="img" preserveAspectRatio="xMidYMid meet">
+<title>Least squares as area, and as a projection</title>
+<desc>Left: data points, a fit you can drag, and each residual drawn as a square whose area is the residual squared. Right: the same fit in vector space, where y is projected onto the column space of A and the error splits by Pythagoras into a part inside that space and a part perpendicular to it.</desc>
+<defs>
+<marker id="ar" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></marker>
+<clipPath id="dclip"><rect x="42" y="34" width="462" height="352"/></clipPath>
+</defs>
+<g id="stage"></g>
+</svg>
+</div>
+
+<div class="row">
+<button class="main" id="solve" onclick="solve()">Solve it</button>
+<button onclick="fresh()">New data</button>
+<span class="seg"><button id="m1" onclick="setp(1)">constant</button><button id="m2" class="on" onclick="setp(2)">line</button><button id="m3" onclick="setp(3)">quadratic</button></span>
+<span class="klab">points</span>
+<select id="np" onchange="fresh()"><option value="14" selected>14</option><option value="40">40</option><option value="100">100</option></select>
+<label class="cb"><input type="checkbox" id="sq" checked onchange="draw()">squares</label>
+</div>
+<div class="row">
+<span class="klab">turn</span>
+<input type="range" id="az" min="-60" max="60" step="1" value="26" oninput="draw()">
+<span class="knum" id="azv">26&#176;</span>
+</div>
+<div class="rd" id="readout"></div>
+<div class="cap" id="caption"></div>
+
+<script>
+var P=2,N=14,XS=[],YS=[],H=[],AN=[],OPT=[],dragging=-1,anim=null;
+var LX0=60,LX1=490,LY0=52,LY1=372,RCX=778,RCY=222;
+var GREEN='#1D9E75',PINK='#D4537E',BLUE='#378ADD',WARM='#BA7517';
+
+/* ---------- data ---------- */
+function gen(){
+ N=+document.getElementById('np').value;
+ var b=0.7+Math.random()*1.3,c=(Math.random()-0.5)*0.24,
+     sd=1.7+Math.random()*0.9,a=-5*b;
+ XS=[];YS=[];
+ for(var i=0;i<N;i++){var x=10*(i+0.5+(Math.random()-0.5)*0.7)/N;
+  x=Math.max(0.15,Math.min(9.85,x));
+  XS.push(x);
+  YS.push(a+b*x+c*x*x+gauss()*sd);}
+}
+function gauss(){var u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();
+ return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+
+/* ---------- little linear algebra ---------- */
+function solveLin(M,b,n){
+ var A=[],i,j,k;
+ for(i=0;i<n;i++){A.push(M[i].slice());A[i].push(b[i]);}
+ for(i=0;i<n;i++){
+  var pv=i;for(k=i+1;k<n;k++)if(Math.abs(A[k][i])>Math.abs(A[pv][i]))pv=k;
+  var tmp=A[i];A[i]=A[pv];A[pv]=tmp;
+  if(Math.abs(A[i][i])<1e-12)return null;
+  for(k=i+1;k<n;k++){var f=A[k][i]/A[i][i];for(j=i;j<=n;j++)A[k][j]-=f*A[i][j];}}
+ var x=new Array(n);
+ for(i=n-1;i>=0;i--){var s=A[i][n];for(j=i+1;j<n;j++)s-=A[i][j]*x[j];x[i]=s/A[i][i];}
+ return x;
+}
+function row(x){var r=[1];for(var j=1;j<P;j++)r.push(Math.pow(x,j));return r;}
+function evalc(c,x){var s=0;for(var j=0;j<c.length;j++)s+=c[j]*Math.pow(x,j);return s;}
+// the least-squares coefficients, straight from the normal equations A'A c = A'y
+function normalEq(){
+ var M=[],b=[],i,j,k;
+ for(j=0;j<P;j++){M.push(new Array(P).fill(0));b.push(0);}
+ for(i=0;i<N;i++){var r=row(XS[i]);
+  for(j=0;j<P;j++){b[j]+=r[j]*YS[i];for(k=0;k<P;k++)M[j][k]+=r[j]*r[k];}}
+ return solveLin(M,b,P)||new Array(P).fill(0);
+}
+// The handles are function values at fixed anchors, so the curve is the one
+// polynomial through them.  Dragging a handle is therefore dragging the fit
+// itself rather than an abstract coefficient.
+function anchors(){
+ if(P===1)return [5];
+ if(P===2)return [1.1,8.9];
+ return [1.1,5,8.9];
+}
+function coefFromH(){
+ var A=[],i;
+ for(i=0;i<P;i++)A.push(row(AN[i]));
+ return solveLin(A,H.slice(),P)||new Array(P).fill(0);
+}
+function setHfrom(c){H=AN.map(function(x){return evalc(c,x);});}
+
+function resid(c){var r=[];for(var i=0;i<N;i++)r.push(YS[i]-evalc(c,XS[i]));return r;}
+function sse(c){var r=resid(c),s=0;for(var i=0;i<N;i++)s+=r[i]*r[i];return s;}
+
+/* ---------- the exact 3-D frame the right panel draws in ---------- */
+// Everything worth drawing -- y, the current fit, the best fit, both residuals --
+// lies in the span of three directions, so the picture is not a cartoon of the
+// geometry in R^n, it is a faithful slice of it.
+function frame(){
+ var c=coefFromH(),i,
+     yh=[],yo=[],ro=[];
+ for(i=0;i<N;i++){yh.push(evalc(c,XS[i]));yo.push(evalc(OPT,XS[i]));ro.push(YS[i]-yo[i]);}
+ function dot(u,v){var s=0;for(var k=0;k<N;k++)s+=u[k]*v[k];return s;}
+ function nrm(u){return Math.sqrt(dot(u,u));}
+ var e1n=nrm(yo),e1=e1n>1e-9?yo.map(function(v){return v/e1n;}):null;
+ if(!e1){e1=new Array(N).fill(1/Math.sqrt(N));e1n=0;}
+ var e3n=nrm(ro),e3=e3n>1e-9?ro.map(function(v){return v/e3n;}):new Array(N).fill(0);
+ // second in-plane direction: whichever way the current fit has strayed
+ var d=[];for(i=0;i<N;i++)d.push(yh[i]-yo[i]);
+ var a1=dot(d,e1);for(i=0;i<N;i++)d[i]-=a1*e1[i];
+ var dn=nrm(d),e2=dn>1e-9?d.map(function(v){return v/dn;}):new Array(N).fill(0);
+ return {y:[dot(YS,e1),0,e3n],           // y always sits in the e1-e3 plane
+         yh:[dot(yh,e1),dot(yh,e2),0],   // any fit lies in the column space
+         yo:[e1n,0,0],
+         c:c,rn:e3n,flat:dn<1e-9};
+}
+
+/* ---------- projection ---------- */
+// Raw camera only.  Scale and centring are decided per frame by fitting whatever
+// the figure actually contains, so the drawing fills the panel whether the
+// residual is large or the fit is nearly perfect.
+function rawProj(p){
+ var az=+document.getElementById('az').value*Math.PI/180,el=20*Math.PI/180,
+     ux=Math.cos(az),uy=Math.sin(az),
+     vx=-Math.sin(az)*Math.sin(el),vy=Math.cos(az)*Math.sin(el),vz=Math.cos(el);
+ return [p[0]*ux+p[1]*uy,-(p[0]*vx+p[1]*vy+p[2]*vz)];
+}
+function fitter(pts,x0,y0,x1,y1,pad){
+ var i,a=1e9,b=1e9,c=-1e9,d=-1e9,q=[];
+ for(i=0;i<pts.length;i++){var r=rawProj(pts[i]);q.push(r);
+  a=Math.min(a,r[0]);c=Math.max(c,r[0]);b=Math.min(b,r[1]);d=Math.max(d,r[1]);}
+ var s=Math.min((x1-x0-2*pad)/Math.max(c-a,1e-9),(y1-y0-2*pad)/Math.max(d-b,1e-9));
+ var ox=(x0+x1)/2-s*(a+c)/2,oy=(y0+y1)/2-s*(b+d)/2;
+ return function(p){var r=rawProj(p);return [ox+s*r[0],oy+s*r[1]];};
+}
+
+/* ---------- drawing helpers ---------- */
+function T(x,y,t,c,anc,cls){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+
+ '" fill="'+c+'"'+(anc?' text-anchor="'+anc+'"':'')+'>'+t+'</text>';}
+function AR(p,q,c,w,dash){return '<line x1="'+p[0].toFixed(1)+'" y1="'+p[1].toFixed(1)+'" x2="'+q[0].toFixed(1)+
+ '" y2="'+q[1].toFixed(1)+'" stroke="'+c+'" stroke-width="'+w+'" stroke-linecap="round"'+
+ (dash?' stroke-dasharray="'+dash+'"':'')+' marker-end="url(#ar)"/>';}
+function LN(p,q,c,w,dash){return '<line x1="'+p[0].toFixed(1)+'" y1="'+p[1].toFixed(1)+'" x2="'+q[0].toFixed(1)+
+ '" y2="'+q[1].toFixed(1)+'" stroke="'+c+'" stroke-width="'+w+'"'+(dash?' stroke-dasharray="'+dash+'"':'')+'/>';}
+function f2(v){return (Math.abs(v)<1e-9?0:v).toFixed(2);}
+
+var YLO=0,YHI=1;
+function setRange(){
+ var lo=1e9,hi=-1e9,i;
+ for(i=0;i<N;i++){lo=Math.min(lo,YS[i]);hi=Math.max(hi,YS[i]);}
+ for(i=0;i<P;i++){lo=Math.min(lo,H[i]);hi=Math.max(hi,H[i]);}
+ var pad=0.16*(hi-lo)+0.4;YLO=lo-pad;YHI=hi+pad;
+}
+function DX(x){return LX0+(x/10)*(LX1-LX0);}
+function DY(y){return LY1-((y-YLO)/(YHI-YLO))*(LY1-LY0);}
+function invY(py){return YLO+((LY1-py)/(LY1-LY0))*(YHI-YLO);}
+
+/* ---------- left panel: the squares ---------- */
+function drawData(){
+ var s='',i,c=coefFromH(),r=resid(c),showSq=document.getElementById('sq').checked;
+ s+='<rect x="42" y="34" width="462" height="352" fill="var(--surface)" opacity="0.45"/>';
+ s+=T(271,24,'the data, and one fit','var(--text-secondary)','middle');
+ s+='<g clip-path="url(#dclip)">';
+ // the squares first, so points and the curve sit on top of them
+ if(showSq)for(i=0;i<N;i++){
+  var side=Math.abs(DY(YS[i])-DY(evalc(c,XS[i])));
+  if(side<1.2)continue;
+  var top=Math.min(DY(YS[i]),DY(evalc(c,XS[i])));
+  s+='<rect x="'+DX(XS[i]).toFixed(1)+'" y="'+top.toFixed(1)+'" width="'+side.toFixed(1)+'" height="'+side.toFixed(1)+
+     '" fill="'+PINK+'" fill-opacity="0.17" stroke="'+PINK+'" stroke-opacity="0.45" stroke-width="0.8"/>';}
+ for(i=0;i<N;i++)s+=LN([DX(XS[i]),DY(YS[i])],[DX(XS[i]),DY(evalc(c,XS[i]))],PINK,1.4);
+ var pts='';
+ for(var x=0;x<=10.001;x+=0.1){var px=DX(x),py=DY(evalc(c,x));pts+=px.toFixed(1)+','+py.toFixed(1)+' ';}
+ s+='<polyline points="'+pts+'" fill="none" stroke="'+WARM+'" stroke-width="2.6"/>';
+ for(i=0;i<N;i++)s+='<circle cx="'+DX(XS[i]).toFixed(1)+'" cy="'+DY(YS[i]).toFixed(1)+
+  '" r="'+(N>60?3:4.2)+'" fill="'+BLUE+'" stroke="var(--blue-ink)" stroke-width="1"/>';
+ s+='</g>';
+ for(i=0;i<P;i++){var hx=DX(AN[i]),hy=DY(H[i]);
+  s+='<circle cx="'+hx.toFixed(1)+'" cy="'+hy.toFixed(1)+'" r="'+(dragging===i?9:7.5)+
+     '" fill="var(--surface)" stroke="'+WARM+'" stroke-width="3"/>';}
+ s+='<rect x="42" y="34" width="462" height="352" fill="none" stroke="var(--border)" stroke-width="1"/>';
+ // the running total, with the floor marked: you can slide left to the tick, never past it
+ var cur=sse(c),best=sse(OPT),T0=62,T1=490,ty=414,
+     scl=(T1-T0)/(4*Math.max(best,1e-6)),w=Math.min(T1-T0,cur*scl),tick=T0+(T1-T0)/4;
+ s+=LN([T0,ty],[T1,ty],'var(--border)',7);
+ s+=LN([T0,ty],[T0+w,ty],PINK,7);
+ s+=LN([tick,ty-9],[tick,ty+9],'var(--green-ink)',2.5);
+ s+=T(T0,ty+26,'total area &#931;r&#178; = '+f2(cur),'var(--pink-ink)','start','tn');
+ s+=T(tick+7,ty-14,'smallest it can be: '+f2(best),'var(--green-ink)','start','tn');
+ return s;
+}
+
+/* ---------- right panel: the projection, and Pythagoras ---------- */
+function drawGeom(){
+ var F=frame(),s='';
+ var e1=Math.max(Math.abs(F.yo[0]),Math.abs(F.yh[0]),1e-6)*1.14,
+     e2=Math.max(Math.abs(F.yh[1])*1.3,e1*0.36),back=e1*0.3;
+ var corners=[[-back,-e2,0],[e1,-e2,0],[e1,e2,0],[-back,e2,0]];
+ var pr=fitter(corners.concat([[0,0,0],F.y,F.yh,F.yo]),528,36,1032,440,40);
+ var O=pr([0,0,0]),Y=pr(F.y),YH=pr(F.yh),YO=pr(F.yo),C=corners.map(pr);
+ s+='<polygon points="'+C.map(function(p){return p[0].toFixed(1)+','+p[1].toFixed(1);}).join(' ')+
+    '" fill="'+GREEN+'" fill-opacity="0.13" stroke="'+GREEN+'" stroke-opacity="0.5" stroke-width="1"/>';
+ s+=T(539,24,'the same fit, as vectors','var(--text-secondary)','start');
+ s+=T((C[0][0]+C[1][0])/2,(C[0][1]+C[1][1])/2+17,'every Ax there is','var(--green-ink)','middle','tn');
+ if(!F.flat)s+='<polygon points="'+[YH,YO,Y].map(function(p){return p[0].toFixed(1)+','+p[1].toFixed(1);}).join(' ')+
+   '" fill="'+PINK+'" fill-opacity="0.10"/>';
+ s+=LN(YH,YO,BLUE,2.2,'6 4');
+ s+=LN(YO,Y,GREEN,2.2,'6 4');
+ s+=AR(O,Y,'var(--text-primary)',2.6);
+ s+=AR(O,YH,WARM,3);
+ if(!F.flat)s+=AR(O,YO,GREEN,2,'7 5');
+ s+=AR(YH,Y,PINK,2.6);
+ // right angle at the foot of the perpendicular
+ var ux=YH[0]-YO[0],uy=YH[1]-YO[1],un=Math.hypot(ux,uy),
+     vx=Y[0]-YO[0],vy=Y[1]-YO[1],vn=Math.hypot(vx,vy),q=12;
+ if(vn>18&&un>18){var a=[YO[0]+ux/un*q,YO[1]+uy/un*q],b=[YO[0]+vx/vn*q,YO[1]+vy/vn*q];
+  s+='<polyline points="'+a[0].toFixed(1)+','+a[1].toFixed(1)+' '+
+     (a[0]+b[0]-YO[0]).toFixed(1)+','+(a[1]+b[1]-YO[1]).toFixed(1)+' '+b[0].toFixed(1)+','+b[1].toFixed(1)+
+     '" fill="none" stroke="'+GREEN+'" stroke-width="1.3" opacity="0.85"/>';}
+ s+='<circle cx="'+O[0].toFixed(1)+'" cy="'+O[1].toFixed(1)+'" r="3" fill="var(--text-primary)"/>';
+ s+='<circle cx="'+YO[0].toFixed(1)+'" cy="'+YO[1].toFixed(1)+'" r="4" fill="'+GREEN+'"/>';
+ s+=T(Y[0]+11,Y[1]-7,'y','var(--text-primary)','start');
+ // Push every label away from the middle of the triangle, so three labels round a
+ // small triangle do not pile up on each other.
+ var gx=(YH[0]+YO[0]+Y[0])/3,gy=(YH[1]+YO[1]+Y[1])/3;
+ function away(ax,ay,bx,by,txt,col){
+  var mx=(ax+bx)/2,my=(ay+by)/2,dx=mx-gx,dy=my-gy,d=Math.hypot(dx,dy)||1;
+  return T(mx+dx/d*17,my+dy/d*17+4,txt,col,dx<-2?'end':(dx>2?'start':'middle'),'tn');}
+ s+=T(YH[0]+(YH[0]<O[0]?-11:11),YH[1]+6,'Ax','var(--warm-ink)',YH[0]<O[0]?'end':'start');
+ if(!F.flat)s+=T(YO[0],YO[1]+22,'Ax&#770;','var(--green-ink)','middle');
+ if(un>30)s+=away(YH[0],YH[1],YO[0],YO[1],'Ax&#770; &#8722; Ax','var(--blue-ink)');
+ if(vn>30)s+=away(YO[0],YO[1],Y[0],Y[1],'y &#8722; Ax&#770;','var(--green-ink)');
+ s+=away(YH[0],YH[1],Y[0],Y[1],'y &#8722; Ax','var(--pink-ink)');
+ return s;
+}
+
+function draw(){
+ setRange();
+ document.getElementById('azv').textContent=document.getElementById('az').value+'°';
+ document.getElementById('stage').innerHTML=
+  '<line x1="520" y1="30" x2="520" y2="446" stroke="var(--border-strong)" stroke-width="0.5"/>'+
+  drawData()+drawGeom();
+ readout();caption();
+}
+function readout(){
+ var c=coefFromH(),cur=sse(c),best=sse(OPT),F=frame(),
+     inplane=Math.max(0,cur-best);
+ var eq=P===1?'a':(P===2?'a + bx':'a + bx + cx²');
+ document.getElementById('readout').innerHTML=
+  'fit <b>'+eq+'</b> with '+c.map(f2).join(', ')+' &#183; &#931;r&#178; = <b>'+f2(cur)+'</b>'+
+  ' = <b>'+f2(inplane)+'</b> (how far the fit is from the best one) + <b>'+f2(best)+
+  '</b> (noise no fit of this shape can reach)'+
+  (inplane<1e-6?' &#183; <b>this is the least-squares solution</b>':'');
+}
+function caption(){
+ var c=coefFromH(),cur=sse(c),best=sse(OPT),h='';
+ h+='<div class="ans"><b>The answer.</b> Least squares minimizes &#8214;y &#8722; Ax&#8214;&#178; = '+
+  '&#931;<sub>i</sub>(y<sub>i</sub> &#8722; (Ax)<sub>i</sub>)&#178;, the sum of the squared residuals: '+
+  'the total pink area on the left, <b class="f">'+f2(cur)+'</b> right now.</div>';
+ h+='<div style="margin-top:6px"><b>Why a perpendicular is the answer.</b> Ax can only ever land in the '+
+  'green region, so split the error at the closest point of it: y &#8722; Ax = (Ax&#770; &#8722; Ax) + (y &#8722; Ax&#770;). '+
+  'Those two legs are at right angles, so the squares add: '+
+  '&#8214;y &#8722; Ax&#8214;&#178; = <b class="f">'+f2(Math.max(0,cur-best))+'</b> + <b class="f">'+f2(best)+'</b>.</div>';
+ h+='<div>The second term is the part of y pointing out of the region, which no choice of x can touch. '+
+  'All you control is the first, and it is zero exactly when Ax = Ax&#770;.</div>';
+ h+='<div style="margin-top:6px"><b>The normal equations.</b> &ldquo;Perpendicular to the region&rdquo; means '+
+  'perpendicular to every column of A, which is A<sup>T</sup>(y &#8722; Ax&#770;) = 0, so A<sup>T</sup>Ax&#770; = A<sup>T</sup>y. '+
+  'With A 100&#215;3 that is three equations in three unknowns however many data points you have: '+
+  'here, '+N+' points and '+P+' unknown'+(P>1?'s':'')+'.</div>';
+ document.getElementById('caption').innerHTML=h;
+}
+
+/* ---------- interaction ---------- */
+function svgPt(e){
+ var svg=document.querySelector('#wrap svg'),m=svg.getScreenCTM();
+ if(!m)return null;
+ var p=svg.createSVGPoint();p.x=e.clientX;p.y=e.clientY;
+ return p.matrixTransform(m.inverse());
+}
+function nearest(p){
+ var bi=-1,bd=1e9;
+ for(var i=0;i<P;i++){var d=Math.hypot(p.x-DX(AN[i]),p.y-DY(H[i]));if(d<bd){bd=d;bi=i;}}
+ return bd<34?bi:-1;
+}
+function bindDrag(){
+ var svg=document.querySelector('#wrap svg');
+ svg.addEventListener('pointermove',function(e){
+  var p=svgPt(e);if(!p)return;
+  if(dragging<0){svg.classList.toggle('grab',nearest(p)>=0);return;}
+  H[dragging]=invY(p.y);draw();});
+ svg.addEventListener('pointerdown',function(e){
+  var p=svgPt(e);if(!p)return;var i=nearest(p);
+  if(i<0)return;
+  if(anim){cancelAnimationFrame(anim);anim=null;}
+  dragging=i;svg.setPointerCapture(e.pointerId);draw();});
+ svg.addEventListener('pointerup',function(e){
+  if(dragging<0)return;dragging=-1;
+  try{svg.releasePointerCapture(e.pointerId);}catch(_){}
+  draw();});
+}
+function solve(){
+ var from=H.slice(),to=AN.map(function(x){return evalc(OPT,x);}),t0=performance.now();
+ if(anim)cancelAnimationFrame(anim);
+ (function stepf(now){
+  var f=Math.min(1,(now-t0)/520),e=f<0.5?2*f*f:1-Math.pow(-2*f+2,2)/2;
+  for(var i=0;i<P;i++)H[i]=from[i]+(to[i]-from[i])*e;
+  draw();
+  anim=f<1?requestAnimationFrame(stepf):null;})(t0);
+}
+function setp(p){
+ P=p;
+ ['m1','m2','m3'].forEach(function(id,k){document.getElementById(id).classList.toggle('on',k+1===p);});
+ AN=anchors();OPT=normalEq();
+ // start somewhere visibly wrong, so there is something to drag away from
+ setHfrom(OPT);for(var i=0;i<P;i++)H[i]+=(i%2?-1:1)*1.6;
+ draw();
+}
+function fresh(){gen();setp(P);}
+document.addEventListener('keydown',function(e){
+ if(e.key===' '||e.key==='Enter'){e.preventDefault();solve();}
+ else if(e.key==='n'||e.key==='N'){fresh();}
+ else if(e.key==='s'||e.key==='S'){var c=document.getElementById('sq');c.checked=!c.checked;draw();}
+});
+gen();bindDrag();setp(2);
+</script>
+</body>
+</html>
