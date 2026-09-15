@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quiz 0, worked</title>
+<meta name="description" content="An interactive explainer for each technical question on the CS7150 starting-points quiz.">
+<style>
+:root{--bg:#faf9f5;--surface:#ffffff;--surface-1:#f1efe8;--text-primary:#26251f;--text-secondary:#5f5e5a;--text-muted:#888780;
+ --border:#d3d1c7;--border-strong:#b4b2a9;--accent:#185FA5;--accent-warm:#BA7517;--accent-green:#0F6E56;}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#1a1a18;--surface:#232320;--surface-1:#2c2c2a;
+ --text-primary:#eceae2;--text-secondary:#b4b2a9;--text-muted:#888780;--border:#3a3a36;--border-strong:#5f5e5a;
+ --accent:#79b1ec;--accent-warm:#d9a24d;--accent-green:#4fbb99;}}
+:root[data-theme="dark"]{--bg:#1a1a18;--surface:#232320;--surface-1:#2c2c2a;--text-primary:#eceae2;--text-secondary:#b4b2a9;
+ --text-muted:#888780;--border:#3a3a36;--border-strong:#5f5e5a;--accent:#79b1ec;--accent-warm:#d9a24d;--accent-green:#4fbb99;}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--text-primary);line-height:1.6;
+ font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
+.page{max-width:900px;margin:0 auto;padding:0 20px 72px}
+header{padding-block:44px 24px;border-bottom:1px solid var(--border)}
+.nav{font-size:14px;margin:0 0 18px}
+.nav a{color:var(--text-muted);text-decoration:none}
+.nav a:hover{color:var(--text-secondary);text-decoration:underline}
+.eyebrow{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);margin:0 0 10px}
+h1{font-size:32px;font-weight:600;letter-spacing:-.015em;margin:0 0 12px}
+header p{margin:0 0 10px;font-size:17px;color:var(--text-secondary);max-width:64ch}
+a{color:var(--accent)}
+ol.qs{list-style:none;counter-reset:q;margin:26px 0 0;padding:0}
+ol.qs li{counter-increment:q;border-bottom:1px solid var(--border);padding:20px 0 20px 52px;position:relative}
+ol.qs li:before{content:counter(q);position:absolute;left:0;top:19px;width:34px;height:34px;border-radius:50%;
+ display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500;
+ background:var(--surface-1);color:var(--text-secondary);border:1px solid var(--border)}
+ol.qs li.done:before{background:var(--surface);border-color:var(--accent);color:var(--accent)}
+.qtag{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-warm)}
+h2{font-size:20px;font-weight:600;margin:5px 0 6px;letter-spacing:-.01em}
+h2 a{text-decoration:none}
+h2 a:hover{text-decoration:underline}
+.ask{margin:0 0 8px;font-size:15.5px;color:var(--text-secondary);border-left:3px solid var(--border-strong);padding-left:12px}
+.ask .math{font-variant-numeric:tabular-nums}
+.what{margin:0;font-size:15.5px;color:var(--text-secondary)}
+.go{display:inline-block;margin-top:9px;font-size:15px}
+.soon{display:inline-block;margin-top:9px;font-size:14px;color:var(--text-muted)}
+footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--border);font-size:14.5px;color:var(--text-muted)}
+footer a{color:var(--text-secondary)}
+@media (max-width:640px){h1{font-size:26px}ol.qs li{padding-left:44px}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <div class="nav"><a href="../../">&larr; CS7150 class demos</a></div>
+  <p class="eyebrow">Northeastern University &middot; CS 7150 &middot; Fall 2026</p>
+  <h1>Quiz 0, worked</h1>
+  <p>Quiz 0 is not a test. It exists to tell me what this particular class already knows, so that
+     I teach the right things. That is why the useful answer to a question you cannot do is
+     &ldquo;don&rsquo;t know&rdquo; rather than a guess.</p>
+  <p>Here is an interactive explainer for each technical question on it. Every one runs in the
+     browser, and every one lets you change the numbers: the point is not the answer to the
+     particular question, it is the picture behind it.</p>
+</header>
+
+<ol class="qs">
+
+<li class="done">
+  <div class="qtag">Linear algebra</div>
+  <h2><a href="matvec.html">Matrix &times; vector</a></h2>
+  <p class="ask"><b>Multiply by hand.</b> <span class="math">[1&nbsp;2&nbsp;&minus;1; 0&nbsp;1&nbsp;0]&nbsp;[3;&nbsp;4;&nbsp;5]&nbsp;=</span></p>
+  <p class="what">Ax is a weighted sum of the columns of A, and x says how far to walk along each.
+     Three legs laid tip to tail in the plane, with a toggle to the row picture where the same six
+     products are two dot products instead.</p>
+  <a class="go" href="matvec.html">Open the explainer &rarr;</a>
+</li>
+
+<li>
+  <div class="qtag">Linear algebra</div>
+  <h2>Least squares</h2>
+  <p class="ask"><b>What quantity does the least-squares solution minimize?</b>
+     You want to fit y &asymp; Ax where A is 100&times;3.</p>
+  <p class="what">Drag a fit and watch the squared residuals as literal squares, then the same thing
+     as geometry: y projected onto the column space, with the error perpendicular to everything the
+     model can reach.</p>
+  <span class="soon">Coming</span>
+</li>
+
+<li>
+  <div class="qtag">Calculus</div>
+  <h2>The chain rule</h2>
+  <p class="ask"><b>Write dz/dw.</b> Let u = wx + b with x and b fixed, and z = g(u).</p>
+  <p class="what">A nudge in w travelling down the chain, with a magnifier at each link showing the
+     stretch factor it picks up. Derivatives multiply because stretches compose.</p>
+  <span class="soon">Coming</span>
+</li>
+
+<li>
+  <div class="qtag">Probability</div>
+  <h2>Expectation and variance</h2>
+  <p class="ask"><b>E[X] and Var(X)</b> for X equal to 1 with probability p and 0 otherwise.</p>
+  <p class="what">The mean as a balance point, the variance as the average squared distance from it,
+     and why the spread is widest at p = &frac12; and vanishes at either end.</p>
+  <span class="soon">Coming</span>
+</li>
+
+<li>
+  <div class="qtag">Probability</div>
+  <h2>Conditional probability</h2>
+  <p class="ask"><b>P(disease | positive)?</b> 1% of people have it; the test is positive for 99% of
+     them and for 5% of everyone else.</p>
+  <p class="what">Ten thousand people as ten thousand squares. The positives fly out and re-sort, and
+     the answer is the fraction of that group who are actually sick.</p>
+  <span class="soon">Coming</span>
+</li>
+
+<li>
+  <div class="qtag">Statistical learning</div>
+  <h2>Capacity</h2>
+  <p class="ask"><b>Does making the model more flexible increase or decrease</b> bias, variance, and
+     training error?</p>
+  <p class="what">One true curve, one noisy sample, and a flexibility dial. Resample and the fits
+     scatter: the scatter is variance, the offset is bias, and training error slides to zero
+     whatever else happens.</p>
+  <span class="soon">Coming</span>
+</li>
+
+</ol>
+
+<footer>
+  Questions 7 through 9 of the quiz ask about your background rather than about mathematics, so
+  they have nothing to explain. &middot;
+  <a href="https://github.com/CS7150/classdemos">Repository</a>
+</footer>
+
+</div>
+</body>
+</html>

@@ -17,5 +17,6 @@ link) and hosts the browser-based interactive demos under `docs/demos/`.
 
 GitHub Pages serves from the `main` branch, `/docs` folder
 (Settings → Pages → Source: "Deploy from a branch" → `main` / `/docs`).
-Adding a demo means dropping a self-contained `.html` file into `docs/demos/`
-and adding a card for it in `docs/index.html`.
+Adding a demo means dropping an `.html` file into `docs/demos/` and adding a card
+for it in `docs/index.html`. Pages under `docs/demos/quiz0/` share the page shell
+in `docs/demos/demo.css`; each one keeps its own figure code inline.
