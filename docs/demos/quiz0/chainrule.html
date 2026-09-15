@@ -21,13 +21,13 @@
 </head>
 <body>
 <div class="nav"><a href="./">&larr; Quiz 0, worked</a> &middot; <a href="../../">CS7150 class demos</a></div>
-<h1>The chain rule<span>: a nudge, relayed</span></h1>
+<h1>The chain rule<span>: a nudge relayed down a graph</span></h1>
 <p class="quiz">Quiz 0, question 3(a). <b>u = wx + b with x and b fixed, z = g(u). Write dz/dw.</b></p>
 
 <div id="wrap">
-<svg viewBox="0 0 1040 430" role="img" preserveAspectRatio="xMidYMid meet">
+<svg viewBox="0 0 1040 460" role="img" preserveAspectRatio="xMidYMid meet">
 <title>A nudge in w passing through u and into z</title>
-<desc>Three panels: u against w, whose slope is x; z against u, whose slope is g prime; and z against w, whose slope is their product. Underneath, the same nudge drawn three times at a common scale, so each link's stretch factor is a visible change of length.</desc>
+<desc>Three panels: u against w, whose slope is x; z against u, whose slope is g prime; and z against w, whose slope is their product. Underneath, the same computation as a graph: w and x into a multiply node, plus b into an add node, then g, then z, with the forward values written on the edges and the derivative of z with respect to each edge written beneath it, filled in from right to left by backpropagation.</desc>
 <defs><marker id="ar" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
 <g id="stage"></g>
 </svg>
@@ -45,7 +45,8 @@
 <span class="klab">b</span><input class="mini" type="number" id="bi" value="-1" step="0.5" oninput="draw()">
 </div>
 <div class="row">
-<button class="main" onclick="shrink()">Shrink the nudge</button>
+<button class="main" id="bpb" onclick="backprop()">Backpropagate</button>
+<button onclick="shrink()">Shrink the nudge</button>
 <span class="klab">nudge &#916;w</span>
 <input type="range" id="hs" min="-300" max="0" step="1" value="-40" oninput="draw()">
 <span class="knum" id="hv">0.40</span>
@@ -54,9 +55,9 @@
 <div class="cap" id="caption"></div>
 
 <script>
-var W=0.8,H=0.4,X=2,B=-1,G='sig',anim=null;
+var W=0.8,H=0.4,X=2,B=-1,G='sig',anim=null,BP=4,bpanim=null;
 var BLUE='#378ADD',WARM='#BA7517',PINK='#D4537E',GREEN='#1D9E75';
-var P=[[14,34,330,250],[356,34,672,250],[698,34,1014,250]];
+var P=[[14,34,330,212],[356,34,672,212],[698,34,1014,212]];
 
 function g(u){
  if(G==='sig')return 1/(1+Math.exp(-u));
@@ -172,24 +173,72 @@ function draw(){
  s+=dot(mC.X(W),mC.Y(z),PINK);
  s+=TX((P[2][0]+P[2][2])/2,24,'slope here is dz/dw = '+f2(gp(u)*X),'var(--pink-ink)','middle','tn');
 
- // The relay.  Every bar is drawn against the same nudge, so its length is the
- // stretch factor itself and shrinking the nudge leaves the lengths alone.
- var y0=300,L=150,cx=150,rz=H!==0?dz/H:0,ru=H!==0?du/H:0;
- function bar(y,val,c,lab,note){
-  var w=L*val,t='';
-  t+='<line x1="'+cx+'" y1="'+(y-11)+'" x2="'+cx+'" y2="'+(y+11)+'" stroke="var(--border-strong)" stroke-width="1"/>';
-  t+='<line x1="'+cx+'" y1="'+y+'" x2="'+(cx+w).toFixed(1)+'" y2="'+y+'" stroke="'+c+
-     '" stroke-width="7" stroke-linecap="round" marker-end="url(#ar)"/>';
-  t+=TX(cx-14,y+5,lab,c,'end');
-  t+=TX(cx+w+(w<0?-16:16),y+5,note,c,w<0?'end':'start','tn');
-  return t;}
- s+=TX(cx-30,y0-26,'the same nudge, three times: each bar is the one above it, stretched','var(--text-secondary)','start','tn');
- s+=bar(y0,1,BLUE,'&#916;w','one unit, by definition');
- s+=bar(y0+34,ru,WARM,'&#916;u','&#215; x = '+f1(X));
- s+=bar(y0+68,rz,PINK,'&#916;z','&#215; '+gname()+'&#8242;(u) = '+f2(rz/(ru||1))+'  so &#916;z/&#916;w = '+f2(rz));
- s+='<line x1="'+(cx-3)+'" y1="'+(y0+12)+'" x2="'+(cx-3)+'" y2="'+(y0+58)+'" stroke="var(--border-strong)" stroke-width="0.8" stroke-dasharray="3 3"/>';
+ // The computation graph.  Values flow left to right along the top of each
+ // edge; the derivative of z with respect to whatever is on that edge sits
+ // underneath, filled in from the right as backpropagation reaches it, each
+ // one the previous one times the local derivative of the node in between.
+ s+=graph(u,z);
  document.getElementById('stage').innerHTML=s;
  readout(u,z,du,dz);caption(u,z,du,dz);
+}
+function box(x,y,lab){return '<rect x="'+(x-23)+'" y="'+(y-17)+'" width="46" height="34" rx="7" fill="var(--surface)" stroke="var(--border-strong)" stroke-width="1.4"/>'+
+ TX(x,y+6,lab,'var(--text-primary)','middle');}
+function edge(x1,y1,x2,y2){return '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="var(--text-secondary)" stroke-width="1.6" marker-end="url(#ar)"/>';}
+function graph(u,z){
+ var s='',Y=318,gpu=gp(u),
+     NX=[118,318,540,762,962],   // w, times, plus, g, z
+     lit=function(k){return BP>=k;},
+     GC='var(--pink-ink)',VC='var(--blue-ink)',MC='var(--text-muted)';
+ s+=TX(520,246,'the same chain as a computation graph: values forward along the top of each edge, derivatives of z back along the bottom','var(--text-secondary)','middle','tn');
+ // main line: w -> x -> + -> g -> z
+ s+=TX(NX[0],Y+6,'w','var(--text-primary)','middle');
+ s+=edge(NX[0]+16,Y,NX[1]-25,Y);
+ s+=box(NX[1],Y,'&#215;');
+ s+=edge(NX[1]+23,Y,NX[2]-25,Y);
+ s+=box(NX[2],Y,'+');
+ s+=edge(NX[2]+23,Y,NX[3]-25,Y);
+ s+=box(NX[3],Y,gname());
+ s+=edge(NX[3]+23,Y,NX[4]-14,Y);
+ s+=TX(NX[4],Y+6,'z','var(--text-primary)','middle');
+ // side inputs, from below left
+ var XY=Y+84;
+ s+=TX(NX[1]-92,XY+6,'x','var(--text-primary)','middle');
+ s+=edge(NX[1]-80,XY-8,NX[1]-16,Y+19);
+ s+=TX(NX[2]-92,XY+6,'b','var(--text-primary)','middle');
+ s+=edge(NX[2]-80,XY-8,NX[2]-16,Y+19);
+ // forward values, above the edges
+ function fv(x,t){return TX(x,Y-12,t,VC,'middle','tn');}
+ s+=fv((NX[0]+NX[1])/2,'w = '+f1(W));
+ s+=fv((NX[1]+NX[2])/2,'wx = '+f2(W*X));
+ s+=fv((NX[2]+NX[3])/2,'u = '+f2(u));
+ s+=fv((NX[3]+NX[4])/2,'z = '+f2(z));
+ s+=TX(NX[1]-104,XY+6,'x = '+f1(X),VC,'end','tn');
+ s+=TX(NX[2]-104,XY+6,'b = '+f1(B),VC,'end','tn');
+ // local derivatives, above each node: what that node alone contributes
+ s+=TX(NX[1],Y-34,'&#8706;(wx)/&#8706;w = x','var(--text-muted)','middle','tn');
+ s+=TX(NX[2],Y-34,'&#8706;u/&#8706;(wx) = 1','var(--text-muted)','middle','tn');
+ s+=TX(NX[3],Y-34,gname()+'&#8242;(u) = '+f2(gpu),'var(--text-muted)','middle','tn');
+ // gradients under the edges, lit from the right, each the one to its right
+ // times the local derivative of the node between them
+ function gv(x,k,t,t2){if(!lit(k))return TX(x,Y+19,'&#8706;z/&#8706;? &nbsp;&middot;&middot;&middot;',MC,'middle','tn');
+  return TX(x,Y+19,t,GC,'middle','tn')+(t2?TX(x,Y+37,t2,GC,'middle','tn'):'');}
+ s+=gv((NX[3]+NX[4])/2,1,'&#8706;z/&#8706;z = 1','start here');
+ s+=gv((NX[2]+NX[3])/2,2,'&#8706;z/&#8706;u = '+f2(gpu),'= 1 &#215; '+gname()+'&#8242;(u)');
+ s+=gv((NX[1]+NX[2])/2,3,'&#8706;z/&#8706;(wx) = '+f2(gpu),'= '+f2(gpu)+' &#215; 1');
+ s+=gv((NX[0]+NX[1])/2,4,'&#8706;z/&#8706;w = '+f2(gpu*X),'= '+f2(gpu)+' &#215; '+f1(X));
+ if(lit(4))s+=TX(NX[1]-104,XY+24,'&#8706;z/&#8706;x = '+f2(gpu*W),GC,'end','tn');
+ if(lit(3))s+=TX(NX[2]-104,XY+24,'&#8706;z/&#8706;b = '+f2(gpu),GC,'end','tn');
+ // the chain, read straight off the graph
+ if(lit(4))s+=TX(NX[4],Y+84,'dz/dw = '+gname()+'&#8242;(u) &#183; 1 &#183; x = <tspan font-weight="500">'+f2(gpu*X)+'</tspan>',GC,'end');
+ else s+=TX(NX[4],Y+84,'press backpropagate',MC,'end','tn');
+ return s;
+}
+function backprop(){
+ if(bpanim)cancelAnimationFrame(bpanim);
+ BP=0;draw();var t0=performance.now();
+ (function st(now){var k=Math.min(4,Math.floor((now-t0)/450)+1);
+  if(k!==BP){BP=k;draw();}
+  bpanim=BP<4?requestAnimationFrame(st):null;})(t0);
 }
 function readout(u,z,du,dz){
  var d=gp(u),rz=H!==0?dz/H:0;
@@ -206,6 +255,9 @@ function caption(u){
   'the output moves per unit of input, once the nudge is small enough that both curves look straight. '+
   'The nudge is stretched by x on the way into u, then by g&#8242;(u) on the way into z, so it comes out '+
   'stretched by both. Composing functions multiplies their stretch factors.</div>';
+ h+='<div style="margin-top:6px"><b>Read it off the graph.</b> Going backward from z, the derivative on each edge is the derivative on the '+
+  'edge to its right times the local derivative of the node in between: 1, then 1&#183;g&#8242;(u), then g&#8242;(u)&#183;1, then g&#8242;(u)&#183;x. '+
+  'That is all backpropagation is: the chain rule, run right to left along a graph, one node at a time.</div>';
  h+='<div style="margin-top:6px"><b>Two things worth noticing.</b> The x is there because u = wx + b: the '+
   'same weight update is scaled by the input it multiplied. And dz/db = g&#8242;(u)&#183;1, so the bias gets the '+
   'same gradient without the x.</div>';
@@ -238,7 +290,8 @@ function shrink(){
 });
 document.addEventListener('keydown',function(e){
  if(e.target.tagName==='INPUT'&&e.target.type==='number')return;
- if(e.key===' '||e.key==='Enter'){e.preventDefault();shrink();}
+ if(e.key===' '||e.key==='Enter'){e.preventDefault();backprop();}
+ else if(e.key==='s'||e.key==='S')shrink();
 });
 draw();
 </script>
