@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="../demo.css">
 <style>
 .ts{font-size:20px}.tn{font-size:17px}
-#wrap{position:relative;flex:0 0 auto;height:clamp(300px,50vh,640px)}
+#wrap{position:relative;flex:0 0 auto;height:clamp(320px,58vh,760px)}
 #wrap svg{position:absolute;inset:0;width:100%;height:100%}
 .mini{width:54px;height:32px;text-align:center;font-size:16px;font-variant-numeric:tabular-nums;
  border:1px solid var(--border-strong);border-radius:7px;background:var(--surface);color:var(--text-primary);
@@ -26,23 +26,23 @@
 <p class="quiz">Quiz 0, question 3(a). <b>u = wx + b with x and b fixed, z = g(u). Write dz/dw.</b></p>
 
 <div id="wrap">
-<svg viewBox="0 0 1440 440" role="img" preserveAspectRatio="xMidYMid meet">
+<svg viewBox="0 0 1440 520" role="img" preserveAspectRatio="xMidYMid meet">
 <title>A nudge in w passing through u and into z</title>
 <desc>Three panels: u against w, whose slope is x; z against u, whose slope is g prime; and z against w, whose slope is their product. Underneath, the same computation as a graph: w and x into a multiply node, plus b into an add node, then g, then z, with the forward values written on the edges and the derivative of z with respect to each edge written beneath it, filled in from right to left by backpropagation.</desc>
-<defs><marker id="ar" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+<defs><clipPath id="c0"><rect x="20" y="34" width="450" height="216"/></clipPath><clipPath id="c1"><rect x="495" y="34" width="450" height="216"/></clipPath><clipPath id="c2"><rect x="970" y="34" width="450" height="216"/></clipPath><marker id="ar" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
 <g id="stage"></g>
 </svg>
 </div>
 
 <div class="row">
 <span class="klab">w</span>
-<input type="range" id="ws" min="-300" max="300" step="1" value="80" oninput="draw()">
+<input type="range" id="ws" min="-200" max="200" step="1" value="80" oninput="draw()">
 <span class="knum" id="wv">0.80</span>
 <span class="klab">x</span>
 <input type="range" id="xs" min="-300" max="300" step="25" value="200" oninput="draw()" style="max-width:180px">
 <span class="knum" id="xv">2.00</span>
 <button onclick="flipx()">flip x</button>
-<span class="klab">b</span><input class="mini" type="number" id="bi" value="-1" step="0.5" oninput="draw()">
+<span class="klab">b</span><input class="mini" type="number" id="bi" value="-1" step="0.5" min="-3" max="3" oninput="draw()">
 <span class="klab">g</span>
 <select id="gf" onchange="draw()">
  <option value="sig" selected>sigmoid</option><option value="tanh">tanh</option>
@@ -60,7 +60,7 @@
 <script>
 var W=0.8,H=0.35,X=2,B=-1,G='sig',anim=null,BP=0,bpanim=null;
 var BLUE='#378ADD',WARM='#BA7517',PINK='#D4537E',GREEN='#1D9E75';
-var P=[[20,34,470,198],[495,34,945,198],[970,34,1420,198]];
+var P=[[20,34,470,250],[495,34,945,250],[970,34,1420,250]];
 
 function g(u){
  if(G==='sig')return 1/(1+Math.exp(-u));
@@ -95,14 +95,14 @@ function axes(m,xl,yl){
  s+=TX(m.r[0]+5,m.r[1]+15,yl,'var(--text-muted)','start','tn');
  return s;
 }
-function curve(m,f,c){
+function curve(m,f,c,clip){
  var pts='',n=220;
  for(var i=0;i<=n;i++){var v=m.x0+(m.x1-m.x0)*i/n,y=f(v);
   if(!isFinite(y))continue;
-  var yy=Math.max(m.y0-1,Math.min(m.y1+1,y));
-  pts+=m.X(v).toFixed(1)+','+m.Y(yy).toFixed(1)+' ';}
- return '<polyline points="'+pts+'" fill="none" stroke="'+c+'" stroke-width="2.4" clip-path="url(#none)"/>';
+  pts+=m.X(v).toFixed(1)+','+m.Y(y).toFixed(1)+' ';}
+ return '<polyline points="'+pts+'" fill="none" stroke="'+c+'" stroke-width="2.4" clip-path="url(#'+clip+')"/>';
 }
+function zrange(){return {sig:[-0.2,1.2],tanh:[-1.25,1.25],relu:[-0.6,6.6],sq:[-3,39],sin:[-1.25,1.25]}[G];}
 function TX(x,y,t,c,anc,cls){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+
  '" fill="'+c+'"'+(anc?' text-anchor="'+anc+'"':'')+'>'+t+'</text>';}
 function dot(x,y,c,r){return '<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="'+(r||4.5)+'" fill="'+c+'" stroke="var(--bg)" stroke-width="1.2"/>';}
@@ -119,7 +119,7 @@ function nudge(m,a,b,fa,fb,c){
 }
 function glow(r){return '<rect x="'+(r[0]-5)+'" y="'+(r[1]-5)+'" width="'+(r[2]-r[0]+10)+'" height="'+(r[3]-r[1]+10)+'" rx="6" fill="none" stroke="var(--pink)" stroke-width="2.5" opacity="0.8"/>';}
 function tangent(m,a,fa,sl,c){
- var d=(m.x1-m.x0)*0.30,p1=[a-d,fa-sl*d],p2=[a+d,fa+sl*d];
+ var d=(m.x1-m.x0)*0.6,p1=[a-d,fa-sl*d],p2=[a+d,fa+sl*d];
  return '<line x1="'+m.X(p1[0]).toFixed(1)+'" y1="'+m.Y(p1[1]).toFixed(1)+'" x2="'+m.X(p2[0]).toFixed(1)+
   '" y2="'+m.Y(p2[1]).toFixed(1)+'" stroke="'+c+'" stroke-width="1.2" stroke-dasharray="6 5" opacity="0.85"/>';
 }
@@ -135,49 +135,48 @@ function draw(){
  var u=W*X+B,u2=(W+H)*X+B,z=g(u),z2=g(u2),
      du=u2-u,dz=z2-z,s='';
 
- // panel 1: u against w.  A straight line, so its slope is x everywhere.
- var wlo=-3,whi=3,ulo=1e9,uhi=-1e9,i;
- for(i=0;i<=40;i++){var wv=wlo+(whi-wlo)*i/40,uv=wv*X+B;ulo=Math.min(ulo,uv);uhi=Math.max(uhi,uv);}
- ulo=Math.min(ulo,u,u2);uhi=Math.max(uhi,u,u2);
- var up=0.18*(uhi-ulo)+0.3,mA=mk(P[0],wlo,whi,ulo-up,uhi+up);
+ // panel 1: u against w.  A straight line whose slope is x, on axes that never
+ // move, so changing x visibly changes the slope.
+ var wlo=-2,whi=2,mA=mk(P[0],wlo,whi,-6,6);
  if(BP===4)s+=glow(P[0]);
  s+=axes(mA,'w','u = wx + b');
- s+=curve(mA,function(v){return v*X+B;},BLUE);
+ s+='<g clip-path="url(#c0)">';
+ s+=curve(mA,function(v){return v*X+B;},BLUE,'c0');
  s+=tangent(mA,W,u,X,BLUE);
  s+=nudge(mA,W,W+H,u,u2,BLUE);
  s+=dot(mA.X(W),mA.Y(u),BLUE);
  s+=TX((mA.X(W)+mA.X(W+H))/2,mA.Y(u)+16,'&#916;w','var(--blue-ink)','middle','tn');
  s+=TX(mA.X(W+H)+7,(mA.Y(u)+mA.Y(u2))/2,'&#916;u','var(--blue-ink)','start','tn');
+ s+='</g>';
  s+=TX((P[0][0]+P[0][2])/2,23,'slope here is x = '+f1(X),'var(--blue-ink)','middle','tn');
 
  // panel 2: z against u.  Its slope is g'(u), and that is the only place the
- // shape of g gets a say.
- var hw=Math.max(3.2,Math.abs(u)+1.6,Math.abs(u2)+0.6),
-     zlo=1e9,zhi=-1e9;
- for(i=0;i<=80;i++){var uv2=-hw+2*hw*i/80,zv=g(uv2);if(isFinite(zv)){zlo=Math.min(zlo,zv);zhi=Math.max(zhi,zv);}}
- var zp=0.18*(zhi-zlo)+0.15,mB=mk(P[1],-hw,hw,zlo-zp,zhi+zp);
+ // shape of g gets a say.  Same u range as the left plot's vertical axis.
+ var zr=zrange(),mB=mk(P[1],-6,6,zr[0],zr[1]);
  if(BP===2)s+=glow(P[1]);
  s+=axes(mB,'u','z = '+gname()+'(u)');
- s+=curve(mB,g,WARM);
+ s+='<g clip-path="url(#c1)">';
+ s+=curve(mB,g,WARM,'c1');
  s+=tangent(mB,u,z,gp(u),WARM);
  s+=nudge(mB,u,u2,z,z2,WARM);
  s+=dot(mB.X(u),mB.Y(z),WARM);
  s+=TX((mB.X(u)+mB.X(u2))/2,mB.Y(z)+16,'&#916;u','var(--warm-ink)','middle','tn');
  s+=TX(mB.X(u2)+7,(mB.Y(z)+mB.Y(z2))/2,'&#916;z','var(--warm-ink)','start','tn');
- s+=TX((P[1][0]+P[1][2])/2,24,'slope here is '+gname()+'&#8242;(u) = '+f2(gp(u)),'var(--warm-ink)','middle','tn');
+ s+='</g>';
+ s+=TX((P[1][0]+P[1][2])/2,23,'slope here is '+gname()+'&#8242;(u) = '+f2(gp(u)),'var(--warm-ink)','middle','tn');
 
- // panel 3: the two links composed
- var clo=1e9,chi=-1e9;
- for(i=0;i<=80;i++){var wv3=wlo+(whi-wlo)*i/80,zv3=g(wv3*X+B);
-  if(isFinite(zv3)){clo=Math.min(clo,zv3);chi=Math.max(chi,zv3);}}
- var cp=0.18*(chi-clo)+0.15,mC=mk(P[2],wlo,whi,clo-cp,chi+cp);
+ // panel 3: the two links composed, on the left plot's w axis and the middle
+ // plot's z axis
+ var mC=mk(P[2],wlo,whi,zr[0],zr[1]);
  if(BP>=4)s+=glow(P[2]);
  s+=axes(mC,'w','z');
- s+=curve(mC,function(v){return g(v*X+B);},PINK);
+ s+='<g clip-path="url(#c2)">';
+ s+=curve(mC,function(v){return g(v*X+B);},PINK,'c2');
  s+=tangent(mC,W,z,gp(u)*X,PINK);
  s+=nudge(mC,W,W+H,z,z2,PINK);
  s+=dot(mC.X(W),mC.Y(z),PINK);
- s+=TX((P[2][0]+P[2][2])/2,24,'slope here is dz/dw = '+f2(gp(u)*X),'var(--pink-ink)','middle','tn');
+ s+='</g>';
+ s+=TX((P[2][0]+P[2][2])/2,23,'slope here is dz/dw = '+f2(gp(u)*X),'var(--pink-ink)','middle','tn');
 
  // The computation graph.  Values flow left to right along the top of each
  // edge; the derivative of z with respect to whatever is on that edge sits
@@ -191,11 +190,11 @@ function box(x,y,lab,hot){return '<rect x="'+(x-27)+'" y="'+(y-20)+'" width="54"
  TX(x,y+7,lab,'var(--text-primary)','middle');}
 function edge(x1,y1,x2,y2){return '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="var(--text-secondary)" stroke-width="1.6" marker-end="url(#ar)"/>';}
 function graph(u,z){
- var s='',Y=312,gpu=gp(u),
+ var s='',Y=384,gpu=gp(u),
      NX=[120,420,720,1020,1330],   // w, times, plus, g, z
      lit=function(k){return BP>=k;},
      GC='var(--pink-ink)',VC='var(--blue-ink)',MC='var(--text-muted)';
- s+=TX(720,236,'the same chain as a computation graph: values forward along the top of each edge, derivatives of z back along the bottom','var(--text-secondary)','middle','tn');
+ s+=TX(720,300,'the same chain as a computation graph: values forward along the top of each edge, derivatives of z back along the bottom','var(--text-secondary)','middle','tn');
  // main line: w -> x -> + -> g -> z
  s+=TX(NX[0],Y+6,'w','var(--text-primary)','middle');
  s+=edge(NX[0]+18,Y,NX[1]-29,Y);
