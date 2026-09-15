@@ -39,7 +39,7 @@
 <script>
 var p=0.3,S=[],ones=0,run=false,raf=null,dragging=false;
 var BLUE='#378ADD',PINK='#D4537E',GREEN='#1D9E75';
-var L0=60,L1=470,BY=96,SQ0=140;  // beam from L0 to L1, squares hang from SQ0
+var L0=60,L1=470,BY=108,SQ0=176;  // beam from L0 to L1, squares hang from SQ0
 function U(x){return L0+(L1-L0)*x;}
 function f3(v){return v.toFixed(3);}
 function TX(x,y,t,c,anc,cls){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+
@@ -54,18 +54,18 @@ function draw(){
  var fx=U(p);
  s+='<polygon points="'+fx.toFixed(1)+','+(BY+2)+' '+(fx-11).toFixed(1)+','+(BY+24)+' '+(fx+11).toFixed(1)+','+(BY+24)+
     '" fill="'+GREEN+'" stroke="var(--green-ink)" stroke-width="1.5" style="cursor:ew-resize"/>';
- var r0=6+26*Math.sqrt(q),r1=6+26*Math.sqrt(p);
+ var r0=5+23*Math.sqrt(q),r1=5+23*Math.sqrt(p);
  s+='<circle cx="'+L0+'" cy="'+(BY-r0-2).toFixed(1)+'" r="'+r0.toFixed(1)+'" fill="'+BLUE+'" fill-opacity="0.85"/>';
  s+='<circle cx="'+L1+'" cy="'+(BY-r1-2).toFixed(1)+'" r="'+r1.toFixed(1)+'" fill="'+PINK+'" fill-opacity="0.85"/>';
- s+=TX(L0,BY-r0*2-10,'X = 0, mass 1 &#8722; p = '+f3(q),'var(--blue-ink)','start','tn');
- s+=TX(L1,BY-r1*2-10,'X = 1, mass p = '+f3(p),'var(--pink-ink)','end','tn');
+ s+=TX(L0-14,44,'X = 0, weight 1 &#8722; p = '+f3(q),'var(--blue-ink)','start','tn');
+ s+=TX(L1+14,44,'X = 1, weight p = '+f3(p),'var(--pink-ink)','end','tn');
  s+=TX(L0,BY+40,'0','var(--text-muted)','middle','tn');
  s+=TX(L1,BY+40,'1','var(--text-muted)','middle','tn');
  s+=TX(fx,BY+40,'p = '+f3(p),'var(--green-ink)','middle');
  // --- the squares.  Outcome 0 sits p away from the mean, outcome 1 sits 1-p
  //     away; square each, then shrink each square vertically by its probability.
  //     What is left is two rectangles of the same height, p(1-p), side by side.
- var K=230,y0=SQ0+30;
+ var K=200,y0=SQ0+26;
  s+=TX((L0+L1)/2,SQ0+8,'Var(X): squared distance from the balance point, weighted by probability','var(--text-secondary)','middle','tn');
  if(p>0.004){
   s+='<rect x="'+L0+'" y="'+y0+'" width="'+(U(p)-L0).toFixed(1)+'" height="'+(K*p).toFixed(1)+
@@ -78,12 +78,12 @@ function draw(){
   s+='<rect x="'+U(p).toFixed(1)+'" y="'+y0+'" width="'+(L1-U(p)).toFixed(1)+'" height="'+(K*v).toFixed(1)+
      '" fill="'+PINK+'" fill-opacity="0.35"/>';}
  s+='<line x1="'+L0+'" y1="'+(y0+K*v).toFixed(1)+'" x2="'+L1+'" y2="'+(y0+K*v).toFixed(1)+'" stroke="'+GREEN+'" stroke-width="2"/>';
- if(p>0.12)s+=TX(U(p/2),y0+Math.max(K*p,K*v)+16,'p&#178; = '+f3(p*p)+', kept '+f3(q)+' of it','var(--blue-ink)','middle','tn');
- if(q>0.12)s+=TX(U(p+q/2),y0+Math.max(K*q,K*v)+16,'(1&#8722;p)&#178; = '+f3(q*q)+', kept '+f3(p)+' of it','var(--pink-ink)','middle','tn');
- s+=TX(L1+8,y0+K*v+5,'height p(1&#8722;p) = '+f3(v),'var(--green-ink)','start','tn');
+ if(p>0.1)s+=TX(U(p/2),y0+Math.max(K*p,K*v)+16,'p&#178; &#215; (1&#8722;p)','var(--blue-ink)','middle','tn');
+ if(q>0.1)s+=TX(U(p+q/2),y0+Math.max(K*q,K*v)+16,'(1&#8722;p)&#178; &#215; p','var(--pink-ink)','middle','tn');
+ s+=TX(L1+7,y0+K*v+5,'= p(1&#8722;p)','var(--green-ink)','start','tn');
 
  // --- right, top: the variance against p
- var RX0=560,RX1=1020,RY0=40,RY1=210;
+ var RX0=590,RX1=1020,RY0=40,RY1=210;
  function PX(x){return RX0+(RX1-RX0)*x;}function PY(y){return RY1-(RY1-RY0)*(y/0.28);}
  s+='<rect x="'+RX0+'" y="'+RY0+'" width="'+(RX1-RX0)+'" height="'+(RY1-RY0)+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
  s+=TX((RX0+RX1)/2,RY0-10,'Var(X) = p(1 &#8722; p), for every p at once','var(--text-secondary)','middle');
@@ -110,9 +110,9 @@ function draw(){
  s+='<rect x="'+RX0+'" y="'+by+'" width="'+(RX1-RX0)+'" height="16" fill="var(--surface-1)" stroke="var(--border)"/>';
  if(S.length){var mm=ones/S.length;
   s+='<rect x="'+RX0+'" y="'+by+'" width="'+((RX1-RX0)*mm).toFixed(1)+'" height="16" fill="var(--text-primary)" opacity="0.55"/>';
-  s+=TX(RX0+(RX1-RX0)*mm+(mm>0.8?-6:6),by+12,'mean of flips = '+f3(mm),'var(--text-primary)',mm>0.8?'end':'start','tn');}
+  s+=TX(RX0+(RX1-RX0)*mm,by+32,'mean of flips = '+f3(mm),'var(--text-primary)',mm>0.75?'end':(mm<0.25?'start':'middle'),'tn');}
  s+='<line x1="'+PX(p).toFixed(1)+'" y1="'+(by-5)+'" x2="'+PX(p).toFixed(1)+'" y2="'+(by+21)+'" stroke="'+GREEN+'" stroke-width="2.5"/>';
- s+=TX(RX0,by+36,'the fraction of 1s heads for p; the spread of the flips heads for p(1 &#8722; p)','var(--text-muted)','start','tn');
+ s+=TX(RX0,by+52,'the fraction of 1s heads for p; the spread of the flips heads for p(1 &#8722; p)','var(--text-muted)','start','tn');
  document.getElementById('stage').innerHTML=s;
  readout();caption();
 }
@@ -136,7 +136,7 @@ function caption(){
   'at p = 0 and p = 1, where the coin is certain. It can never exceed &#188;.</div>';
  document.getElementById('caption').innerHTML=h;
 }
-function setp(v){p=Math.max(0,Math.min(1,v));document.getElementById('ps').value=Math.round(p*1000);
+function setp(v){var np=Math.max(0,Math.min(1,v));if(np!==p){S=[];ones=0;}p=np;document.getElementById('ps').value=Math.round(p*1000);
  document.getElementById('pv').textContent=f3(p);draw();}
 function flip(n){for(var i=0;i<n;i++){var x=Math.random()<p?1:0;S.push(x);ones+=x;}
  if(S.length>5000){var drop=S.splice(0,S.length-5000);for(var k=0;k<drop.length;k++)ones-=drop[k];}
