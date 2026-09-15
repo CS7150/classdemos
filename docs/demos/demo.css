@@ -1,0 +1,51 @@
+/* Shared shell for the CS7150 interactive demos.  Each demo adds its own rules
+   inline; everything common to all of them -- palette, page frame, controls,
+   caption -- lives here. */
+:root{--bg:#faf9f5;--surface:#ffffff;--surface-1:#f1efe8;--text-primary:#26251f;--text-secondary:#5f5e5a;--text-muted:#888780;--border:#d3d1c7;--border-strong:#b4b2a9;
+ --blue:#378ADD;--blue-ink:#185FA5;--warm:#BA7517;--warm-ink:#854F0B;--green:#1D9E75;--green-ink:#0F6E56;--pink:#D4537E;--pink-ink:#993556;--violet:#7F77DD;--violet-ink:#4F47A8;--orange:#D85A30;--orange-ink:#993C1D;--red:#E24B4A;}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#1a1a18;--surface:#232320;--surface-1:#2c2c2a;--text-primary:#eceae2;--text-secondary:#b4b2a9;--text-muted:#888780;--border:#3a3a36;--border-strong:#5f5e5a;
+ --blue-ink:#79b1ec;--warm-ink:#d9a24d;--green-ink:#4fbb99;--pink-ink:#e58aab;--violet-ink:#a49dea;--orange-ink:#e8895f;}}
+:root[data-theme="dark"]{--bg:#1a1a18;--surface:#232320;--surface-1:#2c2c2a;--text-primary:#eceae2;--text-secondary:#b4b2a9;--text-muted:#888780;--border:#3a3a36;--border-strong:#5f5e5a;
+ --blue-ink:#79b1ec;--warm-ink:#d9a24d;--green-ink:#4fbb99;--pink-ink:#e58aab;--violet-ink:#a49dea;--orange-ink:#e8895f;}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text-primary);font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
+body{min-height:100vh;display:flex;flex-direction:column;padding:16px 22px 20px;gap:10px}
+h1{font-size:22px;font-weight:600;margin:0;letter-spacing:-.01em}
+h1 span{font-size:17px;font-weight:400;color:var(--text-secondary);letter-spacing:0}
+.nav{font-size:14px;margin:0 0 -2px}
+.nav a{color:var(--text-muted);text-decoration:none}
+.nav a:hover{color:var(--text-secondary);text-decoration:underline}
+.quiz{font-size:14px;color:var(--text-muted);margin:-4px 0 0}
+.quiz b{font-weight:500;color:var(--text-secondary)}
+#wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+svg{width:100%;height:auto;max-height:100%;display:block}
+.ts{font-size:15px;fill:var(--text-secondary)}
+.tn{font-size:14px;fill:var(--text-muted)}
+/* a halo in the page colour, so glyphs stay readable over the figure */
+.gl{paint-order:stroke;stroke:var(--bg);stroke-width:3.5px;stroke-linejoin:round;stroke-opacity:.8;text-shadow:0 0 4px var(--bg),0 0 4px var(--bg)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+button,select{height:40px;padding:0 14px;border:1px solid var(--border-strong);background:var(--surface);border-radius:8px;font-size:16px;color:var(--text-primary);cursor:pointer;font-family:inherit;white-space:nowrap}
+button:hover,select:hover{background:var(--surface-1)}
+button.main{min-width:118px;border:2px solid var(--text-secondary)}
+label.cb{display:flex;align-items:center;gap:7px;font-size:16px;color:var(--text-secondary);cursor:pointer;white-space:nowrap}
+input[type=range]{flex:1;min-width:140px;accent-color:#378ADD}
+input[type=checkbox],input[type=radio]{width:18px;height:18px;accent-color:#D4537E}
+.seg{display:inline-flex;border:1px solid var(--border-strong);border-radius:8px;overflow:hidden}
+.seg button{border:none;border-radius:0;height:38px}
+.seg button+button{border-left:1px solid var(--border-strong)}
+.seg button.on{background:var(--surface-1);color:var(--text-primary);font-weight:500;box-shadow:inset 0 -2px 0 var(--blue)}
+.rd{font-size:16px;color:var(--text-secondary);line-height:1.7}
+.rd b{font-weight:500;color:var(--text-primary)}
+.num{font-variant-numeric:tabular-nums}
+.klab{font-size:16px;color:var(--text-secondary);white-space:nowrap}
+.knum{font-size:16px;color:var(--text-primary);min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.lg{font-size:14px;color:var(--text-muted);line-height:1.6}
+.cap{font-size:15px;color:var(--text-secondary);line-height:1.75;border-top:1px solid var(--border);padding-top:8px}
+.cap b{font-weight:500;color:var(--text-primary)}
+.cap div+div{margin-top:3px}
+.ans{border-left:3px solid var(--green);padding-left:10px}
+table.bt{border-collapse:collapse;margin-top:6px;font-size:14px;font-variant-numeric:tabular-nums}
+table.bt th{text-align:right;padding:2px 14px 2px 0;font-weight:400;color:var(--text-muted)}
+table.bt td{text-align:right;padding:2px 14px 2px 0;color:var(--text-secondary)}
+table.bt tr.now td{color:var(--text-primary);font-weight:500}
+@media (max-width:900px){body{padding:12px}.rd{font-size:14px}h1{font-size:18px}h1 span{font-size:14px}button,select{font-size:14px;height:34px}.seg button{height:32px}}
