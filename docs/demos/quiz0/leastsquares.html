@@ -7,24 +7,26 @@
 <meta name="description" content="What least squares minimizes: the total area of the squared residuals, and the same thing as a projection onto the column space.">
 <link rel="stylesheet" href="../demo.css">
 <style>
+.ts{font-size:18px}.tn{font-size:15.5px}
 #wrap{position:relative}
 #wrap svg{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
 #wrap svg.grab{cursor:grab}
+#wrap svg.grab:active{cursor:grabbing}
 .cap b.f{font-weight:500;color:var(--text-primary);font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
 <div class="nav"><a href="./">&larr; Quiz 0, worked</a> &middot; <a href="../../">CS7150 class demos</a></div>
 <h1>Least squares<span>: what exactly is being minimized</span></h1>
-<p class="quiz">Quiz 0, question 2(a). <b>You want to fit y &asymp; Ax.</b> Drag the handles on the fit and watch the total area.</p>
+<p class="quiz">Quiz 0, question 2(a). <b>You want to fit y &asymp; Ax.</b> Drag the handles on the fit and watch the total area; drag the vector picture to turn it.</p>
 
 <div id="wrap">
-<svg viewBox="0 0 1300 470" role="img" preserveAspectRatio="xMidYMid meet">
+<svg viewBox="0 0 1440 460" role="img" preserveAspectRatio="xMidYMid meet">
 <title>Least squares as area, and as a projection</title>
 <desc>Left: the system y is approximately A x written out with the actual numbers, one row per data point, one column of A per parameter. Middle: data points, a fit you can drag, and each residual drawn as a square whose area is the residual squared. Right: the same fit in vector space, where y is projected onto the column space of A and the error splits by Pythagoras into a part inside that space and a part perpendicular to it.</desc>
 <defs>
 <marker id="ar" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></marker>
-<clipPath id="dclip"><rect x="302" y="34" width="462" height="352"/></clipPath>
+<clipPath id="dclip"><rect x="512" y="34" width="462" height="352"/></clipPath>
 </defs>
 <g id="stage"></g>
 </svg>
@@ -38,17 +40,12 @@
 <select id="np" onchange="fresh()"><option value="14" selected>14</option><option value="40">40</option><option value="100">100</option></select>
 <label class="cb"><input type="checkbox" id="sq" checked onchange="draw()">squares</label>
 </div>
-<div class="row">
-<span class="klab">turn</span>
-<input type="range" id="az" min="-60" max="60" step="1" value="26" oninput="draw()">
-<span class="knum" id="azv">26&#176;</span>
-</div>
 <div class="rd" id="readout"></div>
 <div class="cap" id="caption"></div>
 
 <script>
 var P=2,N=14,XS=[],YS=[],H=[],AN=[],OPT=[],dragging=-1,anim=null;
-var OFF=260,LX0=60+OFF,LX1=490+OFF,LY0=52,LY1=372,RCX=778,RCY=222;
+var OFF=470,LX0=60+OFF,LX1=490+OFF,LY0=52,LY1=372,AZ=26,EL=20,spin=null;
 var GREEN='#1D9E75',PINK='#D4537E',BLUE='#378ADD',WARM='#BA7517';
 
 /* ---------- data ---------- */
@@ -135,7 +132,7 @@ function frame(){
 // the figure actually contains, so the drawing fills the panel whether the
 // residual is large or the fit is nearly perfect.
 function rawProj(p){
- var az=+document.getElementById('az').value*Math.PI/180,el=20*Math.PI/180,
+ var az=AZ*Math.PI/180,el=EL*Math.PI/180,
      ux=Math.cos(az),uy=Math.sin(az),
      vx=-Math.sin(az)*Math.sin(el),vy=Math.cos(az)*Math.sin(el),vz=Math.cos(el);
  return [p[0]*ux+p[1]*uy,-(p[0]*vx+p[1]*vy+p[2]*vz)];
@@ -174,35 +171,40 @@ function invY(py){return YLO+((LY1-py)/(LY1-LY0))*(YHI-YLO);}
 // One row per data point, one column of A per parameter.  This is the A of the
 // question: 100 x 3 there, N x P here, and every entry of it is a power of x.
 function drawAlg(){
- var c=coefFromH(),s='',i,j,rows=[],RH=23,y0=68;
- if(N<=11)for(i=0;i<N;i++)rows.push(i);
- else{for(i=0;i<7;i++)rows.push(i);rows.push(-1);rows.push(N-2);rows.push(N-1);}
- var XY=56,XA=[112,154,196],XX=252,BW=20;
- s+=T(150,24,'the same fit, as numbers','var(--text-secondary)','middle');
+ var c=coefFromH(),s='',i,j,rows=[],RH=27,y0=76;
+ if(N<=10)for(i=0;i<N;i++)rows.push(i);
+ else{for(i=0;i<6;i++)rows.push(i);rows.push(-1);rows.push(N-2);rows.push(N-1);}
+ // columns: y, the fitted values, then A and the coefficients that made them
+ var XY=70,XF=178,XA=[266,326,386],BW=28,XX=XA[P-1]+BW+8+52;
+ s+=T(240,26,'the same fit, as numbers','var(--text-secondary)','middle');
  var heads=['1','x','x\u00b2'];
- s+=T(XY,y0-16,'y','var(--text-muted)','end','tn');
- for(j=0;j<P;j++)s+=T(XA[j],y0-16,heads[j],'var(--text-muted)','middle','tn');
- s+=T(XX,y0-16,'x','var(--text-muted)','middle','tn');
+ s+=T(XY,y0-18,'y','var(--text-muted)','end','tn');
+ s+=T(XF,y0-18,'Ax','var(--text-muted)','end','tn');
+ for(j=0;j<P;j++)s+=T(XA[j],y0-18,heads[j],'var(--text-muted)','middle','tn');
+ s+=T(XX,y0-18,'x','var(--text-muted)','middle','tn');
  for(var k=0;k<rows.length;k++){var yy=y0+k*RH;
-  if(rows[k]<0){s+=T(XY-8,yy,'\u22ee','var(--text-muted)','middle','tn');
+  if(rows[k]<0){s+=T(XY-10,yy,'\u22ee','var(--text-muted)','middle','tn');s+=T(XF-10,yy,'\u22ee','var(--text-muted)','middle','tn');
    for(j=0;j<P;j++)s+=T(XA[j],yy,'\u22ee','var(--text-muted)','middle','tn');continue;}
   i=rows[k];
   s+=T(XY,yy,f2(YS[i]),'var(--blue-ink)','end','tn');
+  s+=T(XF,yy,f2(evalc(c,XS[i])),'var(--warm-ink)','end','tn');
   var r=row(XS[i]);
   for(j=0;j<P;j++)s+=T(XA[j],yy,f2(r[j]),'var(--text-secondary)','middle','tn');}
- var h=rows.length*RH,top=y0-15;
- function brk(x0,x1,t,hh){return '<path d="M'+(x0+6)+' '+t+' H'+x0+' V'+(t+hh)+' H'+(x0+6)+' M'+(x1-6)+' '+t+' H'+x1+' V'+(t+hh)+' H'+(x1-6)+
-  '" fill="none" stroke="var(--border-strong)" stroke-width="1.4"/>';}
- s+=brk(XY-52,XY+8,top,h);
- s+=brk(XA[0]-BW-6,XA[P-1]+BW+6,top,h);
- s+=T(XY+21,top+h/2+5,'\u2248','var(--text-secondary)','middle');
+ var h=rows.length*RH,top=y0-17;
+ function brk(x0,x1,t,hh){return '<path d="M'+(x0+7)+' '+t+' H'+x0+' V'+(t+hh)+' H'+(x0+7)+' M'+(x1-7)+' '+t+' H'+x1+' V'+(t+hh)+' H'+(x1-7)+
+  '" fill="none" stroke="var(--border-strong)" stroke-width="1.5"/>';}
+ s+=brk(XY-60,XY+10,top,h);
+ s+=brk(XF-60,XF+10,top,h);
+ s+=brk(XA[0]-BW-8,XA[P-1]+BW+8,top,h);
+ s+=T((XY+10+XF-60)/2,top+h/2+6,'\u2248','var(--text-secondary)','middle');
+ s+=T((XF+10+XA[0]-BW-8)/2,top+h/2+6,'=','var(--text-secondary)','middle');
  // the coefficient vector, centred beside A: these are what the handles move
  var names=['a','b','c'],ph=P*RH,pt=top+h/2-ph/2;
- s+=brk(XX-28,XX+28,pt,ph);
- for(j=0;j<P;j++)s+=T(XX,pt+15+j*RH,f2(c[j]),'var(--warm-ink)','middle','tn');
- for(j=0;j<P;j++)s+=T(XX+36,pt+15+j*RH,names[j],'var(--text-muted)','start','tn');
- s+=T(150,top+h+26,'A is '+N+' \u00d7 '+P+': a row per point, a column per parameter','var(--text-muted)','middle','tn');
- s+=T(150,top+h+44,'the fit is y \u2248 '+(P===1?'a':(P===2?'a + bx':'a + bx + cx\u00b2')),'var(--text-muted)','middle','tn');
+ s+=brk(XX-34,XX+34,pt,ph);
+ for(j=0;j<P;j++)s+=T(XX,pt+18+j*RH,f2(c[j]),'var(--warm-ink)','middle','tn');
+ for(j=0;j<P;j++)s+=T(XX+42,pt+18+j*RH,names[j],'var(--text-muted)','start','tn');
+ s+=T(240,top+h+28,'A is '+N+' \u00d7 '+P+': a row per point, a column per parameter','var(--text-muted)','middle','tn');
+ s+=T(240,top+h+48,'y \u2248 '+(P===1?'a':(P===2?'a + bx':'a + bx + cx\u00b2'))+'; the middle column is what that predicts','var(--text-muted)','middle','tn');
  return s;
 }
 
@@ -247,7 +249,7 @@ function drawGeom(){
  var e1=Math.max(Math.abs(F.yo[0]),Math.abs(F.yh[0]),1e-6)*1.14,
      e2=Math.max(Math.abs(F.yh[1])*1.3,e1*0.36),back=e1*0.3;
  var corners=[[-back,-e2,0],[e1,-e2,0],[e1,e2,0],[-back,e2,0]];
- var pr=fitter(corners.concat([[0,0,0],F.y,F.yh,F.yo]),528+OFF,36,1032+OFF,440,40);
+ var pr=fitter(corners.concat([[0,0,0],F.y,F.yh,F.yo]),528+OFF,36,1432,440,40);
  var O=pr([0,0,0]),Y=pr(F.y),YH=pr(F.yh),YO=pr(F.yo),C=corners.map(pr);
  s+='<polygon points="'+C.map(function(p){return p[0].toFixed(1)+','+p[1].toFixed(1);}).join(' ')+
     '" fill="'+GREEN+'" fill-opacity="0.13" stroke="'+GREEN+'" stroke-opacity="0.5" stroke-width="1"/>';
@@ -287,10 +289,9 @@ function drawGeom(){
 
 function draw(){
  setRange();
- document.getElementById('azv').textContent=document.getElementById('az').value+'°';
  document.getElementById('stage').innerHTML=
   '<line x1="'+(520+OFF)+'" y1="30" x2="'+(520+OFF)+'" y2="446" stroke="var(--border-strong)" stroke-width="0.5"/>'+
-  '<line x1="'+(OFF+30)+'" y1="30" x2="'+(OFF+30)+'" y2="446" stroke="var(--border-strong)" stroke-width="0.5"/>'+
+  '<line x1="'+(OFF+22)+'" y1="30" x2="'+(OFF+22)+'" y2="446" stroke="var(--border-strong)" stroke-width="0.5"/>'+
   drawAlg()+drawData()+drawGeom();
  readout();caption();
 }
@@ -334,18 +335,22 @@ function nearest(p){
  for(var i=0;i<P;i++){var d=Math.hypot(p.x-DX(AN[i]),p.y-DY(H[i]));if(d<bd){bd=d;bi=i;}}
  return bd<34?bi:-1;
 }
+function inGeom(p){return p.x>OFF+520&&p.y>30&&p.y<446;}
 function bindDrag(){
  var svg=document.querySelector('#wrap svg');
  svg.addEventListener('pointermove',function(e){
   var p=svgPt(e);if(!p)return;
-  if(dragging<0){svg.classList.toggle('grab',nearest(p)>=0);return;}
+  if(spin){AZ=Math.max(-80,Math.min(80,spin.az+(p.x-spin.x)*0.45));
+   EL=Math.max(10,Math.min(70,spin.el+(p.y-spin.y)*0.35));draw();return;}
+  if(dragging<0){svg.classList.toggle('grab',nearest(p)>=0||inGeom(p));return;}
   H[dragging]=invY(p.y);draw();});
  svg.addEventListener('pointerdown',function(e){
   var p=svgPt(e);if(!p)return;var i=nearest(p);
-  if(i<0)return;
+  if(i<0){if(inGeom(p)){spin={x:p.x,y:p.y,az:AZ,el:EL};svg.setPointerCapture(e.pointerId);}return;}
   if(anim){cancelAnimationFrame(anim);anim=null;}
   dragging=i;svg.setPointerCapture(e.pointerId);draw();});
  svg.addEventListener('pointerup',function(e){
+  if(spin){spin=null;try{svg.releasePointerCapture(e.pointerId);}catch(_){}return;}
   if(dragging<0)return;dragging=-1;
   try{svg.releasePointerCapture(e.pointerId);}catch(_){}
   draw();});
