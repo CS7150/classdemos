@@ -38,25 +38,27 @@
 <span class="klab">w</span>
 <input type="range" id="ws" min="-300" max="300" step="1" value="80" oninput="draw()">
 <span class="knum" id="wv">0.80</span>
+<span class="klab">x</span>
+<input type="range" id="xs" min="-300" max="300" step="25" value="200" oninput="draw()" style="max-width:180px">
+<span class="knum" id="xv">2.00</span>
+<button onclick="flipx()">flip x</button>
+<span class="klab">b</span><input class="mini" type="number" id="bi" value="-1" step="0.5" oninput="draw()">
 <span class="klab">g</span>
 <select id="gf" onchange="draw()">
  <option value="sig" selected>sigmoid</option><option value="tanh">tanh</option>
  <option value="relu">ReLU</option><option value="sq">square</option><option value="sin">sin</option></select>
-<span class="klab">x</span><input class="mini" type="number" id="xi" value="2" step="0.5" oninput="draw()">
-<span class="klab">b</span><input class="mini" type="number" id="bi" value="-1" step="0.5" oninput="draw()">
 </div>
 <div class="row">
-<button class="main" id="bpb" onclick="backprop()">Backpropagate</button>
-<button onclick="shrink()">Shrink the nudge</button>
-<span class="klab">nudge &#916;w</span>
-<input type="range" id="hs" min="-300" max="0" step="1" value="-40" oninput="draw()">
-<span class="knum" id="hv">0.40</span>
+<button class="main" id="stepb" onclick="stepBack()">Step backward</button>
+<button onclick="runAll()">Run all</button>
+<button onclick="resetBP()">Reset</button>
+<span class="klab" id="stepv">forward pass done; nothing propagated yet</span>
 </div>
 <div class="rd" id="readout"></div>
 <div class="cap" id="caption"></div>
 
 <script>
-var W=0.8,H=0.4,X=2,B=-1,G='sig',anim=null,BP=4,bpanim=null;
+var W=0.8,H=0.35,X=2,B=-1,G='sig',anim=null,BP=0,bpanim=null;
 var BLUE='#378ADD',WARM='#BA7517',PINK='#D4537E',GREEN='#1D9E75';
 var P=[[20,34,470,198],[495,34,945,198],[970,34,1420,198]];
 
@@ -75,8 +77,8 @@ function gp(u){
  return Math.cos(u);
 }
 function gname(){return {sig:'σ',tanh:'tanh',relu:'ReLU',sq:'u²',sin:'sin'}[G];}
-function f2(v){return (Math.abs(v)<5e-5?0:v).toFixed(3);}
-function f1(v){return (Math.abs(v)<5e-4?0:v).toFixed(2);}
+function f2(v){return (Math.abs(v)<5e-5?0:v).toFixed(3).replace('-','\u2212');}
+function f1(v){return (Math.abs(v)<5e-4?0:v).toFixed(2).replace('-','\u2212');}
 
 /* ---------- plotting ---------- */
 function mk(r,x0,x1,y0,y1){
@@ -115,6 +117,7 @@ function nudge(m,a,b,fa,fb,c){
     '" stroke="'+c+'" stroke-width="2.2"/>';
  return s;
 }
+function glow(r){return '<rect x="'+(r[0]-5)+'" y="'+(r[1]-5)+'" width="'+(r[2]-r[0]+10)+'" height="'+(r[3]-r[1]+10)+'" rx="6" fill="none" stroke="var(--pink)" stroke-width="2.5" opacity="0.8"/>';}
 function tangent(m,a,fa,sl,c){
  var d=(m.x1-m.x0)*0.30,p1=[a-d,fa-sl*d],p2=[a+d,fa+sl*d];
  return '<line x1="'+m.X(p1[0]).toFixed(1)+'" y1="'+m.Y(p1[1]).toFixed(1)+'" x2="'+m.X(p2[0]).toFixed(1)+
@@ -123,12 +126,11 @@ function tangent(m,a,fa,sl,c){
 
 function draw(){
  W=+document.getElementById('ws').value/100;
- H=Math.pow(10,+document.getElementById('hs').value/100);
- X=parseFloat(document.getElementById('xi').value);if(!isFinite(X))X=0;
+ X=+document.getElementById('xs').value/100;
  B=parseFloat(document.getElementById('bi').value);if(!isFinite(B))B=0;
  G=document.getElementById('gf').value;
  document.getElementById('wv').textContent=W.toFixed(2);
- document.getElementById('hv').textContent=H<0.01?H.toExponential(1):H.toFixed(3);
+ document.getElementById('xv').textContent=X.toFixed(2);
 
  var u=W*X+B,u2=(W+H)*X+B,z=g(u),z2=g(u2),
      du=u2-u,dz=z2-z,s='';
@@ -138,6 +140,7 @@ function draw(){
  for(i=0;i<=40;i++){var wv=wlo+(whi-wlo)*i/40,uv=wv*X+B;ulo=Math.min(ulo,uv);uhi=Math.max(uhi,uv);}
  ulo=Math.min(ulo,u,u2);uhi=Math.max(uhi,u,u2);
  var up=0.18*(uhi-ulo)+0.3,mA=mk(P[0],wlo,whi,ulo-up,uhi+up);
+ if(BP===4)s+=glow(P[0]);
  s+=axes(mA,'w','u = wx + b');
  s+=curve(mA,function(v){return v*X+B;},BLUE);
  s+=tangent(mA,W,u,X,BLUE);
@@ -153,6 +156,7 @@ function draw(){
      zlo=1e9,zhi=-1e9;
  for(i=0;i<=80;i++){var uv2=-hw+2*hw*i/80,zv=g(uv2);if(isFinite(zv)){zlo=Math.min(zlo,zv);zhi=Math.max(zhi,zv);}}
  var zp=0.18*(zhi-zlo)+0.15,mB=mk(P[1],-hw,hw,zlo-zp,zhi+zp);
+ if(BP===2)s+=glow(P[1]);
  s+=axes(mB,'u','z = '+gname()+'(u)');
  s+=curve(mB,g,WARM);
  s+=tangent(mB,u,z,gp(u),WARM);
@@ -167,6 +171,7 @@ function draw(){
  for(i=0;i<=80;i++){var wv3=wlo+(whi-wlo)*i/80,zv3=g(wv3*X+B);
   if(isFinite(zv3)){clo=Math.min(clo,zv3);chi=Math.max(chi,zv3);}}
  var cp=0.18*(chi-clo)+0.15,mC=mk(P[2],wlo,whi,clo-cp,chi+cp);
+ if(BP>=4)s+=glow(P[2]);
  s+=axes(mC,'w','z');
  s+=curve(mC,function(v){return g(v*X+B);},PINK);
  s+=tangent(mC,W,z,gp(u)*X,PINK);
@@ -182,7 +187,7 @@ function draw(){
  document.getElementById('stage').innerHTML=s;
  readout(u,z,du,dz);caption(u,z,du,dz);
 }
-function box(x,y,lab){return '<rect x="'+(x-27)+'" y="'+(y-20)+'" width="54" height="40" rx="8" fill="var(--surface)" stroke="var(--border-strong)" stroke-width="1.5"/>'+
+function box(x,y,lab,hot){return '<rect x="'+(x-27)+'" y="'+(y-20)+'" width="54" height="40" rx="8" fill="var(--surface)" stroke="'+(hot?'var(--pink)':'var(--border-strong)')+'" stroke-width="'+(hot?3:1.5)+'"/>'+
  TX(x,y+7,lab,'var(--text-primary)','middle');}
 function edge(x1,y1,x2,y2){return '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="var(--text-secondary)" stroke-width="1.6" marker-end="url(#ar)"/>';}
 function graph(u,z){
@@ -194,11 +199,11 @@ function graph(u,z){
  // main line: w -> x -> + -> g -> z
  s+=TX(NX[0],Y+6,'w','var(--text-primary)','middle');
  s+=edge(NX[0]+18,Y,NX[1]-29,Y);
- s+=box(NX[1],Y,'&#215;');
+ s+=box(NX[1],Y,'&#215;',BP===4);
  s+=edge(NX[1]+27,Y,NX[2]-29,Y);
- s+=box(NX[2],Y,'+');
+ s+=box(NX[2],Y,'+',BP===3);
  s+=edge(NX[2]+27,Y,NX[3]-29,Y);
- s+=box(NX[3],Y,gname());
+ s+=box(NX[3],Y,gname(),BP===2);
  s+=edge(NX[3]+27,Y,NX[4]-16,Y);
  s+=TX(NX[4],Y+6,'z','var(--text-primary)','middle');
  // side inputs, from below left
@@ -231,22 +236,27 @@ function graph(u,z){
  if(lit(3))s+=TX(NX[2]-114,XY+28,'&#8706;z/&#8706;b = '+f2(gpu),GC,'end','tn');
  // the chain, read straight off the graph
  if(lit(4))s+=TX(NX[4]+16,Y+96,'dz/dw = '+gname()+'&#8242;(u) &#183; 1 &#183; x = <tspan font-weight="500">'+f2(gpu*X)+'</tspan>',GC,'end');
- else s+=TX(NX[4]+16,Y+96,'press backpropagate',MC,'end','tn');
+ else s+=TX(NX[4]+16,Y+96,'step backward to fill these in',MC,'end','tn');
  return s;
 }
-function backprop(){
- if(bpanim)cancelAnimationFrame(bpanim);
- BP=0;draw();var t0=performance.now();
- (function st(now){var k=Math.min(4,Math.floor((now-t0)/450)+1);
-  if(k!==BP){BP=k;draw();}
-  bpanim=BP<4?requestAnimationFrame(st):null;})(t0);
-}
+var STEPS=[
+ 'forward pass done: every edge has its value. Nothing has been propagated back yet.',
+ 'step 1, the seed: &#8706;z/&#8706;z = 1. The output&rsquo;s derivative with respect to itself is one; everything else is built from it.',
+ 'step 2, back through g: &#8706;z/&#8706;u = &#8706;z/&#8706;z &#215; g&#8242;(u). A node multiplies the gradient by its own local slope, which here is the slope of the middle plot.',
+ 'step 3, back through +: &#8706;z/&#8706;(wx) = &#8706;z/&#8706;u &#215; 1. Addition passes the gradient straight through, and b receives the same one.',
+ 'step 4, back through &#215;: &#8706;z/&#8706;w = &#8706;z/&#8706;(wx) &#215; x. Multiplication hands each input the gradient times the <i>other</i> input, so w gets a factor of x and x gets a factor of w. That factor of x is the slope of the left plot, and the product is the slope of the right one.'];
+function stepBack(){if(BP<4){BP++;draw();}}
+function runAll(){BP=4;draw();}
+function resetBP(){BP=0;draw();}
+function flipx(){var el=document.getElementById('xs');el.value=-el.value;draw();}
 function readout(u,z,du,dz){
- var d=gp(u),rz=H!==0?dz/H:0;
+ var d=gp(u);
+ document.getElementById('stepv').textContent=BP?'step '+BP+' of 4':'forward pass done; nothing propagated yet';
+ document.getElementById('stepb').textContent=BP<4?'Step backward':'Done';
  document.getElementById('readout').innerHTML=
-  'w = <b>'+f1(W)+'</b> &#183; u = wx + b = <b>'+f2(u)+'</b> &#183; z = '+gname()+'(u) = <b>'+f2(z)+'</b>'+
-  '<br>&#916;z/&#916;w = <b>'+f2(rz)+'</b> for this nudge, and as the nudge shrinks it settles on '+
-  gname()+'&#8242;(u)&#183;x = '+f2(d)+' &#215; '+f1(X)+' = <b>'+f2(d*X)+'</b>';
+  'w = <b>'+f1(W)+'</b> &#183; x = <b>'+f1(X)+'</b> &#183; u = wx + b = <b>'+f2(u)+'</b> &#183; z = '+gname()+'(u) = <b>'+f2(z)+'</b>'+
+  (BP>=4?' &#183; dz/dw = '+f2(d)+' &#215; '+f1(X)+' = <b>'+f2(d*X)+'</b>':'')+
+  '<br>'+STEPS[BP];
 }
 function caption(u){
  var d=gp(u),h='';
@@ -271,15 +281,8 @@ function caption(u){
    'the stretch factor is 1 from the right and 0 from the left. Frameworks pick one and move on.</div>';
  document.getElementById('caption').innerHTML=h;
 }
-function shrink(){
- var sl=document.getElementById('hs'),from=+sl.value,to=-300,t0=performance.now();
- if(anim)cancelAnimationFrame(anim);
- (function st(now){var f=Math.min(1,(now-t0)/1400);
-  sl.value=Math.round(from+(to-from)*(f<0.5?2*f*f:1-Math.pow(-2*f+2,2)/2));
-  draw();anim=f<1?requestAnimationFrame(st):null;})(t0);
-}
-// drag the little x and b boxes as well as typing in them
-['xi','bi'].forEach(function(id){
+// drag the little b box as well as typing in it
+['bi'].forEach(function(id){
  var el=document.getElementById(id);
  el.addEventListener('pointerdown',function(e){
   var y0=e.clientY,v0=parseFloat(el.value)||0,moved=false;
@@ -291,8 +294,9 @@ function shrink(){
 });
 document.addEventListener('keydown',function(e){
  if(e.target.tagName==='INPUT'&&e.target.type==='number')return;
- if(e.key===' '||e.key==='Enter'){e.preventDefault();backprop();}
- else if(e.key==='s'||e.key==='S')shrink();
+ if(e.key===' '||e.key==='Enter'){e.preventDefault();if(BP<4)stepBack();else resetBP();}
+ else if(e.key==='f'||e.key==='F')flipx();
+ else if(e.key==='r'||e.key==='R')resetBP();
 });
 draw();
 </script>
