@@ -295,10 +295,13 @@ function draw(){
 }
 function readout(){
  var h,k=Math.floor(t),res=result();
+ // the beat in progress, or on a boundary the one just completed: the same rule
+ // the lit label uses
+ var kk=Math.ceil(t-1e-9)-1;
  if(t<=0)h='<b>Ax is a weighted sum of the columns of A.</b> x has one entry per column, and that entry says how much of the column to take.';
- else if(t<1)h='A comes apart into its '+C+' columns. Each is a vector with '+R+' entr'+(R>1?'ies':'y')+', and the geometry shows all '+C+' of them leaving the origin at once.';
- else if(t<2)h='The vector x rises, turns a quarter turn into a row, and deals one entry to each column: x'+SUB[0]+' to the first, x'+SUB[1]+' to the second, and so on.';
- else if(t<3){var e=[];for(var j=0;j<C;j++)e.push(par(X[j])+'a'+SUB[j%5]);
+ else if(kk===0)h='A comes apart into its '+C+' columns. Each is a vector with '+R+' entr'+(R>1?'ies':'y')+', and the geometry shows all '+C+' of them leaving the origin at once.';
+ else if(kk===1)h='The vector x rises, turns a quarter turn into a row, and deals one entry to each column: x'+SUB[0]+' to the first, x'+SUB[1]+' to the second, and so on.';
+ else if(kk===2){var e=[];for(var j=0;j<C;j++)e.push(par(X[j])+'a'+SUB[j%5]);
   h='Every column is stretched by its own coefficient, all at the same time: '+e.join(', ')+'.';}
  else if(t<4)h='The stretched columns line up tip to tail. Where the last one ends is <b>Ax</b>.';
  else h='<b>Ax = ('+res.map(fmt).join(', ')+')</b>, reached by taking '+X.map(fmt).join(', ')+' of the '+C+' columns and adding them.';
