@@ -9,6 +9,7 @@
 <style>
 .ts{font-size:20px}.tn{font-size:17px}
 #wrap{position:relative;flex:0 0 auto;height:clamp(320px,58vh,760px)}
+@media (max-width:820px){#wrap{height:auto;aspect-ratio:500/1370}}
 #wrap svg{position:absolute;inset:0;width:100%;height:100%}
 .mini{width:54px;height:32px;text-align:center;font-size:16px;font-variant-numeric:tabular-nums;
  border:1px solid var(--border-strong);border-radius:7px;background:var(--surface);color:var(--text-primary);
@@ -130,6 +131,7 @@ function tangent(m,a,fa,sl,c){
   '" y2="'+m.Y(p2[1]).toFixed(1)+'" stroke="'+c+'" stroke-width="1.2" stroke-dasharray="6 5" opacity="0.85"/>';
 }
 
+function mobile(){return !!(window.matchMedia&&window.matchMedia('(max-width:820px)').matches);}
 function draw(){
  W=+document.getElementById('ws').value/100;
  X=+document.getElementById('xs').value/100;
@@ -156,6 +158,7 @@ function draw(){
  s+='</g>';
  s+=TX((P[0][0]+P[0][2])/2,23,'slope here is x = '+f1(X),'var(--blue-ink)','middle','tn');
 
+ var pA=s;s='';
  // panel 2: z against u.  Its slope is g'(u), and that is the only place the
  // shape of g gets a say.  Same u range as the left plot's vertical axis.
  var zr=zrange(),mB=mk(P[1],-UMAX,UMAX,zr[0],zr[1]);
@@ -171,6 +174,7 @@ function draw(){
  s+='</g>';
  s+=TX((P[1][0]+P[1][2])/2,23,'slope here is '+gname()+'&#8242;(u) = '+f2(gp(u)),'var(--warm-ink)','middle','tn');
 
+ var pB=s;s='';
  // panel 3: the two links composed, on the left plot's w axis and the middle
  // plot's z axis
  var mC=mk(P[2],wlo,whi,zr[0],zr[1]);
@@ -184,12 +188,18 @@ function draw(){
  s+='</g>';
  s+=TX((P[2][0]+P[2][2])/2,23,'slope here is dz/dw = '+f2(gp(u)*X),'var(--pink-ink)','middle','tn');
 
+ var pC=s;
  // The computation graph.  Values flow left to right along the top of each
  // edge; the derivative of z with respect to whatever is on that edge sits
  // underneath, filled in from the right as backpropagation reaches it, each
  // one the previous one times the local derivative of the node in between.
- s+=graph(u,z);
- document.getElementById('stage').innerHTML=s;
+ // On a phone the three plots stack and the graph is drawn as a vertical chain.
+ var svg=document.querySelector('#wrap svg'),mob=mobile();
+ svg.setAttribute('viewBox',mob?'0 0 500 1370':'0 0 1440 520');
+ document.getElementById('stage').innerHTML=mob?
+  '<g>'+pA+'</g><g transform="translate(-475,270)">'+pB+'</g><g transform="translate(-950,540)">'+pC+'</g>'+
+  '<g transform="translate(0,810)">'+graphV(u,z)+'</g>':
+  pA+pB+pC+graph(u,z);
  readout(u,z,du,dz);caption(u,z,du,dz);
 }
 function box(x,y,lab,hot){return '<rect x="'+(x-27)+'" y="'+(y-20)+'" width="54" height="40" rx="8" fill="var(--surface)" stroke="'+(hot?'var(--pink)':'var(--border-strong)')+'" stroke-width="'+(hot?3:1.5)+'"/>'+
@@ -242,6 +252,48 @@ function graph(u,z){
  // the chain, read straight off the graph
  if(lit(4))s+=TX(NX[4]+16,Y+96,'dz/dw = '+gname()+'&#8242;(u) &#183; 1 &#183; x = <tspan font-weight="500">'+f2(gpu*X)+'</tspan>',GC,'end');
  else s+=TX(NX[4]+16,Y+96,'step backward to fill these in',MC,'end','tn');
+ return s;
+}
+
+// The same graph, top to bottom, for a phone: values to the right of each
+// edge, gradients to the left, side inputs coming in from the left.
+function graphV(u,z){
+ var s='',XC=300,gpu=gp(u),NY=[40,150,270,390,500],
+     lit=function(k){return BP>=k;},GC='var(--pink-ink)',VC='var(--blue-ink)',MC='var(--text-muted)';
+ function vedge(y1,y2){return '<line x1="'+XC+'" y1="'+y1+'" x2="'+XC+'" y2="'+y2+'" stroke="var(--text-secondary)" stroke-width="1.6" marker-end="url(#ar)"/>';}
+ s+=TX(250,14,'the same chain as a computation graph','var(--text-secondary)','middle','tn');
+ s+=TX(XC,NY[0]+7,'w','var(--text-primary)','middle');
+ s+=vedge(NY[0]+14,NY[1]-24);s+=box(XC,NY[1],'&#215;',BP===4);
+ s+=vedge(NY[1]+22,NY[2]-24);s+=box(XC,NY[2],'+',BP===3);
+ s+=vedge(NY[2]+22,NY[3]-24);s+=box(XC,NY[3],gname(),BP===2);
+ s+=vedge(NY[3]+22,NY[4]-14);s+=TX(XC,NY[4]+7,'z','var(--text-primary)','middle');
+ // side inputs come in level with their node, from the left
+ function side(k,name,val){var y=NY[k];
+  return TX(150,y+7,name,'var(--text-primary)','middle')+
+   '<line x1="164" y1="'+y+'" x2="'+(XC-30)+'" y2="'+y+'" stroke="var(--text-secondary)" stroke-width="1.6" marker-end="url(#ar)"/>'+
+   TX(136,y+7,name+' = '+f1(val),VC,'end','tn');}
+ s+=side(1,'x',X);s+=side(2,'b',B);
+ // forward values, right of each edge
+ function fv(y,t){return TX(XC+14,y,t,VC,'start','tn');}
+ s+=fv((NY[0]+NY[1])/2+6,'w = '+f1(W));
+ s+=fv((NY[1]+NY[2])/2+6,'wx = '+f2(W*X));
+ s+=fv((NY[2]+NY[3])/2+6,'u = '+f2(u));
+ s+=fv((NY[3]+NY[4])/2+6,'z = '+f2(z));
+ // local derivatives, right of each node
+ s+=TX(XC+36,NY[1]+6,'&#8706;(wx)/&#8706;w = x',MC,'start','tn');
+ s+=TX(XC+36,NY[2]+6,'&#8706;u/&#8706;(wx) = 1',MC,'start','tn');
+ s+=TX(XC+36,NY[3]+6,gname()+'&#8242;(u) = '+f2(gpu),MC,'start','tn');
+ // gradients, left of each edge, lit from the bottom
+ function gv(y,k,t,t2){if(!lit(k))return TX(XC-14,y,'&#8706;z/&#8706;? &middot;&middot;&middot;',MC,'end','tn');
+  return TX(XC-14,y-4,t,GC,'end','tn')+(t2?TX(XC-14,y+14,t2,GC,'end','tn'):'');}
+ s+=gv((NY[3]+NY[4])/2+6,1,'&#8706;z/&#8706;z = 1','start here');
+ s+=gv((NY[2]+NY[3])/2+6,2,'&#8706;z/&#8706;u = '+f2(gpu),'= 1 &#215; '+gname()+'&#8242;(u)');
+ s+=gv((NY[1]+NY[2])/2+6,3,'&#8706;z/&#8706;(wx) = '+f2(gpu),'= '+f2(gpu)+' &#215; 1');
+ s+=gv((NY[0]+NY[1])/2+6,4,'&#8706;z/&#8706;w = '+f2(gpu*X),'= '+f2(gpu)+' &#215; '+f1(X));
+ if(lit(4))s+=TX(136,NY[1]+27,'&#8706;z/&#8706;x = '+f2(gpu*W),GC,'end','tn');
+ if(lit(3))s+=TX(136,NY[2]+27,'&#8706;z/&#8706;b = '+f2(gpu),GC,'end','tn');
+ if(lit(4))s+=TX(250,NY[4]+48,'dz/dw = '+gname()+'&#8242;(u) &#183; 1 &#183; x = <tspan font-weight="500">'+f2(gpu*X)+'</tspan>',GC,'middle');
+ else s+=TX(250,NY[4]+48,'step backward to fill these in',MC,'middle','tn');
  return s;
 }
 var STEPS=[

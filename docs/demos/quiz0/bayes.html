@@ -9,6 +9,7 @@
 <style>
 .ts{font-size:19px}.tn{font-size:16px}
 #wrap{position:relative;flex:0 0 auto;height:clamp(300px,50vh,620px)}
+@media (max-width:820px){#wrap{height:auto;aspect-ratio:520/1320}}
 #wrap canvas,#wrap svg{position:absolute;inset:0;width:100%;height:100%}
 #wrap svg{pointer-events:none}
 .mini{width:62px;height:32px;text-align:center;font-size:16px;font-variant-numeric:tabular-nums;
@@ -127,10 +128,12 @@ function layoutVenn(){
  for(i=0;i<fpS.length;i++)SLOT[k++]=fpS[i];
  for(i=0;i<tnS.length;i++)SLOT[k++]=tnS[i];
 }
+function mobile(){return !!(window.matchMedia&&window.matchMedia('(max-width:820px)').matches);}
 function fit(){
  var r=cv.getBoundingClientRect(),d=window.devicePixelRatio||1;
  if(cv.width!==Math.round(r.width*d)||cv.height!==Math.round(r.height*d)){cv.width=Math.round(r.width*d);cv.height=Math.round(r.height*d);}
- var s=Math.min(r.width/1440,r.height/440),ox=(r.width-1440*s)/2,oy=(r.height-440*s)/2;
+ var VB=mobile()?[520,1320]:[1440,440],
+     s=Math.min(r.width/VB[0],r.height/VB[1]),ox=(r.width-VB[0]*s)/2,oy=(r.height-VB[1]*s)/2;
  ctx.setTransform(d*s,0,0,d*s,d*ox,d*oy);
  ctx.clearRect(-ox/s,-oy/s,r.width/s,r.height/s);
 }
@@ -176,6 +179,7 @@ function labels(e){
  var ly=GY+gw+22;
  s+=TX(GX,ly,'<tspan fill="'+C_TP+'">&#9632;</tspan> sick, positive '+fmtN(nTP)+'   <tspan fill="'+C_FN+'">&#9632;</tspan> sick, negative '+fmtN(nFN),'var(--text-muted)','start','tn');
  s+=TX(GX,ly+19,'<tspan fill="'+C_FP+'">&#9632;</tspan> well, positive '+fmtN(nFP)+'   <tspan fill="'+C_TN+'">&#9632;</tspan> well, negative '+fmtN(nTN),'var(--text-muted)','start','tn');
+ var band0=s;s='';
  // the chosen probability, as a fraction of one region
  var FX=470,FY=70;
  s+=TX(FX,FY-30,'the highlighted fraction','var(--text-secondary)','start');
@@ -190,6 +194,7 @@ function labels(e){
 
  s+=TX(FX,FY+178,'Every conditional probability is the same move:','var(--text-muted)','start','tn');
  s+=TX(FX,FY+200,'pick a circle, look inside it. The quiz asks the first one.','var(--text-muted)','start','tn');
+ var band1=s;s='';
  // the tree
  var TX0=960,TY=64;
  s+=TX(TX0+200,TY-24,'the same counts, as a tree','var(--text-secondary)','middle');
@@ -212,7 +217,10 @@ function labels(e){
   s+='<g opacity="'+o+'">'+node(L[0],TY+190,L[1],L[3])+node(L[0],TY+210,L[2],L[3])+'</g>';
   if(inDen[L[4]])s+='<rect x="'+(L[0]-34)+'" y="'+(TY+174)+'" width="68" height="44" rx="6" fill="none" stroke="'+(inNum[L[4]]?'var(--green)':'var(--border-strong)')+'" stroke-width="'+(inNum[L[4]]?2:1)+'" stroke-dasharray="'+(inNum[L[4]]?'':'4 3')+'"/>';}
  s+=TX(TX0+200,TY+252,'solid box: the numerator &#183; dashed: the rest of the denominator','var(--text-muted)','middle','tn');
- document.getElementById('lab').innerHTML=s;
+ var svg=document.querySelector('#wrap svg'),mob=mobile();
+ svg.setAttribute('viewBox',mob?'0 0 520 1320':'0 0 1440 440');
+ document.getElementById('lab').innerHTML=mob?
+  '<g>'+band0+'</g><g transform="translate(-460,440)">'+band1+'</g><g transform="translate(-920,880)">'+s+'</g>':band0+band1+s;
 }
 function readout(){
  var P=PROBS[SEL],nn=count(P.num),dd=count(P.den),
