@@ -26,7 +26,8 @@ input.cel[type=number]{-moz-appearance:textfield}
 .brk:before{left:0;border-right:0;border-radius:3px 0 0 3px}
 .brk:after{right:0;border-left:0;border-radius:0 3px 3px 0}
 .phases{display:flex;gap:0;font-size:13.5px;color:var(--text-muted);margin-top:-2px}
-.phases span{flex:1;text-align:center;padding:2px 0;border-top:2px solid var(--border)}
+.phases span{flex:1;text-align:center;padding:4px 0;border-top:2px solid var(--border);cursor:pointer;user-select:none}
+.phases span:hover{color:var(--text-primary);background:var(--surface-1)}
 .phases span.on{color:var(--text-primary);border-top-color:var(--blue)}
 .dim{font-size:15px;color:var(--text-secondary)}
 select.sm{height:34px;padding:0 6px;font-size:15px}
@@ -62,14 +63,14 @@ select.sm{height:34px;padding:0 6px;font-size:15px}
 <div class="row">
 <span class="klab">build</span>
 <input type="range" id="ts" min="0" max="400" step="1" value="0" oninput="setT(+this.value/100,1)">
-<span class="knum" id="tv">0.00</span>
+<button id="nxt" onclick="nextStep()">Next step &rarr;</button>
 <!-- the orbit control keeps its box even when hidden, so the figure is the same
      height in two and three dimensions -->
 <span id="orb" style="visibility:hidden;display:inline-flex;align-items:center;gap:8px;margin-left:14px"><span class="dim">turn</span>
 <input type="range" id="az" min="-180" max="180" step="1" value="32" oninput="draw()" style="flex:0 0 130px;min-width:130px"></span>
 </div>
 <div class="phases" id="ph">
- <span>split</span><span>transpose</span><span>scale</span><span>add</span></div>
+ <span onclick="gotoStep(0)">split</span><span onclick="gotoStep(1)">transpose</span><span onclick="gotoStep(2)">scale</span><span onclick="gotoStep(3)">add</span></div>
 <div class="rd" id="readout"></div>
 <div class="cap" id="caption"></div>
 
@@ -79,7 +80,7 @@ var COL=['#378ADD','#BA7517','#7F77DD','#D85A30','#A0518F'];
 var INK=['var(--blue-ink)','var(--warm-ink)','var(--violet-ink)','var(--orange-ink)','#8A3F7B'];
 var SUB=['₁','₂','₃','₄','₅'];
 var CW=44,CH=30,SG=40,GX=40;
-var t=0,playing=false,raf=null,last=0;
+var t=0,playing=false,raf=null,last=0,STOP=4;
 var els={};
 
 function cl(v){return Math.max(0,Math.min(1,v));}
@@ -285,11 +286,11 @@ function draw(){
  if(!gbA)fitGeo();
  layoutAlg();
  document.getElementById('stage').innerHTML=drawGeo();
- document.getElementById('tv').textContent=t.toFixed(2);
  document.getElementById('ts').value=Math.round(t*100);
- var k=Math.min(3,Math.floor(t));
+ var k=Math.min(3,Math.ceil(t-1e-9)-1);
  var sp=document.getElementById('ph').children;
  for(var i=0;i<4;i++)sp[i].classList.toggle('on',t>0&&i===k);
+ document.getElementById('nxt').textContent=t>=4?'Start over':'Next step \u2192';
  readout();caption();
 }
 function readout(){
@@ -322,15 +323,22 @@ function caption(){
 function setT(v,stop){t=Math.max(0,Math.min(4,v));if(stop)pause();draw();}
 function step(now){
  var dt=Math.min(0.05,(now-last)/1000);last=now;
- if(playing){t+=dt*0.85;if(t>=4){t=4;pause();}}
+ if(playing){t+=dt*0.85;if(t>=STOP){t=STOP;pause();}}
  draw();
  raf=playing?requestAnimationFrame(step):null;
 }
 function pause(){playing=false;document.getElementById('play').textContent=t>=4?'Replay':'Play';
  if(raf){cancelAnimationFrame(raf);raf=null;}}
 function toggle(){if(playing){pause();return;}
- if(t>=4)t=0;playing=true;document.getElementById('play').textContent='Pause';
+ if(t>=4)t=0;STOP=4;playing=true;document.getElementById('play').textContent='Pause';
  last=performance.now();raf=requestAnimationFrame(step);}
+// Next step plays one beat and stops; a step label jumps straight to that beat's end.
+function nextStep(){
+ if(playing)pause();
+ if(t>=4){t=0;draw();}
+ STOP=Math.min(4,Math.floor(t+1e-9)+1);playing=true;document.getElementById('play').textContent='Pause';
+ last=performance.now();raf=requestAnimationFrame(step);}
+function gotoStep(k){setT(k+1,1);}
 function setdim(){
  var nr=+document.getElementById('rows').value,nc=+document.getElementById('cols').value,i,j;
  var B=[];
@@ -358,7 +366,8 @@ window.addEventListener('resize',function(){fitGeo();draw();});
 if(window.ResizeObserver)new ResizeObserver(function(){draw();}).observe(document.getElementById('alg'));
 document.addEventListener('keydown',function(e){
  if(e.target.tagName==='INPUT'&&e.target.type==='number')return;
- if(e.key===' '||e.key==='Enter'){e.preventDefault();toggle();}
+ if(e.key===' '){e.preventDefault();toggle();}
+ else if(e.key==='Enter'){e.preventDefault();nextStep();}
  else if(e.key==='ArrowLeft')setT(t-0.1,1);
  else if(e.key==='ArrowRight')setT(t+0.1,1);
  else if(e.key==='n'||e.key==='N')rnd();
