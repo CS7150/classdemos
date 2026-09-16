@@ -10,6 +10,7 @@
 .ts{font-size:18px}.tn{font-size:15.5px}
 #wrap{position:relative}
 #wrap svg{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+@media (max-width:820px){#wrap{height:auto;aspect-ratio:500/1380}}
 #wrap svg.grab{cursor:grab}
 #wrap svg.grab:active{cursor:grabbing}
 .cap b.f{font-weight:500;color:var(--text-primary);font-variant-numeric:tabular-nums}
@@ -323,12 +324,21 @@ function drawGeom(){
  return s;
 }
 
+// On a narrow screen the three panes stack.  Each pane is drawn exactly as on a
+// desktop and then translated into its band, and pointer coordinates are mapped
+// back in svgPt, so every drag and click works the same way in both layouts.
+var PANE=[[0,0],[-490,460],[-945,920]];
+function mobile(){return !!(window.matchMedia&&window.matchMedia('(max-width:820px)').matches);}
 function draw(){
  setRange();
- document.getElementById('stage').innerHTML=
+ var svg=document.querySelector('#wrap svg'),mob=mobile(),
+     a=drawAlg(),d=drawData(),g=drawGeom();
+ svg.setAttribute('viewBox',mob?'0 0 500 1380':'0 0 1440 460');
+ document.getElementById('stage').innerHTML=mob?
+  '<g>'+a+'</g><g transform="translate('+PANE[1][0]+','+PANE[1][1]+')">'+d+'</g><g transform="translate('+PANE[2][0]+','+PANE[2][1]+')">'+g+'</g>':
   '<line x1="'+(520+OFF)+'" y1="30" x2="'+(520+OFF)+'" y2="446" stroke="var(--border-strong)" stroke-width="0.5"/>'+
   '<line x1="'+(OFF+22)+'" y1="30" x2="'+(OFF+22)+'" y2="446" stroke="var(--border-strong)" stroke-width="0.5"/>'+
-  drawAlg()+drawData()+drawGeom();
+  a+d+g;
  readout();caption();
 }
 function readout(){
@@ -368,7 +378,9 @@ function svgPt(e){
  var svg=document.querySelector('#wrap svg'),m=svg.getScreenCTM();
  if(!m)return null;
  var p=svg.createSVGPoint();p.x=e.clientX;p.y=e.clientY;
- return p.matrixTransform(m.inverse());
+ var q=p.matrixTransform(m.inverse()),r={x:q.x,y:q.y};
+ if(mobile()){var band=r.y>=920?2:(r.y>=460?1:0);r.x-=PANE[band][0];r.y-=PANE[band][1];}
+ return r;
 }
 function nearest(p){
  var bi=-1,bd=1e9;
@@ -422,6 +434,7 @@ document.addEventListener('keydown',function(e){
  else if(e.key==='n'||e.key==='N'){fresh();}
  else if(e.key==='s'||e.key==='S'){var c=document.getElementById('sq');c.checked=!c.checked;draw();}
 });
+window.addEventListener('resize',draw);
 gen();bindDrag();setp(2);
 </script>
 </body>
