@@ -17,6 +17,8 @@ button,select{height:33px;font-size:13.5px;padding:0 10px}
 .knum{font-size:13px;min-width:auto}
 .rd{font-size:14px;line-height:1.5}
 .cap{font-size:12.5px;line-height:1.5;padding-top:5px}
+label.cb{font-size:13px}
+input[type=checkbox]{width:16px;height:16px}
 </style>
 </head>
 <body>
@@ -47,6 +49,8 @@ button,select{height:33px;font-size:13.5px;padding:0 10px}
   <span class="klab" style="color:var(--text-muted)">range&plusmn;</span>
   <input type="range" id="yrange" min="1" max="6" step="0.2" value="3.4" oninput="onChartRange()" style="width:50px">
   <span class="knum" id="yrangeVal">3.4</span>
+  <label class="cb"><input type="checkbox" id="showMean" checked onchange="draw()"> mean</label>
+  <label class="cb"><input type="checkbox" id="showRMS" checked onchange="draw()"> RMS</label>
 </div>
 
 <div class="rd" id="readout"></div>
@@ -117,16 +121,24 @@ function draw(){
   var plotW=VW-padL-padR, plotH=VH-padT-padB;
   var cy=padT+plotH/2, scaleY=(plotH/2)/yMax;
   var barW=plotW/W*0.62, gap=plotW/W;
+  var showMean=document.getElementById('showMean').checked;
+  var showRMS=document.getElementById('showRMS').checked;
   // zero line
   g.appendChild(el('line',{x1:padL,y1:cy,x2:VW-padR,y2:cy,stroke:'var(--border-strong)','stroke-width':1}));
   // RMS band
-  var rmsTop=cy-rms*scaleY, rmsBot=cy+rms*scaleY;
-  g.appendChild(el('rect',{x:padL,y:rmsTop,width:plotW,height:rmsBot-rmsTop,fill:'var(--warm)',opacity:0.08}));
-  g.appendChild(el('line',{x1:padL,y1:rmsTop,x2:VW-padR,y2:rmsTop,stroke:'var(--warm-ink)','stroke-width':1.1,'stroke-dasharray':'5 3',opacity:0.85}));
-  g.appendChild(el('line',{x1:padL,y1:rmsBot,x2:VW-padR,y2:rmsBot,stroke:'var(--warm-ink)','stroke-width':1.1,'stroke-dasharray':'5 3',opacity:0.85}));
+  if(showRMS){
+    var rmsTop=cy-rms*scaleY, rmsBot=cy+rms*scaleY;
+    g.appendChild(el('rect',{x:padL,y:rmsTop,width:plotW,height:rmsBot-rmsTop,fill:'var(--warm)',opacity:0.08}));
+    g.appendChild(el('line',{x1:padL,y1:rmsTop,x2:VW-padR,y2:rmsTop,stroke:'var(--warm-ink)','stroke-width':1.1,'stroke-dasharray':'5 3',opacity:0.85}));
+    g.appendChild(el('line',{x1:padL,y1:rmsBot,x2:VW-padR,y2:rmsBot,stroke:'var(--warm-ink)','stroke-width':1.1,'stroke-dasharray':'5 3',opacity:0.85}));
+    var trms=el('text',{x:VW-padR,y:rmsTop-4,class:'tn gl','text-anchor':'end'}); trms.textContent='RMS = '+fmt(rms); g.appendChild(trms);
+  }
   // mean line
-  var meanY=cy-mean*scaleY;
-  g.appendChild(el('line',{x1:padL,y1:meanY,x2:VW-padR,y2:meanY,stroke:'var(--green-ink)','stroke-width':1.8}));
+  if(showMean){
+    var meanY=cy-mean*scaleY;
+    g.appendChild(el('line',{x1:padL,y1:meanY,x2:VW-padR,y2:meanY,stroke:'var(--green-ink)','stroke-width':1.8}));
+    var tmean=el('text',{x:VW-padR,y:meanY-4,class:'ts gl','text-anchor':'end'}); tmean.textContent='mean = '+fmt(mean); g.appendChild(tmean);
+  }
   // bars
   for(var i=0;i<n;i++){
     var v=hist[i], x=padL+i*gap+ (gap-barW)/2;
@@ -134,8 +146,6 @@ function draw(){
     g.appendChild(el('rect',{x:x,y:by,width:barW,height:Math.max(bh,0.6),
       fill:v>=0?'var(--blue)':'var(--blue-ink)',opacity:i===n-1?1:0.7}));
   }
-  var t1=el('text',{x:VW-padR,y:rmsTop-4,class:'tn gl','text-anchor':'end'}); t1.textContent='RMS = '+fmt(rms); g.appendChild(t1);
-  var t2=el('text',{x:VW-padR,y:meanY-4,class:'ts gl','text-anchor':'end'}); t2.textContent='mean = '+fmt(mean); g.appendChild(t2);
 
   if(runN===0){
     document.getElementById('readout').innerHTML = 'No samples yet &mdash; press Play or Step to start streaming.';
