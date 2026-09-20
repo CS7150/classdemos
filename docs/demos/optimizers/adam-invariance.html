@@ -20,6 +20,7 @@ h1{font-size:19px;margin-top:2px}
 .formula .f{font-size:clamp(12px,2.2vw,15px);line-height:1.25}
 label.cb{font-size:11.5px}
 input[type=checkbox]{width:13px;height:13px}
+input[type=range]:disabled{opacity:.35}
 @media (max-width:640px){.formula{display:none}}
 .row{gap:7px}
 button,select{height:30px;font-size:13px;padding:0 9px}
@@ -44,21 +45,21 @@ button,select{height:30px;font-size:13px;padding:0 9px}
 <div class="formula">
   <div class="fitem">
     <div class="f" style="color:var(--orange-ink)">
-      <div class="texline" data-tex="z \leftarrow z - \eta K g"></div>
+      <div class="texline" id="texSgdZ"></div>
     </div>
     <label class="cb"><input type="checkbox" id="showSGD" checked onchange="draw()"> <span style="color:var(--orange-ink)">&mdash;</span> SGD</label>
   </div>
   <div class="fitem">
     <div class="f" style="color:var(--green-ink)">
-      <div class="texline" data-tex="v \leftarrow \beta_1 v + (1-\beta_1) Kg"></div>
-      <div class="texline" data-tex="z \leftarrow z - \eta v"></div>
+      <div class="texline" id="texMomM"></div>
+      <div class="texline" data-tex="z \leftarrow z - \eta m"></div>
     </div>
     <label class="cb"><input type="checkbox" id="showMom" checked onchange="draw()"> <span style="color:var(--green-ink)">&mdash;</span> momentum</label>
   </div>
   <div class="fitem">
     <div class="f" style="color:var(--blue-ink)">
-      <div class="texline" data-tex="m \leftarrow \beta_1 m + (1-\beta_1) Kg"></div>
-      <div class="texline" data-tex="v \leftarrow \beta_2 v + (1-\beta_2) (Kg)^2"></div>
+      <div class="texline" id="texAdamM"></div>
+      <div class="texline" id="texAdamV"></div>
       <div class="texline" data-tex="z \leftarrow z - \eta \dfrac{\hat m}{\sqrt{\hat v}}"></div>
     </div>
     <label class="cb"><input type="checkbox" id="showAdam" checked onchange="draw()"> <span style="color:var(--blue-ink)">&mdash;</span> Adam</label>
@@ -87,13 +88,14 @@ button,select{height:30px;font-size:13px;padding:0 9px}
   <span class="klab">&eta;</span>
   <input type="range" id="lr" min="-2" max="-0.5" step="0.01" value="-0.921" oninput="onParams()" style="width:70px">
   <span class="knum" id="lrVal">0.120</span>
+  <label class="cb"><input type="checkbox" id="useK" onchange="onParams()"> include K</label>
   <span class="klab">gradient scale K</span>
-  <input type="range" id="kscale" min="-1" max="1" step="0.02" value="0" oninput="onParams()" style="width:90px">
+  <input type="range" id="kscale" min="-1" max="1" step="0.02" value="0" oninput="onParams()" style="width:90px" disabled>
   <span class="knum" id="kVal">1.0&times;</span>
 </div>
 
 <div class="rd" id="readout"></div>
-<div class="cap">Hats denote bias-corrected EMAs (&mdash; divided by 1&minus;&beta;<sub>1</sub><sup>t</sup> or 1&minus;&beta;<sub>2</sub><sup>t</sup>). Scaling g by K scales Adam's m and &radic;v equally, so K cancels &mdash; SGD and momentum have no such cancellation. Drag the 3D surface to rotate it.</div>
+<div class="cap">Check "include K" to rescale every gradient by K and watch what happens. Hats denote bias-corrected EMAs (divided by 1&minus;&beta;<sub>1</sub><sup>t</sup> or 1&minus;&beta;<sub>2</sub><sup>t</sup>). Scaling g by K scales Adam's m and &radic;v equally, so K cancels &mdash; SGD and momentum have no such cancellation. Drag the 3D surface to rotate it.</div>
 
 <script>
 var NS='http://www.w3.org/2000/svg';
@@ -128,7 +130,7 @@ function startPoint(){
 function resetTraj(){
   var p=startPoint();
   sgd = {x:p[0],y:p[1],iter:0,path:[[p[0],p[1]]],diverged:false};
-  mom = {x:p[0],y:p[1],iter:0,path:[[p[0],p[1]]],vx:0,vy:0,diverged:false,lastStep:0};
+  mom = {x:p[0],y:p[1],iter:0,path:[[p[0],p[1]]],mx:0,my:0,diverged:false,lastStep:0};
   adam = {x:p[0],y:p[1],iter:0,path:[[p[0],p[1]]],mx:0,my:0,vx:0,vy:0,diverged:false,lastStep:0};
   draw();
 }
@@ -142,9 +144,9 @@ function stepOnce(){
   }
   if(!mom.diverged){
     var gm=grad(mom.x,mom.y), gmx=K*gm[0], gmy=K*gm[1];
-    mom.vx = beta1*mom.vx + (1-beta1)*gmx;
-    mom.vy = beta1*mom.vy + (1-beta1)*gmy;
-    var dxm=lr*mom.vx, dym=lr*mom.vy;
+    mom.mx = beta1*mom.mx + (1-beta1)*gmx;
+    mom.my = beta1*mom.my + (1-beta1)*gmy;
+    var dxm=lr*mom.mx, dym=lr*mom.my;
     mom.lastStep=Math.hypot(dxm,dym);
     var nxm=mom.x-dxm, nym=mom.y-dym;
     mom.x=nxm; mom.y=nym; mom.iter++; mom.path.push([nxm,nym]);
@@ -178,6 +180,20 @@ function setRunning(r){
 }
 function toggleRun(){ setRunning(!running); }
 
+function renderFormulas(){
+  var useK=document.getElementById('useK').checked;
+  var Kg = useK ? 'Kg' : 'g';
+  var texs = {
+    texSgdZ:  'z \\leftarrow z - \\eta ' + Kg,
+    texMomM:  'm \\leftarrow \\beta_1 m + (1-\\beta_1) ' + Kg + ' = \\mathrm{EMA}_{\\beta_1}(' + Kg + ')',
+    texAdamM: 'm \\leftarrow \\beta_1 m + (1-\\beta_1) ' + Kg + ' = \\mathrm{EMA}_{\\beta_1}(' + Kg + ')',
+    texAdamV: 'v \\leftarrow \\beta_2 v + (1-\\beta_2) ' + (useK?'(Kg)^2':'g^2') + ' = \\mathrm{EMA}_{\\beta_2}(' + (useK?'(Kg)^2':'g^2') + ')'
+  };
+  Object.keys(texs).forEach(function(id){
+    katex.render(texs[id], document.getElementById(id), {throwOnError:false});
+  });
+}
+
 function onParams(){
   a=parseFloat(document.getElementById('aniso').value);
   thetaDeg=parseFloat(document.getElementById('tilt').value);
@@ -186,9 +202,12 @@ function onParams(){
   computeQ();
   lr=Math.pow(10, parseFloat(document.getElementById('lr').value));
   document.getElementById('lrVal').textContent=lr.toFixed(3);
+  var useK=document.getElementById('useK').checked;
+  document.getElementById('kscale').disabled=!useK;
   var slider=parseFloat(document.getElementById('kscale').value);
-  K=Math.pow(10, slider);
+  K = useK ? Math.pow(10, slider) : 1;
   document.getElementById('kVal').textContent=(K<1?K.toFixed(2):K.toFixed(1))+'×';
+  renderFormulas();
   setRunning(false); resetTraj();
 }
 
@@ -360,7 +379,7 @@ function endDrag(){ dragging=false; stage.style.cursor = view==='3d' ? 'grab' : 
 stage.addEventListener('pointerup', endDrag);
 stage.addEventListener('pointercancel', endDrag);
 
-document.querySelectorAll('.texline').forEach(function(el){
+document.querySelectorAll('.texline[data-tex]').forEach(function(el){
   katex.render(el.getAttribute('data-tex'), el, {throwOnError:false});
 });
 onParams();
