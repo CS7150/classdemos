@@ -17,7 +17,8 @@ h1{font-size:19px;margin-top:2px}
 .formula{flex:1;display:flex;flex-direction:column;justify-content:center;gap:9px;
   border-left:1px solid var(--border);padding-left:10px;min-width:0}
 .formula .fitem{display:flex;flex-direction:column;gap:2px}
-.formula .f{font-size:clamp(14px,2.6vw,18px);line-height:1.28}
+.formula .f{font-size:clamp(15px,2.6vw,19px);line-height:1.3;white-space:nowrap}
+.formula .f .katex{color:inherit}
 @media (max-width:640px){.formula{display:none}}
 .row{gap:7px}
 button,select{height:30px;font-size:13px;padding:0 9px}
@@ -25,8 +26,9 @@ button,select{height:30px;font-size:13px;padding:0 9px}
 .knum{font-size:12.5px;min-width:auto}
 .rd{font-size:13.5px;line-height:1.4;min-height:1.4em}
 .cap{font-size:12px;line-height:1.4;padding-top:4px}
-label.cb{font-size:20px;display:flex;align-items:center;gap:6px}
-input[type=checkbox]{width:15px;height:15px}
+label.cb{font-size:20px;display:flex;align-items:center;gap:6px;margin-bottom:10px}
+.warn{color:var(--red)}
+input[type=checkbox]{width:18px;height:18px}
 </style>
 </head>
 <body>
@@ -56,7 +58,7 @@ input[type=checkbox]{width:15px;height:15px}
 </div>
 
 <div class="row">
-  <button class="main" id="run" onclick="toggleRun()">Play</button>
+  <button class="main" id="run" onclick="toggleRun()">Run</button>
   <button onclick="stepOnce()">Step</button>
   <button onclick="resetStream()">Reset</button>
   <button onclick="presetConsistent()">consistent</button>
@@ -107,7 +109,7 @@ function stepOnce(){
 var running=false, timer=null;
 function setRunning(r){
   running=r;
-  document.getElementById('run').textContent=r?'Pause':'Play';
+  document.getElementById('run').textContent=r?'Pause':'Run';
   if(r){ timer=setInterval(stepOnce, 160); } else clearInterval(timer);
 }
 function toggleRun(){ setRunning(!running); }
@@ -169,13 +171,13 @@ function draw(){
   }
 
   if(runN===0){
-    document.getElementById('readout').innerHTML = 'No samples yet &mdash; press Play or Step to start streaming.';
+    document.getElementById('readout').innerHTML = 'No samples yet &mdash; press Run or Step to start streaming.';
   } else {
     var ratio=Math.abs(mean)/(rms||1e-9);
     var verdict = ratio>0.6 ? 'consistent sign &rarr; safe to move fast'
       : ratio>0.25 ? 'somewhat mixed'
       : 'flips sign often &rarr; Adam slows down here';
-    document.getElementById('readout').innerHTML = 'N = <b class="num">'+runN+'</b> &middot; mean = <span class="num">'+fmt(mean)+
+    document.getElementById('readout').innerHTML = 't = <b class="num">'+runN+'</b> &middot; mean = <span class="num">'+fmt(mean)+
       '</span> &middot; RMS = <span class="num">'+fmt(rms)+'</span> &middot; |mean|/RMS = <span class="num">'+fmt(ratio)+'</span> &mdash; '+verdict+'.';
   }
 }
