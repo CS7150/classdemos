@@ -19,7 +19,7 @@ h1{font-size:19px;margin-top:2px}
 .formula .fitem{display:flex;flex-direction:column;gap:2px}
 .formula .f{font-size:clamp(14px,2.7vw,18px);line-height:1.25}
 @media (max-width:640px){.formula{display:none}}
-label.cb{font-size:12px}
+label.cb{font-size:20px;display:flex;align-items:center;gap:6px}
 input[type=checkbox]{width:14px;height:14px}
 .row{gap:7px}
 button,select{height:30px;font-size:13px;padding:0 9px}
@@ -33,7 +33,7 @@ button,select{height:30px;font-size:13px;padding:0 9px}
 <body>
 <div class="nav"><a href="./">&larr; Optimization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
 <h1>EMA and bias correction</h1>
-<p class="quiz">The raw EMA* starts at zero no matter what the data is, so a constant signal is dramatically underestimated at first. The bias-corrected EMA fixes that instantly &mdash; then behaves like an ordinary (lagging) moving average once the data itself changes.</p>
+<p class="quiz">Unlike a running average, which averages every point forever, the exponential moving average (EMA) smoothly averages a window of recent points. But the raw EMA starts at zero even if the data starts nonzero, which can dramatically underestimate signals at first. The bias-corrected <span class="texline" data-tex="\hat{\mathrm{EMA}}" style="display:inline-block"></span> fixes that instantly, then after the start behaves like a moving EMA average.</p>
 
 <div id="wrap">
 <svg id="stage" viewBox="0 0 640 300" role="img" preserveAspectRatio="xMidYMid meet">
@@ -45,19 +45,19 @@ button,select{height:30px;font-size:13px;padding:0 9px}
     <div class="f" style="color:var(--green-ink)">
       <div class="texline" data-tex="\mathrm{Avg} \leftarrow \mathrm{Avg} + \dfrac{x-\mathrm{Avg}}{t}"></div>
     </div>
-    <label class="cb"><input type="checkbox" id="showAvg" checked onchange="draw()"> <span style="color:var(--green-ink)">&mdash;</span> equal average forever</label>
+    <label class="cb"><input type="checkbox" id="showAvg" checked onchange="draw()"> equal average forever</label>
   </div>
   <div class="fitem">
     <div class="f" style="color:var(--warm-ink)">
-      <div class="texline" data-tex="\mathrm{EMA}^* \leftarrow \beta\,\mathrm{EMA}^* + (1-\beta)x"></div>
+      <div class="texline" data-tex="\mathrm{EMA} \leftarrow \beta\,\mathrm{EMA} + (1-\beta)x"></div>
     </div>
-    <label class="cb"><input type="checkbox" id="showStar" checked onchange="draw()"> <span style="color:var(--warm-ink)">&mdash;</span> raw EMA*</label>
+    <label class="cb"><input type="checkbox" id="showStar" checked onchange="draw()"> EMA</label>
   </div>
   <div class="fitem">
     <div class="f" style="color:var(--blue-ink)">
-      <div class="texline" data-tex="\mathrm{EMA} = \dfrac{\mathrm{EMA}^*}{1-\beta^t}"></div>
+      <div class="texline" data-tex="\hat{\mathrm{EMA}} = \dfrac{\mathrm{EMA}}{1-\beta^t}"></div>
     </div>
-    <label class="cb"><input type="checkbox" id="showEma" checked onchange="draw()"> <span style="color:var(--blue-ink)">&mdash;</span> bias-corrected EMA</label>
+    <label class="cb"><input type="checkbox" id="showEma" checked onchange="draw()"> corrected EMA</label>
   </div>
 </div>
 </div>
@@ -77,7 +77,7 @@ button,select{height:30px;font-size:13px;padding:0 9px}
 </div>
 
 <div class="rd" id="readout"></div>
-<div class="cap">Grey dots = raw data x<sub>t</sub>. The equal-forever average weighs every past sample the same, so after the step's jump it drags along very slowly &mdash; the EMA (with its decay) adapts much faster, at the cost of needing bias correction early on.</div>
+<div class="cap">Grey dots = raw data x<sub>t</sub>. The equal-forever average weighs every past sample the same, so after the step's jump it drags along very slowly &mdash; the EMA (with its decay) adapts much faster, at the cost of needing the bias correction early on.</div>
 
 <script>
 var NS='http://www.w3.org/2000/svg';
@@ -85,10 +85,10 @@ function el(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attrs
 function fmt(v){return v.toFixed(3);}
 
 var beta=0.9, dataKind='step', W=44;
-var xs=[], emaStar=[], ema=[], avg=[];
+var xs=[], emaRaw=[], emaHat=[], avg=[];
 
 function genNext(t){
-  // All three patterns start at a nonzero value (not the 0 the EMA* itself
+  // All three patterns start at a nonzero value (not the 0 the raw EMA itself
   // starts at), so the bias-corrected EMA's quick jump to the true early
   // value is visible immediately, not hidden by both starting near zero.
   if(dataKind==='step') return t<22 ? 1.3 : -0.9;
@@ -99,19 +99,19 @@ function genNext(t){
 
 var runAvg=0, runN=0;
 function resetStream(){
-  xs=[]; emaStar=[]; ema=[]; avg=[];
+  xs=[]; emaRaw=[]; emaHat=[]; avg=[];
   runAvg=0; runN=0;
   draw();
 }
 function stepOnce(){
   var t = xs.length+1;
   var x = genNext(xs.length);
-  var prevStar = emaStar.length ? emaStar[emaStar.length-1] : 0;
-  var star = beta*prevStar + (1-beta)*x;
-  var corr = star/(1-Math.pow(beta,t));
+  var prevRaw = emaRaw.length ? emaRaw[emaRaw.length-1] : 0;
+  var raw = beta*prevRaw + (1-beta)*x;
+  var corr = raw/(1-Math.pow(beta,t));
   runN++; runAvg += (x-runAvg)/runN; // plain equal-weighted average, forever
-  xs.push(x); emaStar.push(star); ema.push(corr); avg.push(runAvg);
-  if(xs.length>W){ xs.shift(); emaStar.shift(); ema.shift(); avg.shift(); }
+  xs.push(x); emaRaw.push(raw); emaHat.push(corr); avg.push(runAvg);
+  if(xs.length>W){ xs.shift(); emaRaw.shift(); emaHat.shift(); avg.shift(); }
   draw();
 }
 
@@ -157,20 +157,20 @@ function draw(){
   var showAvg=document.getElementById('showAvg').checked;
 
   xs.forEach(function(v,i){ g.appendChild(el('circle',{cx:px(i),cy:py(v),r:2.4,fill:'var(--border-strong)'})); });
-  if(showStar) line(emaStar, 'var(--warm-ink)', 1.8, '5 3');
+  if(showStar) line(emaRaw, 'var(--warm-ink)', 1.8, '5 3');
   if(showAvg) line(avg, 'var(--green-ink)', 1.8, '2 3');
-  if(showEma) line(ema, 'var(--blue-ink)', 2.4);
+  if(showEma) line(emaHat, 'var(--blue-ink)', 2.4);
   if(xs.length){
     var i=xs.length-1;
-    if(showStar) g.appendChild(el('circle',{cx:px(i),cy:py(emaStar[i]),r:4,fill:'var(--warm-ink)'}));
+    if(showStar) g.appendChild(el('circle',{cx:px(i),cy:py(emaRaw[i]),r:4,fill:'var(--warm-ink)'}));
     if(showAvg) g.appendChild(el('circle',{cx:px(i),cy:py(avg[i]),r:4,fill:'var(--green-ink)'}));
-    if(showEma) g.appendChild(el('circle',{cx:px(i),cy:py(ema[i]),r:4.5,fill:'var(--blue-ink)'}));
+    if(showEma) g.appendChild(el('circle',{cx:px(i),cy:py(emaHat[i]),r:4.5,fill:'var(--blue-ink)'}));
   }
 
   var t=xs.length;
   document.getElementById('readout').innerHTML = t===0 ? 'No samples yet &mdash; press Play or Step.'
     : 't = <b class="num">'+t+'</b> &middot; x<sub>t</sub> = <span class="num">'+fmt(xs[t-1])+'</span> &middot; correction = <span class="num">'+(1/(1-Math.pow(beta,t))).toFixed(2)+'&times;</span><br>'
-    + 'equal average = <span class="num">'+fmt(avg[t-1])+'</span> &middot; EMA* = <span class="num">'+fmt(emaStar[t-1])+'</span> &middot; EMA = <b class="num">'+fmt(ema[t-1])+'</b>';
+    + 'equal average = <span class="num">'+fmt(avg[t-1])+'</span> &middot; EMA = <span class="num">'+fmt(emaRaw[t-1])+'</span> &middot; corrected EMA = <b class="num">'+fmt(emaHat[t-1])+'</b>';
 }
 
 document.querySelectorAll('.texline').forEach(function(el){

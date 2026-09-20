@@ -18,7 +18,7 @@ h1{font-size:19px;margin-top:2px}
   border-left:1px solid var(--border);padding-left:10px;min-width:0;overflow-y:auto}
 .formula .fitem{display:flex;flex-direction:column;gap:3px}
 .formula .f{font-size:clamp(12px,2.2vw,15px);line-height:1.25}
-label.cb{font-size:clamp(18px,3vw,26px);display:flex;align-items:center;gap:6px}
+label.cb{font-size:20px;display:flex;align-items:center;gap:6px}
 input[type=checkbox]{width:19px;height:19px}
 #lossts{width:100%;height:auto;margin-top:4px}
 input[type=range]:disabled{opacity:.35}
@@ -48,14 +48,14 @@ button,select{height:30px;font-size:13px;padding:0 9px}
     <div class="f" style="color:var(--orange-ink)">
       <div class="texline" id="texSgdZ"></div>
     </div>
-    <label class="cb"><input type="checkbox" id="showSGD" checked onchange="draw()"> <span style="color:var(--orange-ink)">&mdash;</span> SGD</label>
+    <label class="cb"><input type="checkbox" id="showSGD" checked onchange="draw()"> SGD</label>
   </div>
   <div class="fitem">
     <div class="f" style="color:var(--green-ink)">
       <div class="texline" id="texMomM"></div>
       <div class="texline" data-tex="z \leftarrow z - \eta m"></div>
     </div>
-    <label class="cb"><input type="checkbox" id="showMom" checked onchange="draw()"> <span style="color:var(--green-ink)">&mdash;</span> momentum</label>
+    <label class="cb"><input type="checkbox" id="showMom" checked onchange="draw()"> momentum</label>
   </div>
   <div class="fitem">
     <div class="f" style="color:var(--blue-ink)">
@@ -63,7 +63,7 @@ button,select{height:30px;font-size:13px;padding:0 9px}
       <div class="texline" id="texAdamV"></div>
       <div class="texline" data-tex="z \leftarrow z - \eta \dfrac{\hat m}{\sqrt{\hat v}}"></div>
     </div>
-    <label class="cb"><input type="checkbox" id="showAdam" checked onchange="draw()"> <span style="color:var(--blue-ink)">&mdash;</span> Adam</label>
+    <label class="cb"><input type="checkbox" id="showAdam" checked onchange="draw()"> Adam</label>
   </div>
   <svg id="lossts" viewBox="0 0 220 110" role="img" preserveAspectRatio="xMidYMid meet">
     <desc>Loss vs. iteration for each shown method, log scale.</desc>

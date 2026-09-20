@@ -25,7 +25,7 @@ button,select{height:30px;font-size:13px;padding:0 9px}
 .knum{font-size:12.5px;min-width:auto}
 .rd{font-size:13.5px;line-height:1.4;min-height:1.4em}
 .cap{font-size:12px;line-height:1.4;padding-top:4px}
-label.cb{font-size:12.5px}
+label.cb{font-size:20px;display:flex;align-items:center;gap:6px}
 input[type=checkbox]{width:15px;height:15px}
 </style>
 </head>
@@ -44,13 +44,13 @@ input[type=checkbox]{width:15px;height:15px}
     <div class="f" style="color:var(--green-ink)">
       <div class="texline" data-tex="\text{mean} = \mathrm{EMA}_\beta(g)"></div>
     </div>
-    <label class="cb"><input type="checkbox" id="showMean" checked onchange="draw()"> <span style="color:var(--green-ink)">&mdash;</span> mean</label>
+    <label class="cb"><input type="checkbox" id="showMean" checked onchange="draw()"> mean</label>
   </div>
   <div class="fitem">
     <div class="f" style="color:var(--warm-ink)">
       <div class="texline" data-tex="\mathrm{RMS} = \sqrt{\mathrm{EMA}_\beta(g^2)}"></div>
     </div>
-    <label class="cb"><input type="checkbox" id="showRMS" checked onchange="draw()"> <span style="color:var(--warm-ink)">&mdash;</span> RMS</label>
+    <label class="cb"><input type="checkbox" id="showRMS" checked onchange="draw()"> RMS</label>
   </div>
 </div>
 </div>
