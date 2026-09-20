@@ -102,8 +102,10 @@ function eigvec(which){ // 'a' (steep) or 'b' (shallow) principal direction, uni
 }
 
 function resetTraj(){
-  var v=eigvec('a'), w=eigvec('b');
-  var x0=1.05*v[0]+1.05*w[0]*0.35, y0=1.05*v[1]+1.05*w[1]*0.35; // start off both principal axes
+  var steep=eigvec('a'), shallow=eigvec('b');
+  // start far out along the long, shallow axis (to show the slow crawl) with a
+  // little steep-axis offset (to show the overshoot) -- the classic zig-zag setup.
+  var x0=0.4*steep[0]+1.4*shallow[0], y0=0.4*steep[1]+1.4*shallow[1];
   st={x:x0,y:y0,iter:0,path:[[x0,y0]],losses:[loss(x0,y0)],diverged:false};
   draw();
 }
@@ -229,6 +231,10 @@ function draw2D(g){
   }
   var pts=st.path.map(function(p){return toPx2(p[0],p[1],scale,cx,cy).join(',');}).join(' ');
   g.appendChild(el('polyline',{points:pts,fill:'none',stroke:st.diverged?'var(--red)':'var(--blue-ink)','stroke-width':2.2}));
+  for(var si=0; si<st.path.length-1; si++){
+    var sp=toPx2(st.path[si][0],st.path[si][1],scale,cx,cy);
+    g.appendChild(el('circle',{cx:sp[0],cy:sp[1],r:3.2,fill:'var(--surface)',stroke:st.diverged?'var(--red)':'var(--blue-ink)','stroke-width':1.3}));
+  }
   var last=st.path[st.path.length-1], lp=toPx2(last[0],last[1],scale,cx,cy);
   g.appendChild(el('circle',{cx:lp[0],cy:lp[1],r:5,fill:st.diverged?'var(--red)':'var(--blue-ink)'}));
   var t2=el('text',{x:8,y:16,class:'ts gl'}); t2.textContent='steep direction (eigval a='+a+')'; g.appendChild(t2);
@@ -290,6 +296,9 @@ function draw3D(g){
   var pts3=st.path.map(function(p){return M(p[0],p[1],zn(p[0],p[1]));});
   g.appendChild(el('polyline',{points:pts3.map(function(p){return p.join(',');}).join(' '),fill:'none',
     stroke:st.diverged?'var(--red)':'var(--blue-ink)','stroke-width':2.2}));
+  for(var si=0; si<pts3.length-1; si++){
+    g.appendChild(el('circle',{cx:pts3[si][0],cy:pts3[si][1],r:3,fill:'var(--surface)',stroke:st.diverged?'var(--red)':'var(--blue-ink)','stroke-width':1.2}));
+  }
   var lastP=pts3[pts3.length-1], lastXY=st.path[st.path.length-1];
   var drop=M(lastXY[0],lastXY[1],0);
   g.appendChild(el('line',{x1:lastP[0],y1:lastP[1],x2:drop[0],y2:drop[1],stroke:'var(--border-strong)','stroke-width':1,'stroke-dasharray':'3 3'}));
