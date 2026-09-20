@@ -29,10 +29,14 @@ button,select{height:30px;font-size:13px;padding:0 9px}
 label.cb{font-size:20px;display:flex;align-items:center;gap:6px;margin-bottom:15px}
 .warn{color:var(--red)}
 input[type=checkbox]{width:18px;height:18px}
+.nav{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.colab-link{font-size:12.5px;color:var(--text-muted);text-decoration:none;white-space:nowrap;
+  border:1px solid var(--border);border-radius:5px;padding:2px 8px}
+.colab-link:hover{color:var(--text-secondary);border-color:var(--border-strong)}
 </style>
 </head>
 <body>
-<div class="nav"><a href="./">&larr; Optimization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<div class="nav"><a href="./">&larr; Optimization demos</a> &middot; <a href="../../">CS7150 class demos</a><a class="colab-link" href="https://colab.research.google.com/github/CS7150/classdemos/blob/main/optimization/meanrms.ipynb" target="_blank" rel="noopener">Open in Colab</a></div>
 <h1>Mean vs. RMS<span>: the diagnostic behind Adam</span></h1>
 <p class="quiz">A synthetic gradient stream. When it flips sign often, the mean cancels toward zero while the RMS does not &mdash; that gap is exactly what Adam watches to decide when to slow down.</p>
 

@@ -32,10 +32,14 @@ button,select{height:30px;font-size:13px;padding:0 9px}
 .rd{font-size:13.5px;line-height:1.4;min-height:1.4em}
 .cap{font-size:12px;line-height:1.4;padding-top:4px}
 .warn{color:var(--red)}
+.nav{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.colab-link{font-size:12.5px;color:var(--text-muted);text-decoration:none;white-space:nowrap;
+  border:1px solid var(--border);border-radius:5px;padding:2px 8px}
+.colab-link:hover{color:var(--text-secondary);border-color:var(--border-strong)}
 </style>
 </head>
 <body>
-<div class="nav"><a href="./">&larr; Optimization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<div class="nav"><a href="./">&larr; Optimization demos</a> &middot; <a href="../../">CS7150 class demos</a><a class="colab-link" href="https://colab.research.google.com/github/CS7150/classdemos/blob/main/optimization/adam-invariance.ipynb" target="_blank" rel="noopener">Open in Colab</a></div>
 <h1>SGD vs. momentum vs. Adam, rescaled<span>: which mechanism buys scale-invariance</span></h1>
 <p class="quiz">The same tilted bowl, run under all three at once. Slide K to multiply every gradient by a constant &mdash; SGD's and momentum's steps both grow with K (momentum only averages the gradient); only Adam's RMS normalization cancels K.</p>
 

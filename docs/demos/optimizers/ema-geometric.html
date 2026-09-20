@@ -25,10 +25,14 @@ button,select{height:30px;font-size:13px;padding:0 9px}
 .knum{font-size:12.5px;min-width:auto}
 .rd{font-size:13.5px;line-height:1.4;min-height:1.4em}
 .cap{font-size:12px;line-height:1.4;padding-top:4px}
+.nav{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.colab-link{font-size:12.5px;color:var(--text-muted);text-decoration:none;white-space:nowrap;
+  border:1px solid var(--border);border-radius:5px;padding:2px 8px}
+.colab-link:hover{color:var(--text-secondary);border-color:var(--border-strong)}
 </style>
 </head>
 <body>
-<div class="nav"><a href="./">&larr; Optimization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<div class="nav"><a href="./">&larr; Optimization demos</a> &middot; <a href="../../">CS7150 class demos</a><a class="colab-link" href="https://colab.research.google.com/github/CS7150/classdemos/blob/main/optimization/ema-geometric.ipynb" target="_blank" rel="noopener">Open in Colab</a></div>
 <h1>Unrolling the EMA<span>: why the recurrence is a geometric series</span></h1>
 <p class="quiz">Cut a strip of length 1 into pieces of size (1&minus;&beta;), (1&minus;&beta;)&beta;, (1&minus;&beta;)&beta;&sup2;, &hellip; &mdash; the classic geometric-series picture. Those exact pieces are the weights the EMA recurrence puts on each past sample, most recent first.</p>
 
