@@ -54,7 +54,7 @@ button,select{height:30px;font-size:13px;padding:0 9px}
       <div class="texline" data-tex="k \leftarrow \beta k + (1-\beta) g"></div>
       <div class="texline" data-tex="x \leftarrow x - \eta k"></div>
     </div>
-    <label class="cb"><input type="checkbox" id="showMom" checked onchange="draw()"> momentum</label>
+    <label class="cb"><input type="checkbox" id="showMom" onchange="draw()"> momentum</label>
   </div>
   <svg id="tsstage" viewBox="0 0 220 108" role="img" preserveAspectRatio="xMidYMid meet">
     <desc>A small time series of the raw gradient for plain gradient descent and the raw gradient and smoothed velocity for momentum, over recent steps.</desc>

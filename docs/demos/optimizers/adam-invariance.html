@@ -55,7 +55,7 @@ button,select{height:30px;font-size:13px;padding:0 9px}
       <div class="texline" id="texMomM"></div>
       <div class="texline" data-tex="z \leftarrow z - \eta m"></div>
     </div>
-    <label class="cb"><input type="checkbox" id="showMom" checked onchange="draw()"> momentum</label>
+    <label class="cb"><input type="checkbox" id="showMom" onchange="draw()"> momentum</label>
   </div>
   <div class="fitem">
     <div class="f" style="color:var(--blue-ink)">
@@ -63,7 +63,7 @@ button,select{height:30px;font-size:13px;padding:0 9px}
       <div class="texline" id="texAdamV"></div>
       <div class="texline" data-tex="z \leftarrow z - \eta \dfrac{\hat m}{\sqrt{\hat v}}"></div>
     </div>
-    <label class="cb"><input type="checkbox" id="showAdam" checked onchange="draw()"> Adam</label>
+    <label class="cb"><input type="checkbox" id="showAdam" onchange="draw()"> Adam</label>
   </div>
   <svg id="lossts" viewBox="0 0 220 110" role="img" preserveAspectRatio="xMidYMid meet">
     <desc>Loss vs. iteration for each shown method, log scale.</desc>

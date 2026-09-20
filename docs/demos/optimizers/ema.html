@@ -51,13 +51,13 @@ button,select{height:30px;font-size:13px;padding:0 9px}
     <div class="f" style="color:var(--warm-ink)">
       <div class="texline" data-tex="\mathrm{EMA} \leftarrow \beta\,\mathrm{EMA} + (1-\beta)x"></div>
     </div>
-    <label class="cb"><input type="checkbox" id="showStar" checked onchange="draw()"> EMA</label>
+    <label class="cb"><input type="checkbox" id="showStar" onchange="draw()"> EMA</label>
   </div>
   <div class="fitem">
     <div class="f" style="color:var(--blue-ink)">
       <div class="texline" data-tex="\hat{\mathrm{EMA}} = \dfrac{\mathrm{EMA}}{1-\beta^t}"></div>
     </div>
-    <label class="cb"><input type="checkbox" id="showEma" checked onchange="draw()"> corrected EMA</label>
+    <label class="cb"><input type="checkbox" id="showEma" onchange="draw()"> corrected EMA</label>
   </div>
 </div>
 </div>
