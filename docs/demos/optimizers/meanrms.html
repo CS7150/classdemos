@@ -6,6 +6,8 @@
 <title>Mean vs. RMS</title>
 <meta name="description" content="The gap between the mean and the RMS of a gradient stream is the diagnostic Adam is built from.">
 <link rel="stylesheet" href="../demo.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 <style>
 body{gap:5px;padding:11px 16px 12px}
 h1{font-size:19px;margin-top:2px}
@@ -15,7 +17,7 @@ h1{font-size:19px;margin-top:2px}
 .formula{flex:1;display:flex;flex-direction:column;justify-content:center;gap:9px;
   border-left:1px solid var(--border);padding-left:10px;min-width:0}
 .formula .fitem{display:flex;flex-direction:column;gap:2px}
-.formula .f{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:clamp(14px,2.6vw,19px);font-weight:700;line-height:1.28;white-space:nowrap}
+.formula .f{font-size:clamp(14px,2.6vw,18px);line-height:1.28}
 @media (max-width:640px){.formula{display:none}}
 .row{gap:7px}
 button,select{height:30px;font-size:13px;padding:0 9px}
@@ -39,11 +41,15 @@ input[type=checkbox]{width:15px;height:15px}
 </svg>
 <div class="formula">
   <div class="fitem">
-    <div class="f" style="color:var(--green-ink)">mean=EMA<sub>&beta;</sub>(g)</div>
+    <div class="f" style="color:var(--green-ink)">
+      <div class="texline" data-tex="\text{mean} = \mathrm{EMA}_\beta(g)"></div>
+    </div>
     <label class="cb"><input type="checkbox" id="showMean" checked onchange="draw()"> <span style="color:var(--green-ink)">&mdash;</span> mean</label>
   </div>
   <div class="fitem">
-    <div class="f" style="color:var(--warm-ink)">RMS=&radic;EMA<sub>&beta;</sub>(g&sup2;)</div>
+    <div class="f" style="color:var(--warm-ink)">
+      <div class="texline" data-tex="\mathrm{RMS} = \sqrt{\mathrm{EMA}_\beta(g^2)}"></div>
+    </div>
     <label class="cb"><input type="checkbox" id="showRMS" checked onchange="draw()"> <span style="color:var(--warm-ink)">&mdash;</span> RMS</label>
   </div>
 </div>
@@ -174,6 +180,9 @@ function draw(){
   }
 }
 
+document.querySelectorAll('.texline').forEach(function(el){
+  katex.render(el.getAttribute('data-tex'), el, {throwOnError:false});
+});
 resetStream();
 </script>
 </body>
