@@ -12,11 +12,10 @@ h1{font-size:19px;margin-top:2px}
 .quiz{margin:0}
 #wrap{height:clamp(150px,26vh,220px);display:flex;gap:10px;align-items:stretch}
 #stage{flex:2;min-width:0}
-.formula{flex:1;display:flex;flex-direction:column;justify-content:center;gap:6px;
+.formula{flex:1;display:flex;flex-direction:column;justify-content:center;gap:9px;
   border-left:1px solid var(--border);padding-left:10px;min-width:0}
-.formula .f{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:clamp(17px,3.4vw,21px);font-weight:700;color:var(--text-primary);line-height:1.32}
-.formula table.bt{font-size:11px}
-.formula table.bt th,.formula table.bt td{padding:1px 6px 1px 0}
+.formula .fitem{display:flex;flex-direction:column;gap:2px}
+.formula .f{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:clamp(15px,3vw,19px);font-weight:700;color:var(--text-primary);line-height:1.25;white-space:nowrap}
 @media (max-width:640px){.formula{display:none}}
 label.cb{font-size:12px}
 input[type=checkbox]{width:14px;height:14px}
@@ -40,10 +39,18 @@ button,select{height:30px;font-size:13px;padding:0 9px}
   <g id="g"></g>
 </svg>
 <div class="formula">
-  <div class="f">EMA*&larr;&beta;EMA*<br>+(1-&beta;)x<br>EMA=EMA*/(1-&beta;<sup>t</sup>)<br>Avg&larr;Avg+<br>(x-Avg)/t</div>
-  <label class="cb"><input type="checkbox" id="showStar" checked onchange="draw()"> <span style="color:var(--warm-ink)">&mdash;</span> raw EMA*</label>
-  <label class="cb"><input type="checkbox" id="showEma" checked onchange="draw()"> <span style="color:var(--blue-ink)">&mdash;</span> bias-corrected EMA</label>
-  <label class="cb"><input type="checkbox" id="showAvg" checked onchange="draw()"> <span style="color:var(--green-ink)">&mdash;</span> equal average forever</label>
+  <div class="fitem">
+    <div class="f">Avg&larr;Avg+(x&minus;Avg)/t</div>
+    <label class="cb"><input type="checkbox" id="showAvg" checked onchange="draw()"> <span style="color:var(--green-ink)">&mdash;</span> equal average forever</label>
+  </div>
+  <div class="fitem">
+    <div class="f">EMA*&larr;&beta;EMA*+(1&minus;&beta;)x</div>
+    <label class="cb"><input type="checkbox" id="showStar" checked onchange="draw()"> <span style="color:var(--warm-ink)">&mdash;</span> raw EMA*</label>
+  </div>
+  <div class="fitem">
+    <div class="f">EMA&larr;EMA*/(1&minus;&beta;<sup>t</sup>)</div>
+    <label class="cb"><input type="checkbox" id="showEma" checked onchange="draw()"> <span style="color:var(--blue-ink)">&mdash;</span> bias-corrected EMA</label>
+  </div>
 </div>
 </div>
 
@@ -155,7 +162,7 @@ function draw(){
   var t=xs.length;
   document.getElementById('readout').innerHTML = t===0 ? 'No samples yet &mdash; press Play or Step.'
     : 't = <b class="num">'+t+'</b> &middot; x<sub>t</sub> = <span class="num">'+fmt(xs[t-1])+'</span> &middot; correction = <span class="num">'+(1/(1-Math.pow(beta,t))).toFixed(2)+'&times;</span><br>'
-    + 'EMA* = <span class="num">'+fmt(emaStar[t-1])+'</span> &middot; EMA = <b class="num">'+fmt(ema[t-1])+'</b> &middot; equal average = <span class="num">'+fmt(avg[t-1])+'</span>';
+    + 'equal average = <span class="num">'+fmt(avg[t-1])+'</span> &middot; EMA* = <span class="num">'+fmt(emaStar[t-1])+'</span> &middot; EMA = <b class="num">'+fmt(ema[t-1])+'</b>';
 }
 
 resetStream();
