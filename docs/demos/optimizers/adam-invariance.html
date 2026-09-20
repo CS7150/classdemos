@@ -262,14 +262,26 @@ function drawLossTS(){
   var showSGD=document.getElementById('showSGD').checked;
   var showMom=document.getElementById('showMom').checked;
   var showAdam=document.getElementById('showAdam').checked;
-  var logMin=-6, logMax=1;
-  function ly(v){ var l=Math.log10(Math.max(v,1e-8)); l=Math.max(logMin,Math.min(logMax,l));
+  // Autoscale the log range to whatever the visible series actually span, so
+  // loss dropping below the old fixed 1e-6 floor (or never getting that low)
+  // is still shown at full resolution instead of clipping or wasting range.
+  var vals=[];
+  if(showSGD) vals=vals.concat(lossSgd);
+  if(showMom) vals=vals.concat(lossMom);
+  if(showAdam) vals=vals.concat(lossAdam);
+  if(!vals.length) vals=[1];
+  var logs=vals.map(function(v){ return Math.log10(Math.max(v,1e-12)); });
+  var logMin=Math.floor(Math.min.apply(null,logs)), logMax=Math.ceil(Math.max.apply(null,logs));
+  if(logMax-logMin<1){ logMax+=1; }
+  function ly(v){ var l=Math.log10(Math.max(v,1e-12)); l=Math.max(logMin,Math.min(logMax,l));
     return padT + (logMax-l)/(logMax-logMin)*h; }
   var maxN=Math.max(lossSgd.length,lossMom.length,lossAdam.length,2);
   function lx(i){ return padL + (i/(maxN-1))*w; }
   lg.appendChild(el('line',{x1:padL,y1:padT,x2:padL,y2:TH-padB,stroke:'var(--border-strong)','stroke-width':1}));
   lg.appendChild(el('line',{x1:padL,y1:TH-padB,x2:TW-padR,y2:TH-padB,stroke:'var(--border-strong)','stroke-width':1}));
-  [1e-6,1e-3,1,10].forEach(function(v){
+  var gridVals=[], gridStep=Math.max(1, Math.ceil((logMax-logMin)/4));
+  for(var e=logMin; e<=logMax; e+=gridStep) gridVals.push(Math.pow(10,e));
+  gridVals.forEach(function(v){
     var y=ly(v);
     lg.appendChild(el('line',{x1:padL,y1:y,x2:TW-padR,y2:y,stroke:'var(--border)','stroke-width':0.6,opacity:0.5}));
     var t=el('text',{x:padL-4,y:y+3,style:'font-size:7.5px;fill:var(--text-muted)','text-anchor':'end'}); t.textContent=v>=1?v.toFixed(0):v.toExponential(0); lg.appendChild(t);
