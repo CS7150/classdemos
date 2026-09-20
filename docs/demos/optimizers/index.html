@@ -51,11 +51,12 @@ footer a{color:var(--text-secondary)}
   <div class="nav"><a href="../../">&larr; CS7150 class demos</a></div>
   <p class="eyebrow">Northeastern University &middot; CS 7150 &middot; Fall 2026</p>
   <h1>Optimizers, explained</h1>
-  <p>Six interactive pieces building up to Adam: how momentum averages out noisy gradients, the
-     exponential moving average and bias correction that make that averaging precise, the trouble
-     a single learning rate has with an anisotropic bowl, the mean/RMS diagnostic Adam adds on
-     top, why its update is scale-invariant, and how network design (activations, initialization,
-     depth) fights the same conditioning problem from the other side.</p>
+  <p>Seven interactive pieces building up to Adam: how momentum averages out noisy gradients, the
+     exponential moving average and bias correction that make that averaging precise (plus a
+     companion piece on why the recurrence is exactly a geometric series), the trouble a single
+     learning rate has with an anisotropic bowl, the mean/RMS diagnostic Adam adds on top, why its
+     update is scale-invariant, and how network design (activations, initialization, depth) fights
+     the same conditioning problem from the other side.</p>
 </header>
 
 <ol class="qs">
@@ -79,6 +80,16 @@ footer a{color:var(--text-secondary)}
 </li>
 
 <li class="done">
+  <div class="qtag">Companion: the EMA identity</div>
+  <h2><a href="ema-geometric.html">Unrolling the EMA</a></h2>
+  <p class="what">Cut a strip of length 1 geometrically &mdash; (1&minus;&beta;), (1&minus;&beta;)&beta;,
+     (1&minus;&beta;)&beta;&sup2;, &hellip; &mdash; and those exact pieces turn out to be the weights
+     the EMA recurrence puts on each past sample. Reveal the cuts one at a time and watch the
+     weighted sum converge to the same number the recurrence gives directly.</p>
+  <a class="go" href="ema-geometric.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
   <div class="qtag">Gradient descent</div>
   <h2><a href="anisotropy.html">Anisotropic gradient descent</a></h2>
   <p class="what">A bowl that's steep in one direction and shallow in another. Adjust the
@@ -98,9 +109,10 @@ footer a{color:var(--text-secondary)}
 
 <li class="done">
   <div class="qtag">Why Adam is scale-invariant</div>
-  <h2><a href="adam-invariance.html">Adam vs. SGD, rescaled</a></h2>
-  <p class="what">The same descent run side by side under SGD and Adam while a slider multiplies
-     every gradient by K. SGD's steps grow with K; Adam's barely change.</p>
+  <h2><a href="adam-invariance.html">SGD vs. momentum vs. Adam, rescaled</a></h2>
+  <p class="what">The same descent run side by side under all three while a slider multiplies
+     every gradient by K. SGD's and momentum's steps both grow with K; only Adam's barely
+     change &mdash; isolating RMS normalization as the mechanism that buys scale-invariance.</p>
   <a class="go" href="adam-invariance.html">Open the explainer &rarr;</a>
 </li>
 

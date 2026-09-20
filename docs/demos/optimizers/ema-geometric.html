@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unrolling the EMA</title>
+<meta name="description" content="Why the EMA recurrence is exactly a geometric-series weighted average, shown as a cut-up strip of length 1 and as weights on real data.">
+<link rel="stylesheet" href="../demo.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<style>
+body{gap:5px;padding:11px 16px 12px}
+h1{font-size:19px;margin-top:2px}
+.quiz{margin:0}
+#panels{display:flex;flex-direction:column;gap:10px}
+.panel{background:var(--surface-1,transparent)}
+.ptitle{font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px}
+#stripStage,#dataStage{width:100%;height:auto;display:block}
+.formrow{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start;margin-top:6px}
+.formrow .f{font-size:clamp(14px,2.4vw,18px);line-height:1.3;white-space:nowrap}
+.formrow .f .katex{color:inherit}
+.row{gap:7px}
+button,select{height:30px;font-size:13px;padding:0 9px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:auto}
+.rd{font-size:13.5px;line-height:1.4;min-height:1.4em}
+.cap{font-size:12px;line-height:1.4;padding-top:4px}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Optimization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Unrolling the EMA<span>: why the recurrence is a geometric series</span></h1>
+<p class="quiz">Cut a strip of length 1 into pieces of size (1&minus;&beta;), (1&minus;&beta;)&beta;, (1&minus;&beta;)&beta;&sup2;, &hellip; &mdash; the classic geometric-series picture. Those exact pieces are the weights the EMA recurrence puts on each past sample, most recent first.</p>
+
+<div id="panels">
+  <div class="panel">
+    <div class="ptitle">The strip: length 1, cut geometrically</div>
+    <svg id="stripStage" viewBox="0 0 640 108" role="img" preserveAspectRatio="xMidYMid meet">
+      <desc>A horizontal bar of length 1 being cut into pieces of size (1-beta) times beta to the k, for k = 0, 1, 2, ..., with the uncut remainder shown at the end.</desc>
+      <g id="stripG"></g>
+    </svg>
+  </div>
+  <div class="panel">
+    <div class="ptitle">The same cuts, as weights on real data (k steps back)</div>
+    <svg id="dataStage" viewBox="0 0 640 190" role="img" preserveAspectRatio="xMidYMid meet">
+      <desc>A bar chart of past data values, each overlaid with the fraction of it that the cut of matching size actually contributes to the running EMA.</desc>
+      <g id="dataG"></g>
+    </svg>
+  </div>
+</div>
+
+<div class="formrow">
+  <div class="f" style="color:var(--warm-ink)">
+    <div class="texline" data-tex="\mathrm{EMA}_t \leftarrow \beta\,\mathrm{EMA}_{t-1} + (1-\beta)x_t"></div>
+  </div>
+  <div class="f" style="color:var(--blue-ink)">
+    <div class="texline" data-tex="\mathrm{EMA}_t = \sum_{k=0}^{t-1} (1-\beta)\beta^{k}\,x_{t-k}"></div>
+  </div>
+  <div class="f" style="color:var(--green-ink)">
+    <div class="texline" data-tex="\sum_{k=0}^{t-1} (1-\beta)\beta^{k} = 1-\beta^{t}"></div>
+  </div>
+</div>
+
+<div class="row">
+  <button class="main" id="run" onclick="toggleRun()">Run</button>
+  <button onclick="revealOne()">Reveal next</button>
+  <button onclick="revealAll()">Reveal all</button>
+  <button onclick="resetReveal()">Reset</button>
+  <button onclick="newData()">New data</button>
+  <span class="klab">&beta;</span>
+  <input type="range" id="beta" min="0.5" max="0.95" step="0.01" value="0.75" oninput="onParams()" style="width:90px">
+  <span class="knum" id="betaVal">0.75</span>
+</div>
+
+<div class="rd" id="readout"></div>
+<div class="cap">Revealing term k cuts a (1&minus;&beta;)&beta;<sup>k</sup> fraction off the strip's remaining &beta;<sup>k</sup>, and weights x<sub>t&minus;k</sub> (k steps before the present) by that same fraction in the data below. Cut every term and the weights sum to exactly 1 and the weighted sum exactly equals the recurrence &mdash; stop early (as any running computation must) and both fall short by precisely &beta;<sup>k</sup>, which is exactly what dividing by (1&minus;&beta;<sup>k</sup>) corrects for.</div>
+
+<script>
+var NS='http://www.w3.org/2000/svg';
+function el(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attrs)e.setAttribute(k,attrs[k]);return e;}
+function fmt(v){return (Math.abs(v)<0.001&&v!==0?v.toExponential(1):v.toFixed(3));}
+
+var N=10, beta=0.75, reveal=0, xs=[];
+
+function randData(){
+  xs=[];
+  for(var i=0;i<N;i++) xs.push((Math.random()*2-1)*1.4);
+}
+function newData(){ resetReveal(); randData(); draw(); }
+
+function weight(k){ return (1-beta)*Math.pow(beta,k); }
+
+function fadeColor(k){
+  var op = Math.max(0.16, Math.pow(0.8,k));
+  return op;
+}
+
+function onParams(){
+  beta=parseFloat(document.getElementById('beta').value);
+  document.getElementById('betaVal').textContent=beta.toFixed(2);
+  draw();
+}
+
+function resetReveal(){ setRunning(false); reveal=0; draw(); }
+function revealOne(){ if(reveal<N){ reveal++; draw(); } if(reveal>=N) setRunning(false); }
+function revealAll(){ setRunning(false); reveal=N; draw(); }
+
+var running=false, timer=null;
+function setRunning(r){
+  running=r;
+  document.getElementById('run').textContent=r?'Pause':'Run';
+  if(r){ timer=setInterval(function(){ revealOne(); }, 500); }
+  else clearInterval(timer);
+}
+function toggleRun(){ if(reveal>=N && !running){ reveal=0; } setRunning(!running); }
+
+var VW=640;
+function drawStrip(){
+  var g=document.getElementById('stripG');
+  g.innerHTML='';
+  var padL=14, padR=14, y0=28, h=40, w=VW-padL-padR;
+  g.appendChild(el('rect',{x:padL,y:y0,width:w,height:h,fill:'none',stroke:'var(--border-strong)','stroke-width':1.2}));
+  var x=padL;
+  for(var k=0;k<reveal;k++){
+    var wk=weight(k), pw=wk*w;
+    g.appendChild(el('rect',{x:x,y:y0,width:Math.max(pw,0.6),height:h,fill:'var(--blue)',opacity:fadeColor(k),stroke:'var(--surface)','stroke-width':0.5}));
+    if(pw>26){
+      var t=el('text',{x:x+pw/2,y:y0+h/2+4,'text-anchor':'middle',style:'font-size:10px;fill:var(--text-primary)'});
+      t.textContent='k='+k;
+      g.appendChild(t);
+    }
+    x+=pw;
+  }
+  var remW=Math.max(VW-padR-x,0);
+  if(remW>0.5) g.appendChild(el('rect',{x:x,y:y0,width:remW,height:h,fill:'var(--border)',opacity:0.5}));
+  var remBeta=Math.pow(beta,reveal);
+  var t2=el('text',{x:VW-padR,y:y0-8,'text-anchor':'end',style:'font-size:11px;fill:var(--text-muted)'});
+  t2.textContent='uncut remainder = β^'+reveal+' = '+fmt(remBeta);
+  g.appendChild(t2);
+  var t3=el('text',{x:padL,y:y0-8,style:'font-size:11px;fill:var(--text-muted)'});
+  t3.textContent='cut so far = 1−β^'+reveal+' = '+fmt(1-remBeta);
+  g.appendChild(t3);
+  var t4=el('text',{x:padL,y:y0+h+18,style:'font-size:10px;fill:var(--text-muted)'});
+  t4.textContent='most recent (k=0)';
+  g.appendChild(t4);
+  var t5=el('text',{x:VW-padR,y:y0+h+18,'text-anchor':'end',style:'font-size:10px;fill:var(--text-muted)'});
+  t5.textContent='further into the past →';
+  g.appendChild(t5);
+}
+
+function drawData(){
+  var g=document.getElementById('dataG');
+  g.innerHTML='';
+  var padL=14, padR=14, padT=14, padB=30, w=VW-padL-padR, h=190-padT-padB;
+  var cy=padT+h/2;
+  var maxAbs=Math.max.apply(null, xs.map(Math.abs).concat([0.3]));
+  var scaleY=(h/2-8)/maxAbs;
+  var colW=w/N;
+  g.appendChild(el('line',{x1:padL,y1:cy,x2:VW-padR,y2:cy,stroke:'var(--border-strong)','stroke-width':1}));
+  for(var k=0;k<N;k++){
+    var x0=padL+k*colW, xv=xs[k];
+    var rawH=Math.abs(xv)*scaleY, rawY=xv>=0?cy-rawH:cy;
+    g.appendChild(el('rect',{x:x0+colW*0.18,y:rawY,width:colW*0.64,height:Math.max(rawH,1),fill:'none',stroke:'var(--border-strong)','stroke-width':1}));
+    if(k<reveal){
+      var wk=weight(k), contrib=wk*xv;
+      var cH=Math.abs(contrib)*scaleY, cY=contrib>=0?cy-cH:cy;
+      g.appendChild(el('rect',{x:x0+colW*0.3,y:cY,width:colW*0.4,height:Math.max(cH,1),fill:'var(--blue)',opacity:fadeColor(k)}));
+    }
+    var lab=el('text',{x:x0+colW/2,y:190-padB+14,'text-anchor':'middle',style:'font-size:10px;fill:var(--text-muted)'});
+    lab.textContent='k='+k;
+    g.appendChild(lab);
+  }
+  var t1=el('text',{x:padL,y:12,style:'font-size:10px;fill:var(--text-muted)'}); t1.textContent='outline = x_{t-k} (raw value)'; g.appendChild(t1);
+  var t2=el('text',{x:VW-padR,y:12,'text-anchor':'end',style:'font-size:10px;fill:var(--text-muted)'}); t2.textContent='filled = (1−β)β^k · x_{t-k} (its contribution)'; g.appendChild(t2);
+}
+
+function draw(){
+  drawStrip();
+  drawData();
+  var weightSum=0, weightedSum=0;
+  for(var k=0;k<reveal;k++){ var wk=weight(k); weightSum+=wk; weightedSum+=wk*xs[k]; }
+  // xs[0] is the most recent sample (k=0); fold oldest-to-newest so this matches
+  // the recurrence exactly: star = beta*star + (1-beta)*x, applied x_{N-1}..x_0.
+  var star=0;
+  for(var j=N-1;j>=0;j--){ star = beta*star + (1-beta)*xs[j]; }
+  document.getElementById('readout').innerHTML =
+    'Revealed '+reveal+' of '+N+' terms &middot; weights sum to <b class="num">'+fmt(weightSum)+'</b> (of 1) &middot; '+
+    'weighted sum = <b class="num">'+fmt(weightedSum)+'</b> &middot; full recurrence EMA<sub>t</sub> = <span class="num">'+fmt(star)+'</span>'+
+    (reveal>=N ? ' <span style="color:var(--green-ink)">&mdash; match</span>' : '');
+}
+
+document.querySelectorAll('.texline').forEach(function(el){
+  katex.render(el.getAttribute('data-tex'), el, {throwOnError:false});
+});
+randData();
+draw();
+</script>
+</body>
+</html>
