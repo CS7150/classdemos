@@ -12,11 +12,10 @@ h1{font-size:19px;margin-top:2px}
 .quiz{margin:0}
 #wrap{height:clamp(135px,22vh,200px);display:flex;gap:10px;align-items:stretch}
 #stage{flex:2;min-width:0}
-.formula{flex:1;display:flex;flex-direction:column;justify-content:center;gap:6px;
+.formula{flex:1;display:flex;flex-direction:column;justify-content:center;gap:9px;
   border-left:1px solid var(--border);padding-left:10px;min-width:0}
-.formula .f{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:clamp(17px,3.4vw,21px);font-weight:700;color:var(--text-primary);line-height:1.32}
-.formula table.bt{font-size:11.5px}
-.formula table.bt th,.formula table.bt td{padding:1px 6px 1px 0}
+.formula .fitem{display:flex;flex-direction:column;gap:2px}
+.formula .f{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:clamp(14px,2.6vw,19px);font-weight:700;line-height:1.28;white-space:nowrap}
 @media (max-width:640px){.formula{display:none}}
 .row{gap:7px}
 button,select{height:30px;font-size:13px;padding:0 9px}
@@ -39,7 +38,14 @@ input[type=checkbox]{width:15px;height:15px}
   <g id="g"></g>
 </svg>
 <div class="formula">
-  <div class="f">mean&larr;mean+<br>(g&minus;mean)/N<br>RMS=&radic;mean(g&sup2;)</div>
+  <div class="fitem">
+    <div class="f" style="color:var(--green-ink)">mean=EMA<sub>&beta;</sub>(g)</div>
+    <label class="cb"><input type="checkbox" id="showMean" checked onchange="draw()"> <span style="color:var(--green-ink)">&mdash;</span> mean</label>
+  </div>
+  <div class="fitem">
+    <div class="f" style="color:var(--warm-ink)">RMS=&radic;EMA<sub>&beta;</sub>(g&sup2;)</div>
+    <label class="cb"><input type="checkbox" id="showRMS" checked onchange="draw()"> <span style="color:var(--warm-ink)">&mdash;</span> RMS</label>
+  </div>
 </div>
 </div>
 
@@ -61,12 +67,10 @@ input[type=checkbox]{width:15px;height:15px}
   <span class="klab" style="color:var(--text-muted)">range&plusmn;</span>
   <input type="range" id="yrange" min="1" max="6" step="0.2" value="3.4" oninput="onChartRange()" style="width:50px">
   <span class="knum" id="yrangeVal">3.4</span>
-  <label class="cb"><input type="checkbox" id="showMean" checked onchange="draw()"> mean</label>
-  <label class="cb"><input type="checkbox" id="showRMS" checked onchange="draw()"> RMS</label>
 </div>
 
 <div class="rd" id="readout"></div>
-<div class="cap">A running (cumulative) average, not a fixed window &mdash; starts at 0, converges as data streams in. Adam's step is proportional to mean/RMS.</div>
+<div class="cap">Here &beta; = 1&minus;1/t grows toward 1 as samples accumulate, so this is the special case of an EMA that weighs every sample equally forever (unlike momentum/Adam's fixed &beta;). Adam's step is proportional to mean/RMS.</div>
 
 <script>
 var NS='http://www.w3.org/2000/svg';
