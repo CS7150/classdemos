@@ -7,18 +7,25 @@
 <meta name="description" content="The gap between the mean and the RMS of a gradient stream is the diagnostic Adam is built from.">
 <link rel="stylesheet" href="../demo.css">
 <style>
-body{gap:6px;padding:12px 18px 14px}
-h1{font-size:20px;margin-top:2px}
+body{gap:5px;padding:11px 16px 12px}
+h1{font-size:19px;margin-top:2px}
 .quiz{margin:0}
-#wrap{height:clamp(150px,24vh,220px)}
-.row{gap:8px}
-button,select{height:33px;font-size:13.5px;padding:0 10px}
-.klab{font-size:13px}
-.knum{font-size:13px;min-width:auto}
-.rd{font-size:14px;line-height:1.5}
-.cap{font-size:12.5px;line-height:1.5;padding-top:5px}
-label.cb{font-size:13px}
-input[type=checkbox]{width:16px;height:16px}
+#wrap{height:clamp(135px,22vh,200px);display:flex;gap:10px;align-items:stretch}
+#stage{flex:1;min-width:0}
+.formula{flex:0 0 160px;display:flex;flex-direction:column;justify-content:center;gap:7px;
+  border-left:1px solid var(--border);padding-left:10px}
+.formula .f{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:var(--text-primary);line-height:1.4}
+.formula table.bt{font-size:11.5px}
+.formula table.bt th,.formula table.bt td{padding:1px 6px 1px 0}
+@media (max-width:640px){.formula{display:none}}
+.row{gap:7px}
+button,select{height:30px;font-size:13px;padding:0 9px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:auto}
+.rd{font-size:13.5px;line-height:1.4;min-height:1.4em}
+.cap{font-size:12px;line-height:1.4;padding-top:4px}
+label.cb{font-size:12.5px}
+input[type=checkbox]{width:15px;height:15px}
 </style>
 </head>
 <body>
@@ -26,10 +33,22 @@ input[type=checkbox]{width:16px;height:16px}
 <h1>Mean vs. RMS<span>: the diagnostic behind Adam</span></h1>
 <p class="quiz">A synthetic gradient stream. When it flips sign often, the mean cancels toward zero while the RMS does not &mdash; that gap is exactly what Adam watches to decide when to slow down.</p>
 
-<div id="wrap"><svg id="stage" viewBox="0 0 640 300" role="img" preserveAspectRatio="xMidYMid meet">
+<div id="wrap">
+<svg id="stage" viewBox="0 0 640 300" role="img" preserveAspectRatio="xMidYMid meet">
   <desc>A live bar chart of a synthetic gradient stream, with its running mean and RMS drawn as reference lines.</desc>
   <g id="g"></g>
-</svg></div>
+</svg>
+<div class="formula">
+  <div class="f">mean&larr;mean+(g-mean)/N<br>meanSq&larr;meanSq+(g&sup2;-meanSq)/N<br>RMS = &radic;meanSq</div>
+  <table class="bt">
+    <tr><th>N</th><td class="num" id="lv-n">&mdash;</td></tr>
+    <tr><th>g<sub>t</sub></th><td class="num" id="lv-g">&mdash;</td></tr>
+    <tr><th>mean</th><td class="num" id="lv-mean">&mdash;</td></tr>
+    <tr><th>RMS</th><td class="num" id="lv-rms">&mdash;</td></tr>
+    <tr><th>|mean|/RMS</th><td class="num" id="lv-ratio">&mdash;</td></tr>
+  </table>
+</div>
+</div>
 
 <div class="row">
   <button class="main" id="run" onclick="toggleRun()">Play</button>
@@ -54,8 +73,7 @@ input[type=checkbox]{width:16px;height:16px}
 </div>
 
 <div class="rd" id="readout"></div>
-<div class="cap">Running mean and RMS, updated one sample at a time from t=0 and converging as data streams in
-  (not a fixed window). Adam's step is proportional to mean/RMS &mdash; near 1 when the sign is consistent, near 0 when it flips often.</div>
+<div class="cap">A running (cumulative) average, not a fixed window &mdash; starts at 0, converges as data streams in. Adam's step is proportional to mean/RMS.</div>
 
 <script>
 var NS='http://www.w3.org/2000/svg';
@@ -147,15 +165,20 @@ function draw(){
       fill:v>=0?'var(--blue)':'var(--blue-ink)',opacity:i===n-1?1:0.7}));
   }
 
+  document.getElementById('lv-n').textContent = runN;
+  document.getElementById('lv-g').textContent = runN? fmt(hist[hist.length-1]) : '—';
+  document.getElementById('lv-mean').textContent = runN? fmt(mean) : '—';
+  document.getElementById('lv-rms').textContent = runN? fmt(rms) : '—';
   if(runN===0){
     document.getElementById('readout').innerHTML = 'No samples yet &mdash; press Play or Step to start streaming.';
+    document.getElementById('lv-ratio').textContent = '—';
   } else {
     var ratio=Math.abs(mean)/(rms||1e-9);
     var verdict = ratio>0.6 ? 'consistent sign &rarr; safe to move fast'
       : ratio>0.25 ? 'somewhat mixed'
       : 'flips sign often &rarr; Adam slows down here';
-    document.getElementById('readout').innerHTML = 'After <b class="num">'+runN+'</b> samples: <b>mean</b> = <span class="num">'+fmt(mean)+'</span> &middot; '+
-      '<b>RMS</b> = <span class="num">'+fmt(rms)+'</span> &middot; |mean|/RMS = <span class="num">'+fmt(ratio)+'</span> &mdash; '+verdict+'.';
+    document.getElementById('lv-ratio').textContent = fmt(ratio);
+    document.getElementById('readout').innerHTML = verdict.charAt(0).toUpperCase()+verdict.slice(1)+'.';
   }
 }
 

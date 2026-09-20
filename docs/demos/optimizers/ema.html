@@ -7,27 +7,47 @@
 <meta name="description" content="Why Adam's exponential moving average needs a bias-correction term, especially early in training.">
 <link rel="stylesheet" href="../demo.css">
 <style>
-body{gap:6px;padding:12px 18px 14px}
-h1{font-size:20px;margin-top:2px}
+body{gap:5px;padding:11px 16px 12px}
+h1{font-size:19px;margin-top:2px}
 .quiz{margin:0}
-#wrap{height:clamp(150px,26vh,240px)}
-.row{gap:8px}
-button,select{height:33px;font-size:13.5px;padding:0 10px}
-.klab{font-size:13px}
-.knum{font-size:13px;min-width:auto}
-.rd{font-size:14px;line-height:1.5}
-.cap{font-size:12.5px;line-height:1.5;padding-top:5px}
+#wrap{height:clamp(150px,26vh,220px);display:flex;gap:10px;align-items:stretch}
+#stage{flex:1;min-width:0}
+.formula{flex:0 0 170px;display:flex;flex-direction:column;justify-content:center;gap:7px;
+  border-left:1px solid var(--border);padding-left:10px}
+.formula .f{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--text-primary);line-height:1.45}
+.formula table.bt{font-size:11.5px}
+.formula table.bt th,.formula table.bt td{padding:1px 6px 1px 0}
+@media (max-width:640px){.formula{display:none}}
+.row{gap:7px}
+button,select{height:30px;font-size:13px;padding:0 9px}
+.seg button{height:28px;font-size:12px;padding:0 8px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:auto}
+.rd{font-size:13.5px;line-height:1.4;min-height:1.4em}
+.cap{font-size:12px;line-height:1.4;padding-top:4px}
 </style>
 </head>
 <body>
 <div class="nav"><a href="./">&larr; Optimization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
 <h1>EMA and bias correction<span>: the machinery inside Adam</span></h1>
-<p class="quiz">The raw exponential moving average starts at zero no matter what the data is, so it crawls up from underneath early on. Dividing by (1&minus;&beta;<sup>t</sup>) undoes exactly that.</p>
+<p class="quiz">The raw EMA* starts at zero no matter what the data is, so a constant signal is dramatically underestimated at first. The bias-corrected EMA fixes that instantly &mdash; then behaves like an ordinary (lagging) moving average once the data itself changes.</p>
 
-<div id="wrap"><svg id="stage" viewBox="0 0 640 300" role="img" preserveAspectRatio="xMidYMid meet">
-  <desc>A data series with its raw exponential moving average and its bias-corrected version overlaid, and a scrubber showing the correction factor at any time step.</desc>
+<div id="wrap">
+<svg id="stage" viewBox="0 0 640 300" role="img" preserveAspectRatio="xMidYMid meet">
+  <desc>A data series with its raw exponential moving average and its bias-corrected version overlaid.</desc>
   <g id="g"></g>
-</svg></div>
+</svg>
+<div class="formula">
+  <div class="f">EMA*<sub>t</sub> = &beta;EMA*<sub>t-1</sub> + (1-&beta;)x<sub>t</sub><br>EMA<sub>t</sub> = EMA*<sub>t</sub> / (1-&beta;<sup>t</sup>)</div>
+  <table class="bt">
+    <tr><th>t</th><td class="num" id="lv-t">&mdash;</td></tr>
+    <tr><th>x<sub>t</sub></th><td class="num" id="lv-x">&mdash;</td></tr>
+    <tr><th>correction</th><td class="num" id="lv-corr">&mdash;</td></tr>
+    <tr><th>EMA*</th><td class="num" id="lv-star">&mdash;</td></tr>
+    <tr><th>EMA</th><td class="num" id="lv-ema">&mdash;</td></tr>
+  </table>
+</div>
+</div>
 
 <div class="row">
   <button class="main" id="run" onclick="toggleRun()">Play</button>
@@ -44,8 +64,7 @@ button,select{height:33px;font-size:13.5px;padding:0 10px}
 </div>
 
 <div class="rd" id="readout"></div>
-<div class="cap">EMA*<sub>t</sub> = &beta;&middot;EMA*<sub>t&minus;1</sub> + (1&minus;&beta;)&middot;x<sub>t</sub>, starting at EMA*<sub>0</sub>=0. Bias-corrected: EMA<sub>t</sub> = EMA*<sub>t</sub> / (1&minus;&beta;<sup>t</sup>).
-  At t=1 the correction factor is 1/(1&minus;&beta;) &mdash; large; by t&asymp;20 it is close to 1.</div>
+<div class="cap">Grey dots = raw data x<sub>t</sub>. Orange dashed = raw EMA* (biased toward 0 early). Blue = bias-corrected EMA.</div>
 
 <script>
 var NS='http://www.w3.org/2000/svg';
@@ -56,9 +75,11 @@ var beta=0.9, dataKind='step', W=44;
 var xs=[], emaStar=[], ema=[];
 
 function genNext(t){
-  if(dataKind==='step') return t<8 ? 0 : 1;
+  // Starts at a nonzero constant (so bias correction is dramatic immediately),
+  // then jumps to a different constant partway through (ordinary EMA lag, no
+  // longer a bias-correction story).
+  if(dataKind==='step') return t<22 ? 1.3 : -0.9;
   if(dataKind==='sine') return Math.sin(t*0.35) + (Math.random()*2-1)*0.25;
-  // random walk
   var prev = xs.length ? xs[xs.length-1] : 0;
   return prev + (Math.random()*2-1)*0.3;
 }
@@ -108,7 +129,6 @@ function draw(){
   var yMax=2.2, yMin=-2.2;
   function px(i){ return padL + (i/(W-1))*plotW; }
   function py(v){ return padT + (yMax-v)/(yMax-yMin)*plotH; }
-  // axes
   g.appendChild(el('line',{x1:padL,y1:py(0),x2:VW-padR,y2:py(0),stroke:'var(--border-strong)','stroke-width':1}));
   g.appendChild(el('line',{x1:padL,y1:padT,x2:padL,y2:VH-padB,stroke:'var(--border-strong)','stroke-width':1}));
   function line(arr, color, width, dash){
@@ -116,7 +136,6 @@ function draw(){
     var pts=arr.map(function(v,i){return px(i)+','+py(v);}).join(' ');
     g.appendChild(el('polyline',{points:pts,fill:'none',stroke:color,'stroke-width':width,'stroke-dasharray':dash||'none'}));
   }
-  // raw data as dots
   xs.forEach(function(v,i){ g.appendChild(el('circle',{cx:px(i),cy:py(v),r:2.4,fill:'var(--border-strong)'})); });
   line(emaStar, 'var(--warm-ink)', 1.8, '5 3');
   line(ema, 'var(--blue-ink)', 2.4);
@@ -125,19 +144,14 @@ function draw(){
     g.appendChild(el('circle',{cx:px(i),cy:py(emaStar[i]),r:4,fill:'var(--warm-ink)'}));
     g.appendChild(el('circle',{cx:px(i),cy:py(ema[i]),r:4.5,fill:'var(--blue-ink)'}));
   }
-  var t1=el('text',{x:VW-padR,y:padT+2,class:'ts gl','text-anchor':'end'}); t1.textContent='blue = bias-corrected EMA'; g.appendChild(t1);
-  var t2=el('text',{x:VW-padR,y:padT+18,class:'ts gl','text-anchor':'end'}); t2.textContent='orange dashed = raw EMA*'; g.appendChild(t2);
-  var t3=el('text',{x:padL,y:VH-8,class:'tn gl'}); t3.textContent='grey dots = raw data x_t'; g.appendChild(t3);
 
   var t=xs.length;
-  if(t===0){
-    document.getElementById('readout').innerHTML='No samples yet &mdash; press Play or Step.';
-  } else {
-    var corr=1/(1-Math.pow(beta,t));
-    document.getElementById('readout').innerHTML='At t = <b class="num">'+t+'</b>: correction factor 1/(1&minus;&beta;<sup>t</sup>) = <b class="num">'+corr.toFixed(2)+
-      '&times;</b> &middot; raw EMA* = <span class="num">'+fmt(emaStar[t-1])+'</span> &middot; corrected EMA = <b class="num">'+fmt(ema[t-1])+'</b>'+
-      (t<15?' <span style="color:var(--warm-ink)">(early: the correction still matters)</span>':' <span style="color:var(--green-ink)">(correction is now close to 1&times;)</span>');
-  }
+  document.getElementById('readout').innerHTML = t===0 ? 'No samples yet &mdash; press Play or Step.' : '';
+  document.getElementById('lv-t').textContent = t;
+  document.getElementById('lv-x').textContent = t? fmt(xs[t-1]) : '—';
+  document.getElementById('lv-corr').textContent = t? (1/(1-Math.pow(beta,t))).toFixed(2)+'×' : '—';
+  document.getElementById('lv-star').textContent = t? fmt(emaStar[t-1]) : '—';
+  document.getElementById('lv-ema').textContent = t? fmt(ema[t-1]) : '—';
 }
 
 resetStream();

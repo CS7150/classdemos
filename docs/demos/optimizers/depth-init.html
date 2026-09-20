@@ -7,17 +7,24 @@
 <meta name="description" content="Watching a signal spread through a deep network under different activations and weight initializations.">
 <link rel="stylesheet" href="../demo.css">
 <style>
-body{gap:6px;padding:12px 18px 14px}
-h1{font-size:20px;margin-top:2px}
+body{gap:5px;padding:11px 16px 12px}
+h1{font-size:19px;margin-top:2px}
 .quiz{margin:0}
-#wrap{height:clamp(170px,28vh,260px)}
-.row{gap:8px}
-button,select{height:33px;font-size:13.5px;padding:0 10px}
-.seg button{height:31px;font-size:12.5px;padding:0 9px}
-.klab{font-size:13px}
-.knum{font-size:13px;min-width:auto}
-.rd{font-size:14px;line-height:1.5}
-.cap{font-size:12.5px;line-height:1.5;padding-top:5px}
+#wrap{height:clamp(155px,25vh,235px);display:flex;gap:10px;align-items:stretch}
+#stage{flex:1;min-width:0}
+.formula{flex:0 0 160px;display:flex;flex-direction:column;justify-content:center;gap:7px;
+  border-left:1px solid var(--border);padding-left:10px}
+.formula .f{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--text-primary);line-height:1.4}
+.formula table.bt{font-size:11.5px}
+.formula table.bt th,.formula table.bt td{padding:1px 6px 1px 0}
+@media (max-width:640px){.formula{display:none}}
+.row{gap:7px}
+button,select{height:30px;font-size:13px;padding:0 9px}
+.seg button{height:28px;font-size:12px;padding:0 8px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:auto}
+.rd{font-size:13.5px;line-height:1.4;min-height:1.4em}
+.cap{font-size:12px;line-height:1.4;padding-top:4px}
 </style>
 </head>
 <body>
@@ -25,10 +32,20 @@ button,select{height:33px;font-size:13.5px;padding:0 10px}
 <h1>Depth, activation, init<span>: conditioning from the other side</span></h1>
 <p class="quiz">A signal (each column, a histogram of one layer's activations) spreading through a deep network. Some combinations keep it alive; others vanish it to zero or blow it up.</p>
 
-<div id="wrap"><svg id="stage" viewBox="0 0 640 300" role="img" preserveAspectRatio="xMidYMid meet">
+<div id="wrap">
+<svg id="stage" viewBox="0 0 640 300" role="img" preserveAspectRatio="xMidYMid meet">
   <desc>A grid of per-layer activation histograms across network depth, and a line chart of the standard deviation of activations by layer.</desc>
   <g id="g"></g>
-</svg></div>
+</svg>
+<div class="formula">
+  <div class="f">h = W&middot;a<br>a = &phi;(h)<br>Xavier: Var(W)=1/n<sub>in</sub><br>He: Var(W)=2/n<sub>in</sub></div>
+  <table class="bt">
+    <tr><th>depth</th><td class="num" id="lv-depth">&mdash;</td></tr>
+    <tr><th>std layer 0</th><td class="num" id="lv-std0">&mdash;</td></tr>
+    <tr><th>std layer N</th><td class="num" id="lv-stdN">&mdash;</td></tr>
+  </table>
+</div>
+</div>
 
 <div class="row">
   <span class="klab">depth</span>
@@ -48,8 +65,7 @@ button,select{height:33px;font-size:13.5px;padding:0 10px}
 </div>
 
 <div class="rd" id="readout"></div>
-<div class="cap">Each layer: h = W&middot;a, a = activation(h), with W drawn fresh each layer from the chosen init (width 48).
-  Xavier scales Var(W) = 1/n<sub>in</sub>; He scales Var(W) = 2/n<sub>in</sub> (matched to ReLU).</div>
+<div class="cap">W is drawn fresh each layer from the chosen init, width 48. Top: activation histograms by layer. Bottom: their std by layer (log scale).</div>
 
 <script>
 var NS='http://www.w3.org/2000/svg';
@@ -167,10 +183,13 @@ function draw(){
   var tchart=el('text',{x:padL,y:chartT-4,class:'ts gl'}); tchart.textContent='std of activations by layer (log scale)'; g.appendChild(tchart);
 
   var finalStd=stds[stds.length-1];
-  var verdict = finalStd<0.01 ? 'vanished &mdash; gradients here will be essentially zero'
-    : finalStd>20 ? 'blown up &mdash; the network is saturating or overflowing'
-    : 'stayed in a healthy range across all '+depth+' layers';
-  document.getElementById('readout').innerHTML = 'Activation std: layer 0 = <b class="num">'+stds[0].toFixed(3)+'</b> &rarr; layer '+depth+' = <b class="num">'+finalStd.toExponential(2)+'</b> &mdash; '+verdict+'.';
+  var verdict = finalStd<0.01 ? 'Vanished &mdash; gradients here will be essentially zero.'
+    : finalStd>20 ? 'Blown up &mdash; the network is saturating or overflowing.'
+    : 'Stayed in a healthy range across all '+depth+' layers.';
+  document.getElementById('readout').innerHTML = verdict;
+  document.getElementById('lv-depth').textContent = depth;
+  document.getElementById('lv-std0').textContent = stds[0].toFixed(3);
+  document.getElementById('lv-stdN').textContent = finalStd.toExponential(2);
 }
 
 onParams();

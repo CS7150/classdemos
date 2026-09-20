@@ -7,80 +7,123 @@
 <meta name="description" content="Why Adam's update is invariant to rescaling the gradient, while SGD's is not.">
 <link rel="stylesheet" href="../demo.css">
 <style>
-body{gap:6px;padding:12px 18px 14px}
-h1{font-size:20px;margin-top:2px}
+body{gap:5px;padding:11px 16px 12px}
+h1{font-size:19px;margin-top:2px}
 .quiz{margin:0}
-#wrap{height:clamp(190px,32vh,300px)}
-.row{gap:8px}
-button,select{height:33px;font-size:13.5px;padding:0 10px}
-.klab{font-size:13px}
-.knum{font-size:13px;min-width:auto}
-.rd{font-size:14px;line-height:1.5}
-.cap{font-size:12.5px;line-height:1.5;padding-top:5px}
-table.bt td.num{font-variant-numeric:tabular-nums}
+#wrap{height:clamp(170px,29vh,270px);display:flex;gap:10px;align-items:stretch}
+#stage{flex:1;min-width:0}
+.formula{flex:0 0 160px;display:flex;flex-direction:column;justify-content:center;gap:7px;
+  border-left:1px solid var(--border);padding-left:10px}
+.formula .f{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--text-primary);line-height:1.4}
+.formula table.bt{font-size:11.5px}
+.formula table.bt th,.formula table.bt td{padding:1px 6px 1px 0}
+@media (max-width:640px){.formula{display:none}}
+.row{gap:7px}
+button,select{height:30px;font-size:13px;padding:0 9px}
+.seg button{height:28px;font-size:12px;padding:0 8px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:auto}
+.rd{font-size:13.5px;line-height:1.4;min-height:1.4em}
+.cap{font-size:12px;line-height:1.4;padding-top:4px}
+.warn{color:var(--red)}
 </style>
 </head>
 <body>
 <div class="nav"><a href="./">&larr; Optimization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
 <h1>Adam vs. SGD, rescaled<span>: why Adam is scale-invariant</span></h1>
-<p class="quiz">The same bowl, the same start, run under SGD (orange) and Adam (blue). Slide K to multiply every gradient by a constant &mdash; SGD's steps grow with K; Adam's barely change.</p>
+<p class="quiz">The same tilted bowl as the anisotropy demo, run under SGD (orange) and Adam (blue) at once. Slide K to multiply every gradient by a constant &mdash; SGD's steps grow with K; Adam's barely change.</p>
 
-<div id="wrap"><svg id="stage" viewBox="0 0 640 300" role="img" preserveAspectRatio="xMidYMid meet">
-  <desc>Two optimizer trajectories, SGD and Adam, descending the same bowl while a slider rescales every gradient by a constant K.</desc>
+<div id="wrap">
+<svg id="stage" viewBox="0 0 640 300" role="img" preserveAspectRatio="xMidYMid meet">
+  <desc>Two optimizer trajectories, SGD and Adam, descending the same tilted bowl while a slider rescales every gradient by a constant K, viewable in 1D, 2D, or 3D.</desc>
   <g id="g"></g>
-</svg></div>
+</svg>
+<div class="formula">
+  <div class="f">SGD: v&larr;v&minus;&eta;Kg<br>Adam: v&larr;v&minus;&eta;m/(&radic;v&#8202;+&#8202;&epsilon;)</div>
+  <table class="bt">
+    <tr><th>K</th><td class="num" id="lv-k">&mdash;</td></tr>
+    <tr><th>SGD loss</th><td class="num" id="lv-sgdloss">&mdash;</td></tr>
+    <tr><th>Adam loss</th><td class="num" id="lv-adamloss">&mdash;</td></tr>
+    <tr><th>|SGD step|</th><td class="num" id="lv-sgdstep">&mdash;</td></tr>
+    <tr><th>|Adam step|</th><td class="num" id="lv-adamstep">&mdash;</td></tr>
+    <tr><th>iter</th><td class="num" id="lv-iter">&mdash;</td></tr>
+  </table>
+</div>
+</div>
+
+<div class="row">
+  <div class="seg" id="viewSeg">
+    <button data-v="1d">1D slice</button>
+    <button data-v="2d" class="on">2D contours</button>
+    <button data-v="3d">3D surface</button>
+  </div>
+  <span class="klab">a:1</span>
+  <input type="range" id="aniso" min="3" max="60" step="1" value="20" oninput="onParams()" style="width:72px">
+  <span class="knum" id="anisoVal">20</span>
+  <span class="klab">tilt</span>
+  <input type="range" id="tilt" min="-60" max="60" step="1" value="-25" oninput="onParams()" style="width:72px">
+  <span class="knum" id="tiltVal">&minus;25&deg;</span>
+</div>
 
 <div class="row">
   <button class="main" id="run" onclick="toggleRun()">Run</button>
   <button onclick="stepOnce()">Step</button>
   <button onclick="resetTraj()">Reset</button>
-  <span class="klab">learning rate</span>
-  <input type="range" id="lr" min="0.01" max="0.3" step="0.005" value="0.12" oninput="onParams()" style="width:80px">
+  <span class="klab">&eta;</span>
+  <input type="range" id="lr" min="-2" max="-0.5" step="0.01" value="-0.921" oninput="onParams()" style="width:70px">
   <span class="knum" id="lrVal">0.120</span>
-</div>
-
-<div class="row">
   <span class="klab">gradient scale K</span>
-  <input type="range" id="kscale" min="-1" max="1" step="0.02" value="0" oninput="onParams()" style="width:140px">
-  <span class="knum" id="kVal">1.00&times;</span>
-  <span class="klab" style="color:var(--text-muted)">(log scale, 0.1&times; to 10&times;)</span>
+  <input type="range" id="kscale" min="-1" max="1" step="0.02" value="0" oninput="onParams()" style="width:90px">
+  <span class="knum" id="kVal">1.0&times;</span>
 </div>
 
 <div class="rd" id="readout"></div>
-<div class="cap">SGD: &Delta;v = &minus;&eta;&middot;g. Adam: &Delta;v = &minus;&eta;&middot;m/(&radic;v&#8202;+&#8202;&epsilon;) with EMAs m&asymp;g, v&asymp;g&sup2;,
-  so scaling g by K scales m by K and &radic;v by K &mdash; the K cancels.</div>
+<div class="cap">Scaling g by K scales Adam's m and &radic;v equally, so K cancels in m/&radic;v &mdash; SGD has no such cancellation. Drag the 3D surface to rotate it.</div>
 
 <script>
 var NS='http://www.w3.org/2000/svg';
 function el(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attrs)e.setAttribute(k,attrs[k]);return e;}
 function fmt(v){return (Math.abs(v)<0.001&&v!==0?v.toExponential(1):v.toFixed(3));}
 
-var Q00=14, Q11=1; // fixed, mildly anisotropic bowl (off-diagonal not needed for this point)
-function loss(x,y){return 0.5*(Q00*x*x+Q11*y*y);}
-function grad(x,y){return [Q00*x,Q11*y];}
+/* ---------- shared bowl math (kept in sync with anisotropy.html) ---------- */
+var a=20, Bc=1, thetaDeg=-25;
+var Q00=1,Q01=0,Q11=1;
+function computeQ(){
+  var th=thetaDeg*Math.PI/180, c=Math.cos(th), s=Math.sin(th);
+  Q00 = a*s*s + Bc*c*c;
+  Q11 = a*c*c + Bc*s*s;
+  Q01 = (Bc-a)*s*c;
+}
+function loss(x,y){return 0.5*(Q00*x*x + 2*Q01*x*y + Q11*y*y);}
+function grad(x,y){return [Q00*x+Q01*y, Q01*x+Q11*y];}
+function eigvec(which){
+  var th=thetaDeg*Math.PI/180;
+  return which==='a' ? [-Math.sin(th),Math.cos(th)] : [Math.cos(th),Math.sin(th)];
+}
 
+var view='2d';
 var K=1, lr=0.12;
 var beta1=0.9, beta2=0.999, eps=1e-8;
 var sgd={}, adam={};
 
-function x0y0(){ return [1.3, 1.15]; }
-
+function startPoint(){
+  var steep=eigvec('a'), shallow=eigvec('b');
+  return [0.4*steep[0]+1.4*shallow[0], 0.4*steep[1]+1.4*shallow[1]];
+}
 function resetTraj(){
-  var p=x0y0();
+  var p=startPoint();
   sgd = {x:p[0],y:p[1],iter:0,path:[[p[0],p[1]]],diverged:false};
-  adam = {x:p[0],y:p[1],iter:0,path:[[p[0],p[1]]],mx:0,my:0,vx:0,vy:0,diverged:false};
+  adam = {x:p[0],y:p[1],iter:0,path:[[p[0],p[1]]],mx:0,my:0,vx:0,vy:0,diverged:false,lastStep:0};
   draw();
 }
 
 function stepOnce(){
-  // SGD, on the K-scaled gradient
   if(!sgd.diverged){
     var g=grad(sgd.x,sgd.y);
     var nx=sgd.x-lr*K*g[0], ny=sgd.y-lr*K*g[1];
     sgd.x=nx; sgd.y=ny; sgd.iter++; sgd.path.push([nx,ny]);
     if(!isFinite(nx)||!isFinite(ny)||Math.abs(nx)>8||Math.abs(ny)>8) sgd.diverged=true;
   }
-  // Adam, on the same K-scaled gradient
   if(!adam.diverged){
     var g2=grad(adam.x,adam.y), gx=K*g2[0], gy=K*g2[1];
     adam.iter++;
@@ -92,7 +135,7 @@ function stepOnce(){
     var mxh=adam.mx/(1-Math.pow(beta1,t)), myh=adam.my/(1-Math.pow(beta1,t));
     var vxh=adam.vx/(1-Math.pow(beta2,t)), vyh=adam.vy/(1-Math.pow(beta2,t));
     var dx=lr*mxh/(Math.sqrt(vxh)+eps), dy=lr*myh/(Math.sqrt(vyh)+eps);
-    adam.lastStep=[dx,dy];
+    adam.lastStep=Math.hypot(dx,dy);
     var nx2=adam.x-dx, ny2=adam.y-dy;
     adam.x=nx2; adam.y=ny2; adam.path.push([nx2,ny2]);
     if(!isFinite(nx2)||!isFinite(ny2)||Math.abs(nx2)>8||Math.abs(ny2)>8) adam.diverged=true;
@@ -104,80 +147,183 @@ var running=false, timer=null;
 function setRunning(r){
   running=r;
   document.getElementById('run').textContent=r?'Pause':'Run';
-  if(r){ timer=setInterval(function(){stepOnce(); if(sgd.iter>=80||(sgd.diverged&&adam.diverged)) setRunning(false);},110); }
+  if(r){ timer=setInterval(function(){stepOnce(); if(sgd.iter>=90||(sgd.diverged&&adam.diverged)) setRunning(false);},110); }
   else clearInterval(timer);
 }
 function toggleRun(){ setRunning(!running); }
 
 function onParams(){
-  lr=parseFloat(document.getElementById('lr').value);
+  a=parseFloat(document.getElementById('aniso').value);
+  thetaDeg=parseFloat(document.getElementById('tilt').value);
+  document.getElementById('anisoVal').textContent=a;
+  document.getElementById('tiltVal').innerHTML=(thetaDeg<0?'&minus;':'')+Math.abs(thetaDeg)+'&deg;';
+  computeQ();
+  lr=Math.pow(10, parseFloat(document.getElementById('lr').value));
   document.getElementById('lrVal').textContent=lr.toFixed(3);
   var slider=parseFloat(document.getElementById('kscale').value);
-  K=Math.pow(10, slider); // -1..1 -> 0.1x .. 10x
+  K=Math.pow(10, slider);
   document.getElementById('kVal').textContent=(K<1?K.toFixed(2):K.toFixed(1))+'×';
   setRunning(false); resetTraj();
 }
 
+document.getElementById('viewSeg').addEventListener('click', function(e){
+  var b=e.target.closest('button'); if(!b) return;
+  view=b.dataset.v;
+  Array.from(document.getElementById('viewSeg').children).forEach(function(x){x.classList.toggle('on',x===b);});
+  document.getElementById('stage').style.cursor = (view==='3d') ? 'grab' : 'default';
+  draw();
+});
+
+/* ---------- drawing ---------- */
 var VW=640, VH=300;
-function toPx(x,y,scale,cx,cy){return [cx+x*scale,cy-y*scale];}
+function toPx2(x,y,scale,cx,cy){return [cx+x*scale, cy-y*scale];}
 
 function draw(){
   var g=document.getElementById('g');
   g.innerHTML='';
-  var scale=90, cx=210, cy=VH/2+6;
-  var gi;
-  for(gi=-1.5; gi<=1.5+1e-9; gi+=0.5){
-    var p0=toPx(gi,-1.5,scale,cx,cy), p1=toPx(gi,1.5,scale,cx,cy);
-    g.appendChild(el('line',{x1:p0[0],y1:p0[1],x2:p1[0],y2:p1[1],stroke:'var(--border)','stroke-width':gi===0?1.2:0.6,opacity:gi===0?0.8:0.45}));
-    var q0=toPx(-1.5,gi,scale,cx,cy), q1=toPx(1.5,gi,scale,cx,cy);
-    g.appendChild(el('line',{x1:q0[0],y1:q0[1],x2:q1[0],y2:q1[1],stroke:'var(--border)','stroke-width':gi===0?1.2:0.6,opacity:gi===0?0.8:0.45}));
-  }
-  var levels=[0.05,0.15,0.3,0.5,0.8,1.2,1.7,2.3];
-  for(var i=0;i<levels.length;i++){
-    var c=levels[i], rx=Math.sqrt(c/Q00)*scale, ry=Math.sqrt(c/Q11)*scale;
-    g.appendChild(el('ellipse',{cx:cx,cy:cy,rx:rx,ry:ry,fill:'none',stroke:'var(--border-strong)','stroke-opacity':0.5,'stroke-width':1}));
-  }
-  function plotPath(path, diverged, color, colorInk){
-    var pts=path.map(function(p){return toPx(p[0],p[1],scale,cx,cy).join(',');}).join(' ');
-    g.appendChild(el('polyline',{points:pts,fill:'none',stroke:diverged?'var(--red)':colorInk,'stroke-width':2.2}));
-    for(var si=0; si<path.length-1; si++){
-      var sp=toPx(path[si][0],path[si][1],scale,cx,cy);
-      g.appendChild(el('circle',{cx:sp[0],cy:sp[1],r:2.8,fill:'var(--surface)',stroke:diverged?'var(--red)':colorInk,'stroke-width':1.1}));
-    }
-    var last=path[path.length-1], lp=toPx(last[0],last[1],scale,cx,cy);
-    g.appendChild(el('circle',{cx:lp[0],cy:lp[1],r:5,fill:diverged?'var(--red)':colorInk}));
-  }
-  plotPath(sgd.path, sgd.diverged, 'var(--orange)', 'var(--orange-ink)');
-  plotPath(adam.path, adam.diverged, 'var(--blue)', 'var(--blue-ink)');
-
-  var lg=el('text',{x:8,y:16,class:'ts gl'}); lg.innerHTML=''; lg.textContent='orange = SGD, blue = Adam'; g.appendChild(lg);
-
-  // step-size readout panel on the right
-  var gx=Q00*sgd.x*K, gy0=Q11*sgd.y*K; // last raw scaled gradient at sgd point (for display only)
-  var sgdStep = Math.hypot(lr*K*Q00*sgd.x, lr*K*Q11*sgd.y);
-  var adamStep = adam.lastStep ? Math.hypot(adam.lastStep[0],adam.lastStep[1]) : 0;
-  var rows=[
-    ['K', K.toFixed(2)+'×'],
-    ['|SGD step|', fmt(sgdStep)],
-    ['|Adam step|', fmt(adamStep)]
-  ];
-  var rx0=440, ry0=40;
-  g.appendChild(el('text',{x:rx0,y:ry0-14,class:'ts gl',style:'font-weight:600'})).textContent='last-step size';
-  for(var r=0;r<rows.length;r++){
-    var lab=el('text',{x:rx0,y:ry0+r*22,class:'ts gl'}); lab.textContent=rows[r][0]; g.appendChild(lab);
-    var val=el('text',{x:rx0+150,y:ry0+r*22,class:'ts gl','text-anchor':'end'}); val.textContent=rows[r][1]; g.appendChild(val);
-  }
-
+  if(view==='1d') draw1D(g);
+  else if(view==='2d') draw2D(g);
+  else draw3D(g);
   readout();
 }
 
-function readout(){
-  var sgdStep = Math.hypot(lr*K*Q00*sgd.x, lr*K*Q11*sgd.y);
-  var adamStep = adam.lastStep ? Math.hypot(adam.lastStep[0],adam.lastStep[1]) : lr;
-  document.getElementById('readout').innerHTML =
-    'At K = <b class="num">'+K.toFixed(2)+'&times;</b>: SGD\'s last step size &asymp; <b class="num">'+fmt(sgdStep)+
-    '</b> (scales with K) &middot; Adam\'s &asymp; <b class="num">'+fmt(adamStep)+'</b> (roughly &eta; = '+lr.toFixed(3)+', regardless of K).';
+function plotPath2D(g,path,diverged,colorInk,scale,cx,cy){
+  var pts=path.map(function(p){return toPx2(p[0],p[1],scale,cx,cy).join(',');}).join(' ');
+  g.appendChild(el('polyline',{points:pts,fill:'none',stroke:diverged?'var(--red)':colorInk,'stroke-width':2.2}));
+  for(var si=0; si<path.length-1; si++){
+    var sp=toPx2(path[si][0],path[si][1],scale,cx,cy);
+    g.appendChild(el('circle',{cx:sp[0],cy:sp[1],r:2.8,fill:'var(--surface)',stroke:diverged?'var(--red)':colorInk,'stroke-width':1.1}));
+  }
+  var last=path[path.length-1], lp=toPx2(last[0],last[1],scale,cx,cy);
+  g.appendChild(el('circle',{cx:lp[0],cy:lp[1],r:5,fill:diverged?'var(--red)':colorInk}));
 }
+
+function draw2D(g){
+  var scale=88, cx=VW/2, cy=VH/2+6;
+  for(var gi=-1.5; gi<=1.5+1e-9; gi+=0.5){
+    var p0=toPx2(gi,-1.5,scale,cx,cy), p1=toPx2(gi,1.5,scale,cx,cy);
+    g.appendChild(el('line',{x1:p0[0],y1:p0[1],x2:p1[0],y2:p1[1],stroke:'var(--border)','stroke-width':gi===0?1.2:0.6,opacity:gi===0?0.8:0.45}));
+    var q0=toPx2(-1.5,gi,scale,cx,cy), q1=toPx2(1.5,gi,scale,cx,cy);
+    g.appendChild(el('line',{x1:q0[0],y1:q0[1],x2:q1[0],y2:q1[1],stroke:'var(--border)','stroke-width':gi===0?1.2:0.6,opacity:gi===0?0.8:0.45}));
+  }
+  var ea=eigvec('a'), eb=eigvec('b');
+  var levels=[0.05,0.15,0.3,0.5,0.8,1.2,1.7,2.3];
+  for(var i=0;i<levels.length;i++){
+    var c=levels[i], ra=Math.sqrt(c/a), rb=Math.sqrt(c/Bc), pts=[];
+    for(var ph=0; ph<=Math.PI*2+1e-9; ph+=Math.PI/24){
+      var px = ra*Math.cos(ph)*ea[0] + rb*Math.sin(ph)*eb[0];
+      var py = ra*Math.cos(ph)*ea[1] + rb*Math.sin(ph)*eb[1];
+      pts.push(toPx2(px,py,scale,cx,cy).join(','));
+    }
+    g.appendChild(el('polyline',{points:pts.join(' '),fill:'none',stroke:'var(--border-strong)','stroke-opacity':0.6,'stroke-width':1}));
+  }
+  plotPath2D(g, sgd.path, sgd.diverged, 'var(--orange-ink)', scale,cx,cy);
+  plotPath2D(g, adam.path, adam.diverged, 'var(--blue-ink)', scale,cx,cy);
+  var t1=el('text',{x:8,y:16,class:'ts gl'}); t1.textContent='orange = SGD, blue = Adam'; g.appendChild(t1);
+}
+
+function draw1D(g){
+  var panelW=(VW-60)/2, h=VH-56, baseY=VH-26;
+  var maxL=0.5*Math.max(a,Bc)*1.5*1.5;
+  function panel(px0, coeff, label){
+    var scaleX=panelW/3.2, scaleY=(h-14)/maxL;
+    var ox=px0+panelW/2;
+    g.appendChild(el('line',{x1:px0,y1:baseY,x2:px0+panelW,y2:baseY,stroke:'var(--border-strong)','stroke-width':1}));
+    g.appendChild(el('line',{x1:ox,y1:baseY,x2:ox,y2:26,stroke:'var(--border-strong)','stroke-width':1}));
+    var pts=[];
+    for(var xx=-1.6; xx<=1.6+1e-9; xx+=0.05){
+      var L=0.5*coeff*xx*xx;
+      pts.push((ox+xx*scaleX)+','+(baseY-Math.min(L,maxL)*scaleY));
+    }
+    g.appendChild(el('polyline',{points:pts.join(' '),fill:'none',stroke:'var(--border-strong)','stroke-width':1.4}));
+    function trail(path, coordIdx, color){
+      for(var i=0;i<path.length;i++){
+        var xv=path[i][coordIdx], L=Math.min(0.5*coeff*xv*xv,maxL);
+        g.appendChild(el('circle',{cx:ox+xv*scaleX,cy:baseY-L*scaleY,r:i===path.length-1?5:2.4,
+          fill:color,opacity:i===path.length-1?1:0.4}));
+      }
+    }
+    trail(sgd.path, px0<VW/2?0:1, 'var(--orange-ink)');
+    trail(adam.path, px0<VW/2?0:1, 'var(--blue-ink)');
+    var t=el('text',{x:ox,y:VH-6,class:'ts gl','text-anchor':'middle'}); t.textContent=label; g.appendChild(t);
+  }
+  panel(20, Q00, 'x  (holding y=0, curvature '+fmt(Q00)+')');
+  panel(40+panelW, Q11, 'y  (holding x=0, curvature '+fmt(Q11)+')');
+}
+
+var azDeg=35, elDeg=22;
+function pr3(v){
+  var az=azDeg*Math.PI/180, elv=elDeg*Math.PI/180, s=Math.sin(az), c=Math.cos(az);
+  return [v[0]*c+v[1]*s, -(-v[0]*s*Math.sin(elv)+v[1]*c*Math.sin(elv)+v[2]*Math.cos(elv))];
+}
+function draw3D(g){
+  var zMax=0.5*a*1.5*1.5;
+  function zn(x,y){return loss(x,y)/zMax*1.4;}
+  var scale=78, cx=VW/2, cy=VH/2+26;
+  function M(x,y,z){var r=pr3([x,y,z]); return [cx+r[0]*scale, cy+r[1]*scale];}
+  var n=13, lo=-1.5, hi=1.5, step=(hi-lo)/n, i,j;
+  for(i=0;i<=n;i++){
+    var pts=[];
+    for(j=0;j<=n;j++){var x=lo+i*step, y=lo+j*step; pts.push(M(x,y,zn(x,y)).join(','));}
+    g.appendChild(el('polyline',{points:pts.join(' '),fill:'none',stroke:'var(--border-strong)','stroke-width':0.7,opacity:0.35}));
+  }
+  for(j=0;j<=n;j++){
+    var pts=[];
+    for(i=0;i<=n;i++){var x=lo+i*step, y=lo+j*step; pts.push(M(x,y,zn(x,y)).join(','));}
+    g.appendChild(el('polyline',{points:pts.join(' '),fill:'none',stroke:'var(--border-strong)','stroke-width':0.7,opacity:0.35}));
+  }
+  var O=M(0,0,0), ax=M(1.6,0,0), ay=M(0,1.6,0);
+  g.appendChild(el('line',{x1:O[0],y1:O[1],x2:ax[0],y2:ax[1],stroke:'var(--border-strong)','stroke-width':1}));
+  g.appendChild(el('line',{x1:O[0],y1:O[1],x2:ay[0],y2:ay[1],stroke:'var(--border-strong)','stroke-width':1}));
+  function plotPath3D(path, diverged, colorInk){
+    var pts3=path.map(function(p){return M(p[0],p[1],zn(p[0],p[1]));});
+    g.appendChild(el('polyline',{points:pts3.map(function(p){return p.join(',');}).join(' '),fill:'none',
+      stroke:diverged?'var(--red)':colorInk,'stroke-width':2.2}));
+    for(var si=0; si<pts3.length-1; si++){
+      g.appendChild(el('circle',{cx:pts3[si][0],cy:pts3[si][1],r:3,fill:'var(--surface)',stroke:diverged?'var(--red)':colorInk,'stroke-width':1.2}));
+    }
+    var lastP=pts3[pts3.length-1], lastXY=path[path.length-1];
+    var drop=M(lastXY[0],lastXY[1],0);
+    g.appendChild(el('line',{x1:lastP[0],y1:lastP[1],x2:drop[0],y2:drop[1],stroke:'var(--border-strong)','stroke-width':1,'stroke-dasharray':'3 3'}));
+    g.appendChild(el('circle',{cx:lastP[0],cy:lastP[1],r:5,fill:diverged?'var(--red)':colorInk}));
+  }
+  plotPath3D(sgd.path, sgd.diverged, 'var(--orange-ink)');
+  plotPath3D(adam.path, adam.diverged, 'var(--blue-ink)');
+  var t1=el('text',{x:8,y:16,class:'ts gl'}); t1.textContent='orange = SGD, blue = Adam'; g.appendChild(t1);
+}
+
+function readout(){
+  var sgdStep = Math.hypot.apply(null, grad(sgd.x,sgd.y).map(function(v){return lr*K*v;}));
+  var adamStep = adam.lastStep || lr;
+  var warn = (sgd.diverged?'SGD diverged. ':'') + (adam.diverged?'Adam diverged.':'');
+  document.getElementById('readout').innerHTML = warn ? '<span class="warn">'+warn+'</span>' : '';
+  document.getElementById('lv-k').textContent=K.toFixed(2)+'×';
+  document.getElementById('lv-sgdloss').textContent=fmt(loss(sgd.x,sgd.y));
+  document.getElementById('lv-adamloss').textContent=fmt(loss(adam.x,adam.y));
+  document.getElementById('lv-sgdstep').textContent=fmt(sgdStep);
+  document.getElementById('lv-adamstep').textContent=fmt(adamStep);
+  document.getElementById('lv-iter').textContent=sgd.iter;
+}
+
+/* ---------- drag to orbit the 3D surface ---------- */
+var stage=document.getElementById('stage');
+var dragging=false, sx=0, sy=0, az0=0, el0=0;
+stage.style.touchAction='none';
+stage.addEventListener('pointerdown', function(e){
+  if(view!=='3d') return;
+  dragging=true; sx=e.clientX; sy=e.clientY; az0=azDeg; el0=elDeg;
+  stage.setPointerCapture(e.pointerId);
+  stage.style.cursor='grabbing';
+});
+stage.addEventListener('pointermove', function(e){
+  if(!dragging) return;
+  azDeg = az0 + (e.clientX-sx)*0.4;
+  elDeg = Math.max(4, Math.min(86, el0 - (e.clientY-sy)*0.4));
+  draw();
+});
+function endDrag(){ dragging=false; stage.style.cursor = view==='3d' ? 'grab' : 'default'; }
+stage.addEventListener('pointerup', endDrag);
+stage.addEventListener('pointercancel', endDrag);
 
 onParams();
 </script>

@@ -7,17 +7,24 @@
 <meta name="description" content="Why one learning rate can't be right for every direction at once, in 1D, 2D, and 3D.">
 <link rel="stylesheet" href="../demo.css">
 <style>
-body{gap:6px;padding:12px 18px 14px}
-h1{font-size:20px;margin-top:2px}
+body{gap:5px;padding:11px 16px 12px}
+h1{font-size:19px;margin-top:2px}
 .quiz{margin:0}
-#wrap{height:clamp(190px,32vh,300px)}
-.row{gap:8px}
-button,select{height:33px;font-size:13.5px;padding:0 10px}
-.seg button{height:31px;font-size:12.5px;padding:0 9px}
-.klab{font-size:13px}
-.knum{font-size:13px;min-width:auto}
-.rd{font-size:14px;line-height:1.5}
-.cap{font-size:12.5px;line-height:1.5;padding-top:5px}
+#wrap{height:clamp(170px,29vh,270px);display:flex;gap:10px;align-items:stretch}
+#stage{flex:1;min-width:0}
+.formula{flex:0 0 150px;display:flex;flex-direction:column;justify-content:center;gap:7px;
+  border-left:1px solid var(--border);padding-left:10px}
+.formula .f{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:var(--text-primary);line-height:1.4}
+.formula table.bt{font-size:11.5px}
+.formula table.bt th,.formula table.bt td{padding:1px 6px 1px 0}
+@media (max-width:640px){.formula{display:none}}
+.row{gap:7px}
+button,select{height:30px;font-size:13px;padding:0 9px}
+.seg button{height:28px;font-size:12px;padding:0 8px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:auto}
+.rd{font-size:13.5px;line-height:1.4;min-height:1.4em}
+.cap{font-size:12px;line-height:1.4;padding-top:4px}
 .warn{color:var(--red)}
 </style>
 </head>
@@ -26,10 +33,23 @@ button,select{height:33px;font-size:13.5px;padding:0 10px}
 <h1>Anisotropic gradient descent<span>: the zig-zag problem</span></h1>
 <p class="quiz">A tilted bowl, steep along one axis and shallow along another. One shared learning rate fights itself; per-axis rates help, but only fully fix it when the tilt is zero.</p>
 
-<div id="wrap"><svg id="stage" viewBox="0 0 640 300" role="img" preserveAspectRatio="xMidYMid meet">
+<div id="wrap">
+<svg id="stage" viewBox="0 0 640 300" role="img" preserveAspectRatio="xMidYMid meet">
   <desc>An animated view of gradient descent on a tilted, elongated quadratic bowl, switchable between a 1D per-axis slice, a 2D contour map, and a 3D wireframe surface.</desc>
   <g id="g"></g>
-</svg></div>
+</svg>
+<div class="formula">
+  <div class="f">v &larr; v &minus; &eta;&middot;Qv</div>
+  <table class="bt">
+    <tr><th>x</th><td class="num" id="lv-x">&mdash;</td></tr>
+    <tr><th>y</th><td class="num" id="lv-y">&mdash;</td></tr>
+    <tr><th>loss</th><td class="num" id="lv-loss">&mdash;</td></tr>
+    <tr><th>&eta;<sub>x</sub></th><td class="num" id="lv-etax">&mdash;</td></tr>
+    <tr><th>&eta;<sub>y</sub></th><td class="num" id="lv-etay">&mdash;</td></tr>
+    <tr><th>iter</th><td class="num" id="lv-iter">&mdash;</td></tr>
+  </table>
+</div>
+</div>
 
 <div class="row">
   <div class="seg" id="viewSeg">
@@ -51,15 +71,15 @@ button,select{height:33px;font-size:13.5px;padding:0 10px}
     <button data-m="per">Per-axis &eta;</button>
   </div>
   <span id="sharedRow" style="display:flex;align-items:center;gap:6px">
-    <input type="range" id="lr" min="0.002" max="0.6" step="0.002" value="0.03" oninput="onLR()" style="width:72px">
+    <input type="range" id="lr" min="-3" max="-0.2" step="0.01" value="-1.523" oninput="onLR()" style="width:72px">
     <span class="knum" id="lrVal">0.030</span>
   </span>
   <span id="perRow" style="display:none;align-items:center;gap:6px">
     <span class="klab">x</span>
-    <input type="range" id="lrx" min="0.002" max="0.6" step="0.002" value="0.03" oninput="onLR()" style="width:60px">
+    <input type="range" id="lrx" min="-3" max="-0.2" step="0.01" value="-1.523" oninput="onLR()" style="width:60px">
     <span class="knum" id="lrxVal">0.030</span>
     <span class="klab">y</span>
-    <input type="range" id="lry" min="0.01" max="2" step="0.01" value="1.20" oninput="onLR()" style="width:60px">
+    <input type="range" id="lry" min="-2" max="0.32" step="0.01" value="0.079" oninput="onLR()" style="width:60px">
     <span class="knum" id="lryVal">1.20</span>
   </span>
   <button class="main" id="run" onclick="toggleRun()">Run</button>
@@ -71,9 +91,7 @@ button,select{height:33px;font-size:13.5px;padding:0 10px}
 </div>
 
 <div class="rd" id="readout"></div>
-<div class="cap">L(x,y) = &frac12;v<sup>T</sup>Qv for v=(x,y), where Q has eigenvalues a and 1 along axes rotated by the tilt.
-  Per-axis rates scale x and y separately, not the true eigen-directions &mdash; in 3D, drag the surface to rotate it.
-  <span id="stab"></span></div>
+<div class="cap">L(x,y) = &frac12;v<sup>T</sup>Qv, Q has eigenvalues a and 1 along axes rotated by the tilt. Per-axis rates can't fully fix a nonzero tilt. Drag the 3D surface to rotate it.</div>
 
 <script>
 var NS='http://www.w3.org/2000/svg';
@@ -110,9 +128,12 @@ function resetTraj(){
   draw();
 }
 
+function fromLog(id){ return Math.pow(10, parseFloat(document.getElementById(id).value)); }
+function toLog(id,val){ document.getElementById(id).value = Math.log10(val); }
+
 function curLR(){
-  if(mode==='shared'){var lr=parseFloat(document.getElementById('lr').value);return [lr,lr];}
-  return [parseFloat(document.getElementById('lrx').value), parseFloat(document.getElementById('lry').value)];
+  if(mode==='shared'){var lr=fromLog('lr');return [lr,lr];}
+  return [fromLog('lrx'), fromLog('lry')];
 }
 
 function stepOnce(){
@@ -145,9 +166,9 @@ function onAniso(){
   setRunning(false); resetTraj();
 }
 function onLR(){
-  document.getElementById('lrVal').textContent=parseFloat(document.getElementById('lr').value).toFixed(3);
-  document.getElementById('lrxVal').textContent=parseFloat(document.getElementById('lrx').value).toFixed(3);
-  document.getElementById('lryVal').textContent=parseFloat(document.getElementById('lry').value).toFixed(2);
+  document.getElementById('lrVal').textContent=fromLog('lr').toFixed(3);
+  document.getElementById('lrxVal').textContent=fromLog('lrx').toFixed(3);
+  document.getElementById('lryVal').textContent=fromLog('lry').toFixed(2);
 }
 
 document.getElementById('viewSeg').addEventListener('click', function(e){
@@ -175,18 +196,18 @@ function selectMode(m){
 }
 function presetLow(){
   selectMode('shared');
-  document.getElementById('lr').value = (0.15/a).toFixed(4); onLR();
+  toLog('lr', Math.max(0.001, 0.15/a)); onLR();
   setRunning(false); resetTraj(); setRunning(true);
 }
 function presetHigh(){
   selectMode('shared');
-  document.getElementById('lr').value = Math.min(0.6, 2.05/a).toFixed(4); onLR();
+  toLog('lr', Math.min(0.6, 2.05/a)); onLR();
   setRunning(false); resetTraj(); setRunning(true);
 }
 function presetGood(){
   selectMode('per');
-  document.getElementById('lrx').value = Math.min(0.6, 1.2/a).toFixed(4);
-  document.getElementById('lry').value = Math.min(2, 1.2/Bc).toFixed(4);
+  toLog('lrx', Math.min(0.6, 1.2/a));
+  toLog('lry', Math.min(2, 1.2/Bc));
   onLR();
   setRunning(false); resetTraj(); setRunning(true);
 }
@@ -307,12 +328,16 @@ function draw3D(g){
 
 function readout(){
   var last=st.losses[st.losses.length-1];
-  var h='<b>Iteration '+st.iter+'.</b> loss = <b class="num">'+fmt(last)+'</b>';
-  if(st.diverged) h='<span class="warn"><b>Diverged.</b></span> Past the stability limit &mdash; lower the rate, or use per-axis rates.';
-  document.getElementById('readout').innerHTML=h;
-  document.getElementById('stab').innerHTML = thetaDeg===0
-    ? ('At tilt 0, stability needs &eta; &lt; '+(2/a).toFixed(3)+' on x but &eta; &lt; '+(2/Bc).toFixed(2)+' on y.')
-    : ('At a nonzero tilt, x and y mix the two eigen-directions, so no pair of per-axis rates fully removes the zig-zag.');
+  document.getElementById('readout').innerHTML = st.diverged
+    ? '<span class="warn"><b>Diverged.</b></span> Past the stability limit &mdash; lower the rate, or use per-axis rates.'
+    : '';
+  var lrs=curLR();
+  document.getElementById('lv-x').textContent=fmt(st.x);
+  document.getElementById('lv-y').textContent=fmt(st.y);
+  document.getElementById('lv-loss').textContent=fmt(last);
+  document.getElementById('lv-etax').textContent=lrs[0].toFixed(3);
+  document.getElementById('lv-etay').textContent=lrs[1].toFixed(3);
+  document.getElementById('lv-iter').textContent=st.iter;
 }
 
 /* ---------- drag to orbit the 3D surface ---------- */
