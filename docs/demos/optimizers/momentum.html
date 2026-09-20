@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Momentum averages out noise</title>
+<meta name="description" content="Why averaging the gradient with momentum lets descent ride through high-frequency ripples that trap plain gradient descent.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:5px;padding:11px 16px 12px}
+h1{font-size:19px;margin-top:2px}
+.quiz{margin:0}
+#wrap{height:clamp(170px,29vh,270px);display:flex;gap:10px;align-items:stretch}
+#stage{flex:1;min-width:0}
+.formula{flex:0 0 165px;display:flex;flex-direction:column;justify-content:center;gap:7px;
+  border-left:1px solid var(--border);padding-left:10px}
+.formula .f{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--text-primary);line-height:1.45}
+.formula table.bt{font-size:11.5px}
+.formula table.bt th,.formula table.bt td{padding:1px 6px 1px 0}
+@media (max-width:640px){.formula{display:none}}
+.row{gap:7px}
+button,select{height:30px;font-size:13px;padding:0 9px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:auto}
+.rd{font-size:13.5px;line-height:1.4;min-height:1.4em}
+.cap{font-size:12px;line-height:1.4;padding-top:4px}
+.warn{color:var(--red)}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Optimization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Momentum<span>: averaging out the noise, before Adam</span></h1>
+<p class="quiz">A smooth bowl with a high-frequency ripple riding on top. Plain gradient descent (orange) gets stuck bouncing inside one ripple; momentum (blue) averages the alternating ripple gradient toward zero and keeps riding the bowl's gradient down.</p>
+
+<div id="wrap">
+<svg id="stage" viewBox="0 0 640 300" role="img" preserveAspectRatio="xMidYMid meet">
+  <desc>A 1D loss curve made of a smooth bowl plus a high-frequency ripple, with two descent trajectories overlaid: plain gradient descent, which bounces inside one ripple, and momentum, which rides the bowl down.</desc>
+  <g id="g"></g>
+</svg>
+<div class="formula">
+  <div class="f">GD: x&larr;x&minus;&eta;g<br>Momentum:<br>v&larr;&beta;v+(1-&beta;)g<br>x&larr;x&minus;&eta;v</div>
+  <table class="bt">
+    <tr><th>iter</th><td class="num" id="lv-iter">&mdash;</td></tr>
+    <tr><th>g (raw)</th><td class="num" id="lv-g">&mdash;</td></tr>
+    <tr><th>v (EMA)</th><td class="num" id="lv-v">&mdash;</td></tr>
+    <tr><th>x, GD</th><td class="num" id="lv-xgd">&mdash;</td></tr>
+    <tr><th>x, mom.</th><td class="num" id="lv-xmom">&mdash;</td></tr>
+  </table>
+</div>
+</div>
+
+<div class="row">
+  <span class="klab">ripple amp</span>
+  <input type="range" id="ramp" min="0" max="0.3" step="0.01" value="0.08" oninput="onParams()" style="width:70px">
+  <span class="knum" id="rampVal">0.08</span>
+  <span class="klab">ripple period</span>
+  <input type="range" id="rperiod" min="0.08" max="0.6" step="0.01" value="0.22" oninput="onParams()" style="width:70px">
+  <span class="knum" id="rperiodVal">0.22</span>
+  <span class="klab">bowl steepness a</span>
+  <input type="range" id="bowlA" min="0.1" max="1.2" step="0.01" value="0.4" oninput="onParams()" style="width:70px">
+  <span class="knum" id="bowlAVal">0.40</span>
+</div>
+
+<div class="row">
+  <button class="main" id="run" onclick="toggleRun()">Run</button>
+  <button onclick="stepOnce()">Step</button>
+  <button onclick="resetTraj()">Reset</button>
+  <span class="klab">&beta;</span>
+  <input type="range" id="beta" min="0" max="0.98" step="0.01" value="0.85" oninput="onParams()" style="width:70px">
+  <span class="knum" id="betaVal">0.85</span>
+  <span class="klab">&eta;</span>
+  <input type="range" id="lr" min="-2.3" max="-0.5" step="0.01" value="-1.097" oninput="onParams()" style="width:70px">
+  <span class="knum" id="lrVal">0.080</span>
+</div>
+
+<div class="rd" id="readout"></div>
+<div class="cap">Orange dashed = smooth bowl alone. Solid curve = bowl + ripple, the actual loss. Momentum's v is an EMA of the gradient
+  &mdash; a zero-mean alternating ripple gradient averages toward 0, leaving mostly the slow bowl gradient.</div>
+
+<script>
+var NS='http://www.w3.org/2000/svg';
+function el(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attrs)e.setAttribute(k,attrs[k]);return e;}
+function fmt(v){return (Math.abs(v)<0.001&&v!==0?v.toExponential(1):v.toFixed(3));}
+
+var rampAmp=0.08, rPeriod=0.22, bowlA=0.4, beta=0.85, lr=0.08;
+
+function loss(x){ return 0.5*bowlA*x*x + rampAmp*Math.sin(2*Math.PI*x/rPeriod); }
+function grad(x){ return bowlA*x + rampAmp*(2*Math.PI/rPeriod)*Math.cos(2*Math.PI*x/rPeriod); }
+
+var gd={}, mom={};
+function resetTraj(){
+  var x0=1.3;
+  gd = {x:x0, iter:0, path:[x0], diverged:false};
+  mom = {x:x0, v:0, iter:0, path:[x0], diverged:false, lastG:0};
+  draw();
+}
+
+function stepOnce(){
+  if(!gd.diverged){
+    var g=grad(gd.x);
+    var nx=gd.x-lr*g;
+    gd.x=nx; gd.iter++; gd.path.push(nx);
+    if(!isFinite(nx)||Math.abs(nx)>8) gd.diverged=true;
+  }
+  if(!mom.diverged){
+    var g2=grad(mom.x);
+    mom.v = beta*mom.v + (1-beta)*g2;
+    mom.lastG=g2;
+    var nx2=mom.x-lr*mom.v;
+    mom.x=nx2; mom.iter++; mom.path.push(nx2);
+    if(!isFinite(nx2)||Math.abs(nx2)>8) mom.diverged=true;
+  }
+  draw();
+}
+
+var running=false, timer=null;
+function setRunning(r){
+  running=r;
+  document.getElementById('run').textContent=r?'Pause':'Run';
+  if(r){ timer=setInterval(function(){stepOnce(); if(gd.iter>=140||(gd.diverged&&mom.diverged)) setRunning(false);}, 90); }
+  else clearInterval(timer);
+}
+function toggleRun(){ setRunning(!running); }
+
+function onParams(){
+  rampAmp=parseFloat(document.getElementById('ramp').value);
+  rPeriod=parseFloat(document.getElementById('rperiod').value);
+  bowlA=parseFloat(document.getElementById('bowlA').value);
+  beta=parseFloat(document.getElementById('beta').value);
+  lr=Math.pow(10, parseFloat(document.getElementById('lr').value));
+  document.getElementById('rampVal').textContent=rampAmp.toFixed(2);
+  document.getElementById('rperiodVal').textContent=rPeriod.toFixed(2);
+  document.getElementById('bowlAVal').textContent=bowlA.toFixed(2);
+  document.getElementById('betaVal').textContent=beta.toFixed(2);
+  document.getElementById('lrVal').textContent=lr.toFixed(3);
+  setRunning(false); resetTraj();
+}
+
+var VW=640, VH=300;
+function draw(){
+  var g=document.getElementById('g');
+  g.innerHTML='';
+  var padL=14, padR=14, padT=16, padB=26;
+  var plotW=VW-padL-padR, plotH=VH-padT-padB;
+  var xMin=-1.7, xMax=1.7;
+  var yMaxBowl=0.5*bowlA*xMax*xMax;
+  var yMax=yMaxBowl+rampAmp+0.02, yMin=-rampAmp-0.02;
+  function px(x){ return padL + (x-xMin)/(xMax-xMin)*plotW; }
+  function py(v){ return padT + (yMax-v)/(yMax-yMin)*plotH; }
+  g.appendChild(el('line',{x1:padL,y1:py(0),x2:VW-padR,y2:py(0),stroke:'var(--border)','stroke-width':0.7,opacity:0.5}));
+  g.appendChild(el('line',{x1:px(0),y1:padT,x2:px(0),y2:VH-padB,stroke:'var(--border)','stroke-width':0.7,opacity:0.5}));
+
+  // bowl-only reference, dashed
+  var bpts=[];
+  for(var x=xMin;x<=xMax+1e-9;x+=0.02) bpts.push(px(x)+','+py(0.5*bowlA*x*x));
+  g.appendChild(el('polyline',{points:bpts.join(' '),fill:'none',stroke:'var(--border-strong)','stroke-width':1.3,'stroke-dasharray':'5 3'}));
+
+  // actual loss curve (bowl + ripple)
+  var lpts=[];
+  for(var x2=xMin;x2<=xMax+1e-9;x2+=0.01) lpts.push(px(x2)+','+py(loss(x2)));
+  g.appendChild(el('polyline',{points:lpts.join(' '),fill:'none',stroke:'var(--text-secondary)','stroke-width':1.6}));
+
+  function plotTraj(path, diverged, colorInk){
+    var pts=path.map(function(xv){ return px(xv)+','+py(loss(xv)); }).join(' ');
+    g.appendChild(el('polyline',{points:pts,fill:'none',stroke:diverged?'var(--red)':colorInk,'stroke-width':2}));
+    for(var i=0;i<path.length-1;i++){
+      g.appendChild(el('circle',{cx:px(path[i]),cy:py(loss(path[i])),r:2.6,fill:'var(--surface)',stroke:diverged?'var(--red)':colorInk,'stroke-width':1.1}));
+    }
+    var lastX=path[path.length-1];
+    g.appendChild(el('circle',{cx:px(lastX),cy:py(loss(lastX)),r:5,fill:diverged?'var(--red)':colorInk}));
+  }
+  plotTraj(gd.path, gd.diverged, 'var(--orange-ink)');
+  plotTraj(mom.path, mom.diverged, 'var(--blue-ink)');
+
+  var t1=el('text',{x:padL+4,y:padT+2,class:'ts gl'}); t1.textContent='orange = plain GD, blue = momentum'; g.appendChild(t1);
+  var t2=el('text',{x:padL+4,y:VH-8,class:'tn gl'}); t2.textContent='grey dashed = bowl alone, grey solid = bowl + ripple (the real loss)'; g.appendChild(t2);
+
+  readout();
+}
+
+function readout(){
+  var warn = (gd.diverged?'GD diverged. ':'') + (mom.diverged?'Momentum diverged.':'');
+  document.getElementById('readout').innerHTML = warn ? '<span class="warn">'+warn+'</span>' : '';
+  document.getElementById('lv-iter').textContent = gd.iter;
+  document.getElementById('lv-g').textContent = fmt(grad(gd.x));
+  document.getElementById('lv-v').textContent = fmt(mom.v);
+  document.getElementById('lv-xgd').textContent = fmt(gd.x);
+  document.getElementById('lv-xmom').textContent = fmt(mom.x);
+}
+
+onParams();
+</script>
+</body>
+</html>

@@ -51,10 +51,11 @@ footer a{color:var(--text-secondary)}
   <div class="nav"><a href="../../">&larr; CS7150 class demos</a></div>
   <p class="eyebrow">Northeastern University &middot; CS 7150 &middot; Fall 2026</p>
   <h1>Optimizers, explained</h1>
-  <p>Five interactive pieces building up to Adam, in the order HW2 develops them: the trouble
-     with a single learning rate, the mean/RMS diagnostic Adam is built from, why its update is
-     scale-invariant, the exponential moving average underneath it, and how network design
-     (activations, initialization, depth) fights the same conditioning problem from the other side.</p>
+  <p>Six interactive pieces building up to Adam, in the order HW2 develops them: the trouble
+     with a single learning rate, how momentum averages that trouble away, the mean/RMS diagnostic
+     Adam adds on top, why its update is scale-invariant, the exponential moving average underneath
+     it, and how network design (activations, initialization, depth) fights the same conditioning
+     problem from the other side.</p>
 </header>
 
 <ol class="qs">
@@ -66,6 +67,15 @@ footer a{color:var(--text-secondary)}
      anisotropy, watch a single learning rate zig-zag or crawl, then switch to per-axis rates
      and see the difference &mdash; in a 1D per-axis slice, a 2D contour map, or a 3D surface.</p>
   <a class="go" href="anisotropy.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">Before Adam: momentum</div>
+  <h2><a href="momentum.html">Momentum averages out noise</a></h2>
+  <p class="what">A smooth bowl with a high-frequency ripple on top. Plain gradient descent gets
+     stuck bouncing inside one ripple; momentum's exponential moving average of the gradient
+     cancels the alternating ripple and rides the bowl down.</p>
+  <a class="go" href="momentum.html">Open the explainer &rarr;</a>
 </li>
 
 <li class="done">
