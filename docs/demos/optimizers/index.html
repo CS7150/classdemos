@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Optimizers, explained</title>
+<meta name="description" content="Interactive explainers for the ideas behind gradient descent, Adam, and network conditioning.">
+<style>
+:root{--bg:#faf9f5;--surface:#ffffff;--surface-1:#f1efe8;--text-primary:#26251f;--text-secondary:#5f5e5a;--text-muted:#888780;
+ --border:#d3d1c7;--border-strong:#b4b2a9;--accent:#185FA5;--accent-warm:#BA7517;--accent-green:#0F6E56;}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#1a1a18;--surface:#232320;--surface-1:#2c2c2a;
+ --text-primary:#eceae2;--text-secondary:#b4b2a9;--text-muted:#888780;--border:#3a3a36;--border-strong:#5f5e5a;
+ --accent:#79b1ec;--accent-warm:#d9a24d;--accent-green:#4fbb99;}}
+:root[data-theme="dark"]{--bg:#1a1a18;--surface:#232320;--surface-1:#2c2c2a;--text-primary:#eceae2;--text-secondary:#b4b2a9;
+ --text-muted:#888780;--border:#3a3a36;--border-strong:#5f5e5a;--accent:#79b1ec;--accent-warm:#d9a24d;--accent-green:#4fbb99;}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--text-primary);line-height:1.6;
+ font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
+.page{max-width:900px;margin:0 auto;padding:0 20px 72px}
+header{padding-block:44px 24px;border-bottom:1px solid var(--border)}
+.nav{font-size:14px;margin:0 0 18px}
+.nav a{color:var(--text-muted);text-decoration:none}
+.nav a:hover{color:var(--text-secondary);text-decoration:underline}
+.eyebrow{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);margin:0 0 10px}
+h1{font-size:32px;font-weight:600;letter-spacing:-.015em;margin:0 0 12px}
+header p{margin:0 0 10px;font-size:17px;color:var(--text-secondary);max-width:64ch}
+a{color:var(--accent)}
+ol.qs{list-style:none;counter-reset:q;margin:26px 0 0;padding:0}
+ol.qs li{counter-increment:q;border-bottom:1px solid var(--border);padding:20px 0 20px 52px;position:relative}
+ol.qs li:before{content:counter(q);position:absolute;left:0;top:19px;width:34px;height:34px;border-radius:50%;
+ display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500;
+ background:var(--surface-1);color:var(--text-secondary);border:1px solid var(--border)}
+ol.qs li.done:before{background:var(--surface);border-color:var(--accent);color:var(--accent)}
+.qtag{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-warm)}
+h2{font-size:20px;font-weight:600;margin:5px 0 6px;letter-spacing:-.01em}
+h2 a{text-decoration:none}
+h2 a:hover{text-decoration:underline}
+.what{margin:0;font-size:15.5px;color:var(--text-secondary)}
+.go{display:inline-block;margin-top:9px;font-size:15px}
+.soon{display:inline-block;margin-top:9px;font-size:14px;color:var(--text-muted)}
+footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--border);font-size:14.5px;color:var(--text-muted)}
+footer a{color:var(--text-secondary)}
+@media (max-width:640px){h1{font-size:26px}ol.qs li{padding-left:44px}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <div class="nav"><a href="../../">&larr; CS7150 class demos</a></div>
+  <p class="eyebrow">Northeastern University &middot; CS 7150 &middot; Fall 2026</p>
+  <h1>Optimizers, explained</h1>
+  <p>Five interactive pieces building up to Adam, in the order HW2 develops them: the trouble
+     with a single learning rate, the mean/RMS diagnostic Adam is built from, why its update is
+     scale-invariant, the exponential moving average underneath it, and how network design
+     (activations, initialization, depth) fights the same conditioning problem from the other side.</p>
+</header>
+
+<ol class="qs">
+
+<li class="done">
+  <div class="qtag">Gradient descent</div>
+  <h2><a href="anisotropy.html">Anisotropic gradient descent</a></h2>
+  <p class="what">A bowl that's steep in one direction and shallow in another. Adjust the
+     anisotropy, watch a single learning rate zig-zag or crawl, then switch to per-axis rates
+     and see the difference &mdash; in a 1D per-axis slice, a 2D contour map, or a 3D surface.</p>
+  <a class="go" href="anisotropy.html">Open the explainer &rarr;</a>
+</li>
+
+<li>
+  <div class="qtag">The Adam diagnostic</div>
+  <h2>Mean vs. RMS</h2>
+  <p class="what">A synthetic gradient stream with adjustable noise and sign-flip frequency, and
+     the running mean and RMS drawn live &mdash; the exact gap that tells Adam when to slow down.</p>
+  <span class="soon">Coming soon</span>
+</li>
+
+<li>
+  <div class="qtag">Why Adam is scale-invariant</div>
+  <h2>Adam vs. SGD under rescaling</h2>
+  <p class="what">The same descent run side by side under SGD and Adam while a slider multiplies
+     every gradient by K. SGD speeds up and slows down with K; Adam barely notices.</p>
+  <span class="soon">Coming soon</span>
+</li>
+
+<li>
+  <div class="qtag">The machinery inside Adam</div>
+  <h2>EMA and bias correction</h2>
+  <p class="what">Raw data, the uncorrected running average, and the bias-corrected one, overlaid
+     &mdash; and why the correction matters most in the first few steps.</p>
+  <span class="soon">Coming soon</span>
+</li>
+
+<li>
+  <div class="qtag">The other half of conditioning</div>
+  <h2>Depth, activation, and initialization</h2>
+  <p class="what">Watch a signal spread through a network of adjustable depth, and see which
+     combinations of activation and initialization keep it alive versus vanish or blow up.</p>
+  <span class="soon">Coming soon</span>
+</li>
+
+</ol>
+
+<footer>
+  Built alongside HW2.1 (Training a Deep Network). &middot;
+  <a href="https://github.com/CS7150/classdemos">Repository</a>
+</footer>
+
+</div>
+</body>
+</html>
