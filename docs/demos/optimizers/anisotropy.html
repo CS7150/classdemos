@@ -7,19 +7,27 @@
 <meta name="description" content="Why one learning rate can't be right for every direction at once, in 1D, 2D, and 3D.">
 <link rel="stylesheet" href="../demo.css">
 <style>
-#wrap{height:clamp(260px,52vh,520px)}
-.seg button{font-size:14px}
+body{gap:6px;padding:12px 18px 14px}
+h1{font-size:20px;margin-top:2px}
+.quiz{margin:0}
+#wrap{height:clamp(190px,32vh,300px)}
+.row{gap:8px}
+button,select{height:33px;font-size:13.5px;padding:0 10px}
+.seg button{height:31px;font-size:12.5px;padding:0 9px}
+.klab{font-size:13px}
+.knum{font-size:13px;min-width:auto}
+.rd{font-size:14px;line-height:1.5}
+.cap{font-size:12.5px;line-height:1.5;padding-top:5px}
 .warn{color:var(--red)}
 </style>
 </head>
 <body>
 <div class="nav"><a href="./">&larr; Optimization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
 <h1>Anisotropic gradient descent<span>: the zig-zag problem</span></h1>
-<p class="quiz">The bowl below is steeper in <b>x</b> than in <b>y</b>. Drag the anisotropy slider,
-   then run gradient descent with one shared learning rate and watch it fight itself.</p>
+<p class="quiz">A tilted bowl, steep along one axis and shallow along another. One shared learning rate fights itself; per-axis rates help, but only fully fix it when the tilt is zero.</p>
 
-<div id="wrap"><svg id="stage" viewBox="0 0 560 420" role="img" preserveAspectRatio="xMidYMid meet">
-  <desc>An animated view of gradient descent on an elongated quadratic bowl, switchable between a 1D per-axis slice, a 2D contour map, and a 3D wireframe surface.</desc>
+<div id="wrap"><svg id="stage" viewBox="0 0 640 300" role="img" preserveAspectRatio="xMidYMid meet">
+  <desc>An animated view of gradient descent on a tilted, elongated quadratic bowl, switchable between a 1D per-axis slice, a 2D contour map, and a 3D wireframe surface.</desc>
   <g id="g"></g>
 </svg></div>
 
@@ -29,68 +37,73 @@
     <button data-v="2d" class="on">2D contours</button>
     <button data-v="3d">3D surface</button>
   </div>
-  <span id="turnwrap" style="display:none;align-items:center;gap:8px">
-    <span class="klab">turn</span>
-    <input type="range" id="az" min="-180" max="180" step="1" value="35" oninput="draw()" style="width:120px">
-  </span>
-</div>
-
-<div class="row">
-  <span class="klab">anisotropy a : 1</span>
-  <input type="range" id="aniso" min="3" max="60" step="1" value="20" oninput="onAniso()">
+  <span class="klab">a:1</span>
+  <input type="range" id="aniso" min="3" max="60" step="1" value="20" oninput="onAniso()" style="width:72px">
   <span class="knum" id="anisoVal">20</span>
+  <span class="klab">tilt</span>
+  <input type="range" id="tilt" min="-60" max="60" step="1" value="-25" oninput="onAniso()" style="width:72px">
+  <span class="knum" id="tiltVal">&minus;25&deg;</span>
 </div>
 
 <div class="row">
   <div class="seg" id="modeSeg">
-    <button data-m="shared" class="on">Shared rate</button>
-    <button data-m="per">Per-axis rate</button>
+    <button data-m="shared" class="on">Shared &eta;</button>
+    <button data-m="per">Per-axis &eta;</button>
   </div>
-</div>
-
-<div class="row" id="sharedRow">
-  <span class="klab">learning rate &eta;</span>
-  <input type="range" id="lr" min="0.002" max="0.6" step="0.002" value="0.03" oninput="onLR()">
-  <span class="knum" id="lrVal">0.030</span>
-</div>
-<div class="row" id="perRow" style="display:none">
-  <span class="klab">&eta;<sub>x</sub></span>
-  <input type="range" id="lrx" min="0.002" max="0.6" step="0.002" value="0.03" oninput="onLR()">
-  <span class="knum" id="lrxVal">0.030</span>
-  <span class="klab">&eta;<sub>y</sub></span>
-  <input type="range" id="lry" min="0.01" max="2" step="0.01" value="1.20" oninput="onLR()">
-  <span class="knum" id="lryVal">1.20</span>
-</div>
-
-<div class="row">
+  <span id="sharedRow" style="display:flex;align-items:center;gap:6px">
+    <input type="range" id="lr" min="0.002" max="0.6" step="0.002" value="0.03" oninput="onLR()" style="width:72px">
+    <span class="knum" id="lrVal">0.030</span>
+  </span>
+  <span id="perRow" style="display:none;align-items:center;gap:6px">
+    <span class="klab">x</span>
+    <input type="range" id="lrx" min="0.002" max="0.6" step="0.002" value="0.03" oninput="onLR()" style="width:60px">
+    <span class="knum" id="lrxVal">0.030</span>
+    <span class="klab">y</span>
+    <input type="range" id="lry" min="0.01" max="2" step="0.01" value="1.20" oninput="onLR()" style="width:60px">
+    <span class="knum" id="lryVal">1.20</span>
+  </span>
   <button class="main" id="run" onclick="toggleRun()">Run</button>
   <button onclick="stepOnce()">Step</button>
   <button onclick="resetTraj()">Reset</button>
-  <span class="klab">preset:</span>
   <button onclick="presetLow()">too low</button>
   <button onclick="presetHigh()">too high</button>
-  <button onclick="presetGood()">just right (per-axis)</button>
+  <button onclick="presetGood()">per-axis fix</button>
 </div>
 
 <div class="rd" id="readout"></div>
-<div class="cap">L(x, y) = &frac12;(a&middot;x&sup2; + y&sup2;). Gradient descent: x &larr; x &minus; &eta;&middot;&part;L/&part;x,
-  applied separately on each axis. <span id="stab"></span></div>
+<div class="cap">L(x,y) = &frac12;v<sup>T</sup>Qv for v=(x,y), where Q has eigenvalues a and 1 along axes rotated by the tilt.
+  Per-axis rates scale x and y separately, not the true eigen-directions &mdash; in 3D, drag the surface to rotate it.
+  <span id="stab"></span></div>
 
 <script>
 var NS='http://www.w3.org/2000/svg';
 function el(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attrs)e.setAttribute(k,attrs[k]);return e;}
 function fmt(v){return (Math.abs(v)<0.001?v.toExponential(1):v.toFixed(3));}
 
-var a=20,B=1;
+var a=20, Bc=1, thetaDeg=-25;
+var Q00=1,Q01=0,Q11=1; // filled in by computeQ()
 var view='2d';
 var mode='shared';
 var st={};
 
-function loss(x,y){return 0.5*(a*x*x+B*y*y);}
-function grad(x,y){return [a*x,B*y];}
+function computeQ(){
+  var th=thetaDeg*Math.PI/180, c=Math.cos(th), s=Math.sin(th);
+  // Q = a*e2 e2^T + b*e1 e1^T, e1=(c,s) (eigval b, shallow, ~horizontal at tilt 0
+  // so the long axis of the bowl matches this wide canvas), e2=(-s,c) (eigval a, steep).
+  Q00 = a*s*s + Bc*c*c;
+  Q11 = a*c*c + Bc*s*s;
+  Q01 = (Bc-a)*s*c;
+}
+function loss(x,y){return 0.5*(Q00*x*x + 2*Q01*x*y + Q11*y*y);}
+function grad(x,y){return [Q00*x+Q01*y, Q01*x+Q11*y];}
+function eigvec(which){ // 'a' (steep) or 'b' (shallow) principal direction, unit vector
+  var th=thetaDeg*Math.PI/180;
+  return which==='a' ? [-Math.sin(th),Math.cos(th)] : [Math.cos(th),Math.sin(th)];
+}
 
 function resetTraj(){
-  var x0=1.15,y0=1.15;
+  var v=eigvec('a'), w=eigvec('b');
+  var x0=1.05*v[0]+1.05*w[0]*0.35, y0=1.05*v[1]+1.05*w[1]*0.35; // start off both principal axes
   st={x:x0,y:y0,iter:0,path:[[x0,y0]],losses:[loss(x0,y0)],diverged:false};
   draw();
 }
@@ -123,7 +136,10 @@ function toggleRun(){ setRunning(!running); }
 
 function onAniso(){
   a=parseFloat(document.getElementById('aniso').value);
+  thetaDeg=parseFloat(document.getElementById('tilt').value);
   document.getElementById('anisoVal').textContent=a;
+  document.getElementById('tiltVal').innerHTML=(thetaDeg<0?'&minus;':'')+Math.abs(thetaDeg)+'&deg;';
+  computeQ();
   setRunning(false); resetTraj();
 }
 function onLR(){
@@ -136,47 +152,45 @@ document.getElementById('viewSeg').addEventListener('click', function(e){
   var b=e.target.closest('button'); if(!b) return;
   view=b.dataset.v;
   Array.from(document.getElementById('viewSeg').children).forEach(function(x){x.classList.toggle('on',x===b);});
-  document.getElementById('turnwrap').style.display = (view==='3d') ? 'inline-flex' : 'none';
+  document.getElementById('stage').style.cursor = (view==='3d') ? 'grab' : 'default';
   draw();
 });
 document.getElementById('modeSeg').addEventListener('click', function(e){
   var b=e.target.closest('button'); if(!b) return;
   mode=b.dataset.m;
   Array.from(document.getElementById('modeSeg').children).forEach(function(x){x.classList.toggle('on',x===b);});
-  document.getElementById('sharedRow').style.display = mode==='shared' ? 'flex' : 'none';
-  document.getElementById('perRow').style.display = mode==='per' ? 'flex' : 'none';
+  document.getElementById('sharedRow').style.display = mode==='shared' ? 'inline-flex' : 'none';
+  document.getElementById('perRow').style.display = mode==='per' ? 'inline-flex' : 'none';
   setRunning(false); resetTraj();
 });
 
+function selectMode(m){
+  mode=m;
+  document.querySelector('#modeSeg button[data-m=shared]').classList.toggle('on', m==='shared');
+  document.querySelector('#modeSeg button[data-m=per]').classList.toggle('on', m==='per');
+  document.getElementById('sharedRow').style.display = m==='shared' ? 'inline-flex' : 'none';
+  document.getElementById('perRow').style.display = m==='per' ? 'inline-flex' : 'none';
+}
 function presetLow(){
-  mode='shared';
-  document.querySelector('#modeSeg button[data-m=shared]').classList.add('on');
-  document.querySelector('#modeSeg button[data-m=per]').classList.remove('on');
-  document.getElementById('sharedRow').style.display='flex'; document.getElementById('perRow').style.display='none';
+  selectMode('shared');
   document.getElementById('lr').value = (0.15/a).toFixed(4); onLR();
   setRunning(false); resetTraj(); setRunning(true);
 }
 function presetHigh(){
-  document.querySelector('#modeSeg button[data-m=shared]').classList.add('on');
-  document.querySelector('#modeSeg button[data-m=per]').classList.remove('on');
-  document.getElementById('sharedRow').style.display='flex'; document.getElementById('perRow').style.display='none';
-  mode='shared';
+  selectMode('shared');
   document.getElementById('lr').value = Math.min(0.6, 2.05/a).toFixed(4); onLR();
   setRunning(false); resetTraj(); setRunning(true);
 }
 function presetGood(){
-  document.querySelector('#modeSeg button[data-m=per]').classList.add('on');
-  document.querySelector('#modeSeg button[data-m=shared]').classList.remove('on');
-  document.getElementById('perRow').style.display='flex'; document.getElementById('sharedRow').style.display='none';
-  mode='per';
+  selectMode('per');
   document.getElementById('lrx').value = Math.min(0.6, 1.2/a).toFixed(4);
-  document.getElementById('lry').value = Math.min(2, 1.2/B).toFixed(4);
+  document.getElementById('lry').value = Math.min(2, 1.2/Bc).toFixed(4);
   onLR();
   setRunning(false); resetTraj(); setRunning(true);
 }
 
 /* ---------- drawing ---------- */
-var VW=560, VH=420;
+var VW=640, VH=300;
 function toPx2(x,y,scale,cx,cy){return [cx+x*scale, cy-y*scale];}
 
 function draw(){
@@ -189,70 +203,75 @@ function draw(){
 }
 
 function draw2D(g){
-  var scale=130, cx=VW/2, cy=VH/2;
-  for(var gx=-1.5; gx<=1.5+1e-9; gx+=0.5){
-    var p0=toPx2(gx,-1.5,scale,cx,cy), p1=toPx2(gx,1.5,scale,cx,cy);
-    g.appendChild(el('line',{x1:p0[0],y1:p0[1],x2:p1[0],y2:p1[1],stroke:'var(--border)','stroke-width':gx===0?1.2:0.7,opacity:gx===0?0.8:0.5}));
+  var scale=88, cx=VW/2, cy=VH/2+6;
+  var gi;
+  for(gi=-1.5; gi<=1.5+1e-9; gi+=0.5){
+    var p0=toPx2(gi,-1.5,scale,cx,cy), p1=toPx2(gi,1.5,scale,cx,cy);
+    g.appendChild(el('line',{x1:p0[0],y1:p0[1],x2:p1[0],y2:p1[1],stroke:'var(--border)','stroke-width':gi===0?1.2:0.6,opacity:gi===0?0.8:0.45}));
+    var q0=toPx2(-1.5,gi,scale,cx,cy), q1=toPx2(1.5,gi,scale,cx,cy);
+    g.appendChild(el('line',{x1:q0[0],y1:q0[1],x2:q1[0],y2:q1[1],stroke:'var(--border)','stroke-width':gi===0?1.2:0.6,opacity:gi===0?0.8:0.45}));
   }
-  for(var gy=-1.5; gy<=1.5+1e-9; gy+=0.5){
-    var p0=toPx2(-1.5,gy,scale,cx,cy), p1=toPx2(1.5,gy,scale,cx,cy);
-    g.appendChild(el('line',{x1:p0[0],y1:p0[1],x2:p1[0],y2:p1[1],stroke:'var(--border)','stroke-width':gy===0?1.2:0.7,opacity:gy===0?0.8:0.5}));
-  }
+  // principal axes, dashed
+  var ea=eigvec('a'), eb=eigvec('b');
+  [ea,eb].forEach(function(e){
+    var p0=toPx2(-e[0]*1.6,-e[1]*1.6,scale,cx,cy), p1=toPx2(e[0]*1.6,e[1]*1.6,scale,cx,cy);
+    g.appendChild(el('line',{x1:p0[0],y1:p0[1],x2:p1[0],y2:p1[1],stroke:'var(--border-strong)','stroke-width':1,'stroke-dasharray':'4 3',opacity:0.7}));
+  });
   var levels=[0.05,0.15,0.3,0.5,0.8,1.2,1.7,2.3];
   for(var i=0;i<levels.length;i++){
-    var c=levels[i], rx=Math.sqrt(c/a)*scale, ry=Math.sqrt(c/B)*scale;
-    g.appendChild(el('ellipse',{cx:cx,cy:cy,rx:rx,ry:ry,fill:'none',stroke:'var(--blue)','stroke-opacity':0.4,'stroke-width':1.1}));
+    var c=levels[i], ra=Math.sqrt(c/a), rb=Math.sqrt(c/Bc), pts=[];
+    for(var ph=0; ph<=Math.PI*2+1e-9; ph+=Math.PI/24){
+      var px = ra*Math.cos(ph)*ea[0] + rb*Math.sin(ph)*eb[0];
+      var py = ra*Math.cos(ph)*ea[1] + rb*Math.sin(ph)*eb[1];
+      pts.push(toPx2(px,py,scale,cx,cy).join(','));
+    }
+    g.appendChild(el('polyline',{points:pts.join(' '),fill:'none',stroke:'var(--blue)','stroke-opacity':0.4,'stroke-width':1.1}));
   }
   var pts=st.path.map(function(p){return toPx2(p[0],p[1],scale,cx,cy).join(',');}).join(' ');
   g.appendChild(el('polyline',{points:pts,fill:'none',stroke:st.diverged?'var(--red)':'var(--blue-ink)','stroke-width':2.2}));
   var last=st.path[st.path.length-1], lp=toPx2(last[0],last[1],scale,cx,cy);
   g.appendChild(el('circle',{cx:lp[0],cy:lp[1],r:5,fill:st.diverged?'var(--red)':'var(--blue-ink)'}));
-  var t=el('text',{x:cx+6,y:cy-8,class:'tn gl'}); t.textContent='minimum'; g.appendChild(t);
-  var t2=el('text',{x:8,y:16,class:'ts gl'}); t2.textContent='x (steep, coeff a='+a+')'; g.appendChild(t2);
-  var t3=el('text',{x:VW-8,y:VH-10,class:'ts gl','text-anchor':'end'}); t3.textContent='y (shallow, coeff 1)'; g.appendChild(t3);
+  var t2=el('text',{x:8,y:16,class:'ts gl'}); t2.textContent='steep direction (eigval a='+a+')'; g.appendChild(t2);
+  var t3=el('text',{x:VW-8,y:VH-8,class:'ts gl','text-anchor':'end'}); t3.textContent='shallow direction (eigval 1)'; g.appendChild(t3);
 }
 
 function draw1D(g){
-  var panelW=(VW-40)/2, h=VH-60, baseY=VH-30;
-  var maxL=0.5*Math.max(a,B)*1.5*1.5;
-  function panel(px0, coeff, label, color, val, valAll){
-    var scaleX=panelW/3.2, scaleY=(h-20)/maxL;
+  var panelW=(VW-60)/2, h=VH-56, baseY=VH-26;
+  var maxL=0.5*Math.max(a,Bc)*1.5*1.5;
+  function panel(px0, coeff, label, color, valAll){
+    var scaleX=panelW/3.2, scaleY=(h-14)/maxL;
     var ox=px0+panelW/2;
-    // axis
     g.appendChild(el('line',{x1:px0,y1:baseY,x2:px0+panelW,y2:baseY,stroke:'var(--border-strong)','stroke-width':1}));
-    g.appendChild(el('line',{x1:ox,y1:baseY,x2:ox,y2:30,stroke:'var(--border-strong)','stroke-width':1}));
-    // curve
+    g.appendChild(el('line',{x1:ox,y1:baseY,x2:ox,y2:26,stroke:'var(--border-strong)','stroke-width':1}));
     var pts=[];
     for(var xx=-1.6; xx<=1.6+1e-9; xx+=0.05){
       var L=0.5*coeff*xx*xx;
       pts.push((ox+xx*scaleX)+','+(baseY-Math.min(L,maxL)*scaleY));
     }
     g.appendChild(el('polyline',{points:pts.join(' '),fill:'none',stroke:color,'stroke-width':2}));
-    // trail
     for(var i=0;i<valAll.length;i++){
       var xv=valAll[i], L=Math.min(0.5*coeff*xv*xv,maxL);
-      g.appendChild(el('circle',{cx:ox+xv*scaleX,cy:baseY-L*scaleY,r:i===valAll.length-1?5:2.4,
+      g.appendChild(el('circle',{cx:ox+xv*scaleX,cy:baseY-L*scaleY,r:i===valAll.length-1?5:2.2,
         fill:color,opacity:i===valAll.length-1?1:0.35}));
     }
-    var t=el('text',{x:ox,y:VH-8,class:'ts gl','text-anchor':'middle'}); t.textContent=label; g.appendChild(t);
+    var t=el('text',{x:ox,y:VH-6,class:'ts gl','text-anchor':'middle'}); t.textContent=label; g.appendChild(t);
   }
   var xs=st.path.map(function(p){return p[0];}), ys=st.path.map(function(p){return p[1];});
-  panel(20, a, 'x  (coeff a = '+a+')', 'var(--blue-ink)', st.x, xs);
-  panel(20+panelW+ (VW-40-2*panelW), B, 'y  (coeff 1)', 'var(--warm-ink)', st.y, ys);
+  panel(20, Q00, 'x  (holding y=0, curvature '+fmt(Q00)+')', 'var(--blue-ink)', xs);
+  panel(40+panelW, Q11, 'y  (holding x=0, curvature '+fmt(Q11)+')', 'var(--warm-ink)', ys);
 }
 
-function pr3(v,az){
-  var el0=22*Math.PI/180, s=Math.sin(az), c=Math.cos(az);
-  return [v[0]*c+v[1]*s, -(-v[0]*s*Math.sin(el0)+v[1]*c*Math.sin(el0)+v[2]*Math.cos(el0))];
+var azDeg=35, elDeg=22;
+function pr3(v){
+  var az=azDeg*Math.PI/180, elv=elDeg*Math.PI/180, s=Math.sin(az), c=Math.cos(az);
+  return [v[0]*c+v[1]*s, -(-v[0]*s*Math.sin(elv)+v[1]*c*Math.sin(elv)+v[2]*Math.cos(elv))];
 }
 function draw3D(g){
-  var az=parseFloat(document.getElementById('az').value)*Math.PI/180;
   var zMax=0.5*a*1.5*1.5;
-  function zn(x,y){return loss(x,y)/zMax*1.5;} // normalize so the bowl always fills the same depth
-  var scale=95, cx=VW/2, cy=VH/2+40;
-  function M(x,y,z){var r=pr3([x,y,z],az); return [cx+r[0]*scale, cy+r[1]*scale];}
-  var n=14, lo=-1.5, hi=1.5, step=(hi-lo)/n;
-  var i,j;
+  function zn(x,y){return loss(x,y)/zMax*1.4;}
+  var scale=78, cx=VW/2, cy=VH/2+26;
+  function M(x,y,z){var r=pr3([x,y,z]); return [cx+r[0]*scale, cy+r[1]*scale];}
+  var n=13, lo=-1.5, hi=1.5, step=(hi-lo)/n, i,j;
   for(i=0;i<=n;i++){
     var pts=[];
     for(j=0;j<=n;j++){var x=lo+i*step, y=lo+j*step; pts.push(M(x,y,zn(x,y)).join(','));}
@@ -263,17 +282,14 @@ function draw3D(g){
     for(i=0;i<=n;i++){var x=lo+i*step, y=lo+j*step; pts.push(M(x,y,zn(x,y)).join(','));}
     g.appendChild(el('polyline',{points:pts.join(' '),fill:'none',stroke:'var(--blue)','stroke-width':0.7,opacity:0.35}));
   }
-  // axes ticks at base
-  var O=M(0,0,0);
-  var ax=M(1.6,0,0), ay=M(0,1.6,0);
+  var O=M(0,0,0), ax=M(1.6,0,0), ay=M(0,1.6,0);
   g.appendChild(el('line',{x1:O[0],y1:O[1],x2:ax[0],y2:ax[1],stroke:'var(--border-strong)','stroke-width':1}));
   g.appendChild(el('line',{x1:O[0],y1:O[1],x2:ay[0],y2:ay[1],stroke:'var(--border-strong)','stroke-width':1}));
   var tx=el('text',{x:ax[0]+4,y:ax[1],class:'ts gl'}); tx.textContent='x'; g.appendChild(tx);
   var ty=el('text',{x:ay[0]+4,y:ay[1],class:'ts gl'}); ty.textContent='y'; g.appendChild(ty);
-  // trajectory lifted onto the surface
   var pts3=st.path.map(function(p){return M(p[0],p[1],zn(p[0],p[1]));});
   g.appendChild(el('polyline',{points:pts3.map(function(p){return p.join(',');}).join(' '),fill:'none',
-    stroke:st.diverged?'var(--red)':'var(--blue-ink)','stroke-width':2.4}));
+    stroke:st.diverged?'var(--red)':'var(--blue-ink)','stroke-width':2.2}));
   var lastP=pts3[pts3.length-1], lastXY=st.path[st.path.length-1];
   var drop=M(lastXY[0],lastXY[1],0);
   g.appendChild(el('line',{x1:lastP[0],y1:lastP[1],x2:drop[0],y2:drop[1],stroke:'var(--border-strong)','stroke-width':1,'stroke-dasharray':'3 3'}));
@@ -283,11 +299,34 @@ function draw3D(g){
 function readout(){
   var last=st.losses[st.losses.length-1];
   var h='<b>Iteration '+st.iter+'.</b> loss = <b class="num">'+fmt(last)+'</b>';
-  if(st.diverged) h='<span class="warn"><b>Diverged.</b></span> The learning rate is past the stability limit for this direction &mdash; try a lower rate, or switch to per-axis rates.';
+  if(st.diverged) h='<span class="warn"><b>Diverged.</b></span> Past the stability limit &mdash; lower the rate, or use per-axis rates.';
   document.getElementById('readout').innerHTML=h;
-  document.getElementById('stab').innerHTML = 'For coefficient c, plain gradient descent on &frac12;c&middot;x&sup2; is stable only for &eta; &lt; 2/c &mdash; here that is &eta; &lt; '+(2/a).toFixed(3)+' on x but &eta; &lt; '+(2/B).toFixed(2)+' on y.';
+  document.getElementById('stab').innerHTML = thetaDeg===0
+    ? ('At tilt 0, stability needs &eta; &lt; '+(2/a).toFixed(3)+' on x but &eta; &lt; '+(2/Bc).toFixed(2)+' on y.')
+    : ('At a nonzero tilt, x and y mix the two eigen-directions, so no pair of per-axis rates fully removes the zig-zag.');
 }
 
+/* ---------- drag to orbit the 3D surface ---------- */
+var stage=document.getElementById('stage');
+var dragging=false, sx=0, sy=0, az0=0, el0=0;
+stage.style.touchAction='none';
+stage.addEventListener('pointerdown', function(e){
+  if(view!=='3d') return;
+  dragging=true; sx=e.clientX; sy=e.clientY; az0=azDeg; el0=elDeg;
+  stage.setPointerCapture(e.pointerId);
+  stage.style.cursor='grabbing';
+});
+stage.addEventListener('pointermove', function(e){
+  if(!dragging) return;
+  azDeg = az0 + (e.clientX-sx)*0.4;
+  elDeg = Math.max(4, Math.min(86, el0 - (e.clientY-sy)*0.4));
+  draw();
+});
+function endDrag(){ dragging=false; stage.style.cursor = view==='3d' ? 'grab' : 'default'; }
+stage.addEventListener('pointerup', endDrag);
+stage.addEventListener('pointercancel', endDrag);
+
+computeQ();
 resetTraj();
 </script>
 </body>
