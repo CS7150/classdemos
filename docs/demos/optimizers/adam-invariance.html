@@ -12,14 +12,15 @@
 body{gap:5px;padding:11px 16px 12px}
 h1{font-size:19px;margin-top:2px}
 .quiz{margin:0}
-#wrap{height:clamp(195px,32vh,290px);display:flex;gap:10px;align-items:stretch}
+#wrap{height:clamp(270px,44vh,420px);display:flex;gap:10px;align-items:stretch}
 #stage{flex:2;min-width:0}
-.formula{flex:1;display:flex;flex-direction:column;justify-content:center;gap:7px;
-  border-left:1px solid var(--border);padding-left:10px;min-width:0}
-.formula .fitem{display:flex;flex-direction:column;gap:2px}
+.formula{flex:1;display:flex;flex-direction:column;justify-content:center;gap:8px;
+  border-left:1px solid var(--border);padding-left:10px;min-width:0;overflow-y:auto}
+.formula .fitem{display:flex;flex-direction:column;gap:3px}
 .formula .f{font-size:clamp(12px,2.2vw,15px);line-height:1.25}
-label.cb{font-size:11.5px}
-input[type=checkbox]{width:13px;height:13px}
+label.cb{font-size:clamp(18px,3vw,26px);display:flex;align-items:center;gap:6px}
+input[type=checkbox]{width:19px;height:19px}
+#lossts{width:100%;height:auto;margin-top:4px}
 input[type=range]:disabled{opacity:.35}
 @media (max-width:640px){.formula{display:none}}
 .row{gap:7px}
@@ -64,6 +65,10 @@ button,select{height:30px;font-size:13px;padding:0 9px}
     </div>
     <label class="cb"><input type="checkbox" id="showAdam" checked onchange="draw()"> <span style="color:var(--blue-ink)">&mdash;</span> Adam</label>
   </div>
+  <svg id="lossts" viewBox="0 0 220 110" role="img" preserveAspectRatio="xMidYMid meet">
+    <desc>Loss vs. iteration for each shown method, log scale.</desc>
+    <g id="lossg"></g>
+  </svg>
 </div>
 </div>
 
@@ -86,7 +91,7 @@ button,select{height:30px;font-size:13px;padding:0 9px}
   <button onclick="stepOnce()">Step</button>
   <button onclick="resetTraj()">Reset</button>
   <span class="klab">&eta;</span>
-  <input type="range" id="lr" min="-2" max="-0.5" step="0.01" value="-0.921" oninput="onParams()" style="width:70px">
+  <input type="range" id="lr" min="-2" max="-0.5" step="0.01" value="-1" oninput="onParams()" style="width:70px">
   <span class="knum" id="lrVal">0.120</span>
   <label class="cb"><input type="checkbox" id="useK" onchange="onParams()"> include K</label>
   <span class="klab">gradient scale K</span>
@@ -127,11 +132,13 @@ function startPoint(){
   var steep=eigvec('a'), shallow=eigvec('b');
   return [0.4*steep[0]+1.4*shallow[0], 0.4*steep[1]+1.4*shallow[1]];
 }
+var W3=150, lossSgd=[], lossMom=[], lossAdam=[];
 function resetTraj(){
   var p=startPoint();
   sgd = {x:p[0],y:p[1],iter:0,path:[[p[0],p[1]]],diverged:false};
   mom = {x:p[0],y:p[1],iter:0,path:[[p[0],p[1]]],mx:0,my:0,diverged:false,lastStep:0};
   adam = {x:p[0],y:p[1],iter:0,path:[[p[0],p[1]]],mx:0,my:0,vx:0,vy:0,diverged:false,lastStep:0};
+  lossSgd=[loss(p[0],p[1])]; lossMom=[loss(p[0],p[1])]; lossAdam=[loss(p[0],p[1])];
   draw();
 }
 
@@ -140,6 +147,7 @@ function stepOnce(){
     var g=grad(sgd.x,sgd.y);
     var nx=sgd.x-lr*K*g[0], ny=sgd.y-lr*K*g[1];
     sgd.x=nx; sgd.y=ny; sgd.iter++; sgd.path.push([nx,ny]);
+    lossSgd.push(loss(nx,ny)); if(lossSgd.length>W3) lossSgd.shift();
     if(!isFinite(nx)||!isFinite(ny)||Math.abs(nx)>8||Math.abs(ny)>8) sgd.diverged=true;
   }
   if(!mom.diverged){
@@ -150,6 +158,7 @@ function stepOnce(){
     mom.lastStep=Math.hypot(dxm,dym);
     var nxm=mom.x-dxm, nym=mom.y-dym;
     mom.x=nxm; mom.y=nym; mom.iter++; mom.path.push([nxm,nym]);
+    lossMom.push(loss(nxm,nym)); if(lossMom.length>W3) lossMom.shift();
     if(!isFinite(nxm)||!isFinite(nym)||Math.abs(nxm)>8||Math.abs(nym)>8) mom.diverged=true;
   }
   if(!adam.diverged){
@@ -166,6 +175,7 @@ function stepOnce(){
     adam.lastStep=Math.hypot(dx,dy);
     var nx2=adam.x-dx, ny2=adam.y-dy;
     adam.x=nx2; adam.y=ny2; adam.path.push([nx2,ny2]);
+    lossAdam.push(loss(nx2,ny2)); if(lossAdam.length>W3) lossAdam.shift();
     if(!isFinite(nx2)||!isFinite(ny2)||Math.abs(nx2)>8||Math.abs(ny2)>8) adam.diverged=true;
   }
   draw();
@@ -223,13 +233,58 @@ document.getElementById('viewSeg').addEventListener('click', function(e){
 var VW=640, VH=300;
 function toPx2(x,y,scale,cx,cy){return [cx+x*scale, cy-y*scale];}
 
+function legendItem(g,x,y,color,label){
+  g.appendChild(el('line',{x1:x,y1:y,x2:x+16,y2:y,stroke:color,'stroke-width':2.4}));
+  g.appendChild(el('circle',{cx:x+16,cy:y,r:3,fill:color}));
+  var t=el('text',{x:x+23,y:y+4,class:'ts gl'}); t.textContent=label; g.appendChild(t);
+}
+function drawLegend(g){
+  legendItem(g, 8, 16, 'var(--orange-ink)', 'SGD');
+  legendItem(g, 76, 16, 'var(--green-ink)', 'momentum');
+  legendItem(g, 190, 16, 'var(--blue-ink)', 'Adam');
+}
+
 function draw(){
   var g=document.getElementById('g');
   g.innerHTML='';
   if(view==='1d') draw1D(g);
   else if(view==='2d') draw2D(g);
   else draw3D(g);
+  drawLossTS();
   readout();
+}
+
+function drawLossTS(){
+  var lg=document.getElementById('lossg');
+  lg.innerHTML='';
+  var TW=220, TH=110, padL=28, padR=8, padT=8, padB=18;
+  var w=TW-padL-padR, h=TH-padT-padB;
+  var showSGD=document.getElementById('showSGD').checked;
+  var showMom=document.getElementById('showMom').checked;
+  var showAdam=document.getElementById('showAdam').checked;
+  var logMin=-6, logMax=1;
+  function ly(v){ var l=Math.log10(Math.max(v,1e-8)); l=Math.max(logMin,Math.min(logMax,l));
+    return padT + (logMax-l)/(logMax-logMin)*h; }
+  var maxN=Math.max(lossSgd.length,lossMom.length,lossAdam.length,2);
+  function lx(i){ return padL + (i/(maxN-1))*w; }
+  lg.appendChild(el('line',{x1:padL,y1:padT,x2:padL,y2:TH-padB,stroke:'var(--border-strong)','stroke-width':1}));
+  lg.appendChild(el('line',{x1:padL,y1:TH-padB,x2:TW-padR,y2:TH-padB,stroke:'var(--border-strong)','stroke-width':1}));
+  [1e-6,1e-3,1,10].forEach(function(v){
+    var y=ly(v);
+    lg.appendChild(el('line',{x1:padL,y1:y,x2:TW-padR,y2:y,stroke:'var(--border)','stroke-width':0.6,opacity:0.5}));
+    var t=el('text',{x:padL-4,y:y+3,style:'font-size:7.5px;fill:var(--text-muted)','text-anchor':'end'}); t.textContent=v>=1?v.toFixed(0):v.toExponential(0); lg.appendChild(t);
+  });
+  function plotLine(arr,color){
+    if(arr.length<2) return;
+    var pts=arr.map(function(v,i){ return lx(i)+','+ly(v); }).join(' ');
+    lg.appendChild(el('polyline',{points:pts,fill:'none',stroke:color,'stroke-width':1.8}));
+    var last=arr.length-1;
+    lg.appendChild(el('circle',{cx:lx(last),cy:ly(arr[last]),r:2.8,fill:color}));
+  }
+  if(showSGD) plotLine(lossSgd,'var(--orange-ink)');
+  if(showMom) plotLine(lossMom,'var(--green-ink)');
+  if(showAdam) plotLine(lossAdam,'var(--blue-ink)');
+  var tt=el('text',{x:padL,y:TH-4,style:'font-size:8px;fill:var(--text-muted)'}); tt.textContent='loss vs. iteration (log scale)'; lg.appendChild(tt);
 }
 
 function plotPath2D(g,path,diverged,colorInk,scale,cx,cy){
@@ -268,7 +323,7 @@ function draw2D(g){
   if(showSGD) plotPath2D(g, sgd.path, sgd.diverged, 'var(--orange-ink)', scale,cx,cy);
   if(showMom) plotPath2D(g, mom.path, mom.diverged, 'var(--green-ink)', scale,cx,cy);
   if(showAdam) plotPath2D(g, adam.path, adam.diverged, 'var(--blue-ink)', scale,cx,cy);
-  var t1=el('text',{x:8,y:16,class:'ts gl'}); t1.textContent='orange = SGD, green = momentum, blue = Adam'; g.appendChild(t1);
+  drawLegend(g);
 }
 
 function draw1D(g){
@@ -346,7 +401,7 @@ function draw3D(g){
   if(showSGD) plotPath3D(sgd.path, sgd.diverged, 'var(--orange-ink)');
   if(showMom) plotPath3D(mom.path, mom.diverged, 'var(--green-ink)');
   if(showAdam) plotPath3D(adam.path, adam.diverged, 'var(--blue-ink)');
-  var t1=el('text',{x:8,y:16,class:'ts gl'}); t1.textContent='orange = SGD, green = momentum, blue = Adam'; g.appendChild(t1);
+  drawLegend(g);
 }
 
 function readout(){
