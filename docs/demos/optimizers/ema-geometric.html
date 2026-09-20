@@ -68,7 +68,7 @@ button,select{height:30px;font-size:13px;padding:0 9px}
   <button onclick="resetReveal()">Reset</button>
   <button onclick="newData()">New data</button>
   <span class="klab">&beta;</span>
-  <input type="range" id="beta" min="0.5" max="0.95" step="0.01" value="0.75" oninput="onParams()" style="width:90px">
+  <input type="range" id="beta" min="0.5" max="0.99" step="0.01" value="0.75" oninput="onParams()" style="width:90px">
   <span class="knum" id="betaVal">0.75</span>
 </div>
 
@@ -86,6 +86,19 @@ function randData(){
   xs=[];
   for(var i=0;i<N;i++) xs.push((Math.random()*2-1)*1.4);
 }
+function genX(){ return (Math.random()*2-1)*1.4; }
+// More terms are needed to see the decay once beta is close to 1 (long memory);
+// pick N so beta^N has shrunk to roughly 1%. The strip can show all of these
+// (up to ~500, near beta=0.99); the data panel below only has room to show the
+// most recent NDATA_MAX of them legibly.
+var NDATA_MAX=28;
+function computeN(b){ return Math.max(8, Math.min(500, Math.round(Math.log(0.01)/Math.log(b)))); }
+function resizeData(newN){
+  if(newN>N){ for(var i=N;i<newN;i++) xs.push(genX()); }
+  else if(newN<N){ xs.length=newN; }
+  N=newN;
+  reveal=Math.min(reveal,N);
+}
 function newData(){ resetReveal(); randData(); draw(); }
 
 function weight(k){ return (1-beta)*Math.pow(beta,k); }
@@ -98,11 +111,13 @@ function fadeColor(k){
 function onParams(){
   beta=parseFloat(document.getElementById('beta').value);
   document.getElementById('betaVal').textContent=beta.toFixed(2);
+  resizeData(computeN(beta));
   draw();
 }
 
 function resetReveal(){ setRunning(false); reveal=0; draw(); }
-function revealOne(){ if(reveal<N){ reveal++; draw(); } if(reveal>=N) setRunning(false); }
+function revealStep(){ return Math.max(1, Math.round(N/30)); } // ~30 clicks/ticks end to end, any N
+function revealOne(){ if(reveal<N){ reveal=Math.min(N,reveal+revealStep()); draw(); } if(reveal>=N) setRunning(false); }
 function revealAll(){ setRunning(false); reveal=N; draw(); }
 
 var running=false, timer=null;
@@ -127,7 +142,7 @@ function drawStrip(){
   for(var k=0;k<reveal;k++){
     var wk=weight(k), pw=wk*w;
     var rx=xEdge-pw;
-    g.appendChild(el('rect',{x:rx,y:y0,width:Math.max(pw,0.6),height:h,fill:'var(--blue)',opacity:fadeColor(k),stroke:'var(--surface)','stroke-width':0.5}));
+    g.appendChild(el('rect',{x:rx,y:y0,width:Math.max(pw,0.05),height:h,fill:'var(--blue)',opacity:fadeColor(k),stroke:'var(--surface)','stroke-width':0.5}));
     if(pw>26){
       var t=el('text',{x:rx+pw/2,y:y0+h/2+4,'text-anchor':'middle',style:'font-size:10px;fill:var(--text-primary)'});
       t.textContent='k='+k;
@@ -159,20 +174,27 @@ function drawData(){
   var cy=padT+h/2;
   var maxAbs=Math.max.apply(null, xs.map(Math.abs).concat([0.3]));
   var scaleY=(h/2-8)/maxAbs;
-  var colW=w/N;
+  var shown=Math.min(N,NDATA_MAX);
+  var colW=w/shown;
   g.appendChild(el('line',{x1:padL,y1:cy,x2:VW-padR,y2:cy,stroke:'var(--border-strong)','stroke-width':1}));
-  for(var k=0;k<N;k++){
-    var x0=padL+(N-1-k)*colW, xv=xs[k]; // k=0 (most recent) sits rightmost
+  for(var k=0;k<shown;k++){
+    var x0=padL+(shown-1-k)*colW, xv=xs[k]; // k=0 (most recent) sits rightmost
     var rawH=Math.abs(xv)*scaleY, rawY=xv>=0?cy-rawH:cy;
     g.appendChild(el('rect',{x:x0+colW*0.18,y:rawY,width:colW*0.64,height:Math.max(rawH,1),fill:'none',stroke:'var(--border-strong)','stroke-width':1}));
     if(k<reveal){
-      var wk=weight(k), contrib=wk*xv;
-      var cH=Math.abs(contrib)*scaleY, cY=contrib>=0?cy-cH:cy;
+      // Displayed height uses beta^k alone (dropping the (1-beta) normalizer,
+      // which just scales every bar equally) so the k=0 bar matches the raw
+      // bar exactly and later bars fall off visibly by a factor of beta each
+      // step -- the actual (1-beta)*beta^k weight still drives the real sums.
+      var displayContrib=Math.pow(beta,k)*xv;
+      var cH=Math.abs(displayContrib)*scaleY, cY=displayContrib>=0?cy-cH:cy;
       g.appendChild(el('rect',{x:x0+colW*0.3,y:cY,width:colW*0.4,height:Math.max(cH,1),fill:'var(--blue)',opacity:fadeColor(k)}));
     }
-    var lab=el('text',{x:x0+colW/2,y:DH-padB+14,'text-anchor':'middle',style:'font-size:9.5px;fill:var(--text-muted)'});
-    lab.textContent='k='+k;
-    g.appendChild(lab);
+    var lab = colW>22 ? el('text',{x:x0+colW/2,y:DH-padB+14,'text-anchor':'middle',style:'font-size:9.5px;fill:var(--text-muted)'}) : null;
+    if(lab){
+      lab.textContent='k='+k;
+      g.appendChild(lab);
+    }
   }
   var t1=el('text',{x:padL,y:12,style:'font-size:10px;fill:var(--text-muted)'}); t1.textContent='outline = x_{t-k} (raw value)'; g.appendChild(t1);
   var t2=el('text',{x:VW-padR,y:12,'text-anchor':'end',style:'font-size:10px;fill:var(--text-muted)'}); t2.textContent='filled = (1−β)β^k · x_{t-k} (its contribution)'; g.appendChild(t2);
@@ -196,6 +218,7 @@ function draw(){
 document.querySelectorAll('.texline').forEach(function(el){
   katex.render(el.getAttribute('data-tex'), el, {throwOnError:false});
 });
+N=computeN(beta);
 randData();
 draw();
 </script>
