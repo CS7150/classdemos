@@ -51,8 +51,8 @@ button,select{height:30px;font-size:13px;padding:0 9px}
   </div>
   <div class="fitem">
     <div class="f" style="color:var(--blue-ink)">
-      <div class="texline" data-tex="v \leftarrow \beta v + (1-\beta) g"></div>
-      <div class="texline" data-tex="x \leftarrow x - \eta v"></div>
+      <div class="texline" data-tex="k \leftarrow \beta k + (1-\beta) g"></div>
+      <div class="texline" data-tex="x \leftarrow x - \eta k"></div>
     </div>
     <label class="cb"><input type="checkbox" id="showMom" checked onchange="draw()"> <span style="color:var(--blue-ink)">&mdash;</span> momentum</label>
   </div>
@@ -88,7 +88,7 @@ button,select{height:30px;font-size:13px;padding:0 9px}
 </div>
 
 <div class="rd" id="readout"></div>
-<div class="cap">Orange dashed = smooth bowl alone. Solid curve = bowl + ripple, the actual loss. Momentum's v is an EMA of the gradient
+<div class="cap">Orange dashed = smooth bowl alone. Solid curve = bowl + ripple, the actual loss. Momentum's k is an EMA of the gradient
   &mdash; a zero-mean alternating ripple gradient averages toward 0, leaving mostly the slow bowl gradient.</div>
 
 <script>
@@ -97,7 +97,7 @@ function el(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attrs
 function fmt(v){return (Math.abs(v)<0.001&&v!==0?v.toExponential(1):v.toFixed(3));}
 
 var rampAmp=0.05, rPeriod=0.22, bowlA=0.4, beta=0.99, lr=0.1;
-var W2=36, histGdG=[], histMomG=[], histMomV=[];
+var W2=36, histGdG=[], histMomG=[], histMomK=[];
 
 // Ripple amplitude scales with distance from the optimum (A(x)=rampAmp*|x|), so
 // the ripple vanishes right at x=0 and gets steeper further out -- product rule
@@ -121,8 +121,8 @@ function startX(){
 function resetTraj(){
   var x0=startX();
   gd = {x:x0, iter:0, path:[x0], diverged:false};
-  mom = {x:x0, v:0, iter:0, path:[x0], diverged:false, lastG:0};
-  histGdG=[]; histMomG=[]; histMomV=[];
+  mom = {x:x0, k:0, iter:0, path:[x0], diverged:false, lastG:0};
+  histGdG=[]; histMomG=[]; histMomK=[];
   draw();
 }
 
@@ -136,12 +136,12 @@ function stepOnce(){
   }
   if(!mom.diverged){
     var g2=grad(mom.x);
-    mom.v = beta*mom.v + (1-beta)*g2;
+    mom.k = beta*mom.k + (1-beta)*g2;
     mom.lastG=g2;
-    var nx2=mom.x-lr*mom.v;
+    var nx2=mom.x-lr*mom.k;
     mom.x=nx2; mom.iter++; mom.path.push(nx2);
     histMomG.push(g2); if(histMomG.length>W2) histMomG.shift();
-    histMomV.push(mom.v); if(histMomV.length>W2) histMomV.shift();
+    histMomK.push(mom.k); if(histMomK.length>W2) histMomK.shift();
     if(!isFinite(nx2)||Math.abs(nx2)>8) mom.diverged=true;
   }
   draw();
@@ -233,7 +233,7 @@ function drawTS(){
   var TW=220, TH=108, padL=8, padR=6, padT=10, chartB=88, legY=102;
   var w=TW-padL-padR, h=chartB-padT;
   var maxAbs=0.15;
-  [histGdG,histMomG,histMomV].forEach(function(arr){ arr.forEach(function(v){ maxAbs=Math.max(maxAbs, Math.abs(v)); }); });
+  [histGdG,histMomG,histMomK].forEach(function(arr){ arr.forEach(function(v){ maxAbs=Math.max(maxAbs, Math.abs(v)); }); });
   var midY=padT+h/2, scaleY=(h/2)/maxAbs;
   function px(i){ return padL + (i/(W2-1))*w; }
   function py(v){ return midY - v*scaleY; }
@@ -246,7 +246,7 @@ function drawTS(){
   var showGD=document.getElementById('showGD').checked;
   var showMom=document.getElementById('showMom').checked;
   if(showGD) dots(histGdG, 'var(--orange-ink)', true, 1.7);
-  if(showMom){ dots(histMomG, 'var(--blue)', false, 1.6); dots(histMomV, 'var(--blue-ink)', true, 1.9); }
+  if(showMom){ dots(histMomG, 'var(--blue)', false, 1.6); dots(histMomK, 'var(--blue-ink)', true, 1.9); }
 
   function tsLegend(x,color,filled,label){
     tsg.appendChild(el('circle',{cx:x,cy:legY,r:2.6,fill:filled?color:'var(--surface)',stroke:color,'stroke-width':1}));
@@ -255,7 +255,7 @@ function drawTS(){
   }
   var nx=padL+2;
   if(showGD) nx=tsLegend(nx, 'var(--orange-ink)', true, 'g GD');
-  if(showMom){ nx=tsLegend(nx, 'var(--blue)', false, 'g mom'); tsLegend(nx, 'var(--blue-ink)', true, 'v mom'); }
+  if(showMom){ nx=tsLegend(nx, 'var(--blue)', false, 'g mom'); tsLegend(nx, 'var(--blue-ink)', true, 'k mom'); }
 
   var tt=el('text',{x:padL,y:padT-2,style:'font-size:8.5px;fill:var(--text-muted)'}); tt.textContent='gradient & velocity, last '+W2+' steps'; tsg.appendChild(tt);
 }

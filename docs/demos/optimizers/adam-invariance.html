@@ -262,18 +262,20 @@ function drawLossTS(){
   var showSGD=document.getElementById('showSGD').checked;
   var showMom=document.getElementById('showMom').checked;
   var showAdam=document.getElementById('showAdam').checked;
-  // Autoscale the log range to whatever the visible series actually span, so
-  // loss dropping below the old fixed 1e-6 floor (or never getting that low)
-  // is still shown at full resolution instead of clipping or wasting range.
+  // Autoscale the log range to whatever the visible series actually span,
+  // starting from a 1e-6 floor by default but opening up to as low as 1e-9
+  // if loss actually gets that small, instead of clipping or wasting range.
+  var FLOOR=-9, DEFAULT_FLOOR=-6;
   var vals=[];
   if(showSGD) vals=vals.concat(lossSgd);
   if(showMom) vals=vals.concat(lossMom);
   if(showAdam) vals=vals.concat(lossAdam);
   if(!vals.length) vals=[1];
-  var logs=vals.map(function(v){ return Math.log10(Math.max(v,1e-12)); });
-  var logMin=Math.floor(Math.min.apply(null,logs)), logMax=Math.ceil(Math.max.apply(null,logs));
+  var logs=vals.map(function(v){ return Math.log10(Math.max(v,Math.pow(10,FLOOR))); });
+  var logMin=Math.max(FLOOR, Math.min(DEFAULT_FLOOR, Math.floor(Math.min.apply(null,logs))));
+  var logMax=Math.ceil(Math.max.apply(null,logs));
   if(logMax-logMin<1){ logMax+=1; }
-  function ly(v){ var l=Math.log10(Math.max(v,1e-12)); l=Math.max(logMin,Math.min(logMax,l));
+  function ly(v){ var l=Math.log10(Math.max(v,Math.pow(10,FLOOR))); l=Math.max(logMin,Math.min(logMax,l));
     return padT + (logMax-l)/(logMax-logMin)*h; }
   var maxN=Math.max(lossSgd.length,lossMom.length,lossAdam.length,2);
   function lx(i){ return padL + (i/(maxN-1))*w; }
