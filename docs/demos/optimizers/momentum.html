@@ -12,12 +12,13 @@ h1{font-size:19px;margin-top:2px}
 .quiz{margin:0}
 #wrap{height:clamp(170px,29vh,270px);display:flex;gap:10px;align-items:stretch}
 #stage{flex:2;min-width:0}
-.formula{flex:1;display:flex;flex-direction:column;justify-content:center;gap:6px;
+.formula{flex:1;display:flex;flex-direction:column;justify-content:center;gap:9px;
   border-left:1px solid var(--border);padding-left:10px;min-width:0}
-.formula .f{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:clamp(17px,3.4vw,21px);font-weight:700;color:var(--text-primary);line-height:1.32}
-.formula table.bt{font-size:11.5px}
-.formula table.bt th,.formula table.bt td{padding:1px 6px 1px 0}
+.formula .fitem{display:flex;flex-direction:column;gap:2px}
+.formula .f{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:clamp(15px,3vw,19px);font-weight:700;line-height:1.28}
 #tsstage{width:100%;height:auto}
+label.cb{font-size:12px}
+input[type=checkbox]{width:14px;height:14px}
 @media (max-width:640px){.formula{display:none}}
 .row{gap:7px}
 button,select{height:30px;font-size:13px;padding:0 9px}
@@ -39,7 +40,14 @@ button,select{height:30px;font-size:13px;padding:0 9px}
   <g id="g"></g>
 </svg>
 <div class="formula">
-  <div class="f">GD: x&larr;x&minus;&eta;g<br>Momentum:<br>v&larr;&beta;v+(1-&beta;)g<br>x&larr;x&minus;&eta;v</div>
+  <div class="fitem">
+    <div class="f" style="color:var(--orange-ink)">GD: x&larr;x&minus;&eta;g</div>
+    <label class="cb"><input type="checkbox" id="showGD" checked onchange="draw()"> <span style="color:var(--orange-ink)">&mdash;</span> plain GD</label>
+  </div>
+  <div class="fitem">
+    <div class="f" style="color:var(--blue-ink)">v&larr;&beta;v+(1&minus;&beta;)g<br>x&larr;x&minus;&eta;v</div>
+    <label class="cb"><input type="checkbox" id="showMom" checked onchange="draw()"> <span style="color:var(--blue-ink)">&mdash;</span> momentum</label>
+  </div>
   <svg id="tsstage" viewBox="0 0 220 108" role="img" preserveAspectRatio="xMidYMid meet">
     <desc>A small time series of the raw gradient for plain gradient descent and the raw gradient and smoothed velocity for momentum, over recent steps.</desc>
     <g id="tsg"></g>
@@ -193,16 +201,18 @@ function draw(){
     var lastX=path[path.length-1];
     g.appendChild(el('circle',{cx:px(lastX),cy:py(loss(lastX)),r:5,fill:diverged?'var(--red)':colorInk}));
   }
-  plotTraj(gd.path, gd.diverged, 'var(--orange-ink)');
-  plotTraj(mom.path, mom.diverged, 'var(--blue-ink)');
+  var showGD=document.getElementById('showGD').checked;
+  var showMom=document.getElementById('showMom').checked;
+  if(showGD) plotTraj(gd.path, gd.diverged, 'var(--orange-ink)');
+  if(showMom) plotTraj(mom.path, mom.diverged, 'var(--blue-ink)');
 
   function legendItem(x,y,color,label){
     g.appendChild(el('line',{x1:x,y1:y,x2:x+16,y2:y,stroke:color,'stroke-width':2.4}));
     g.appendChild(el('circle',{cx:x+16,cy:y,r:3,fill:color}));
     var t=el('text',{x:x+23,y:y+4,class:'ts gl'}); t.textContent=label; g.appendChild(t);
   }
-  legendItem(padL+6, padT+8, 'var(--orange-ink)', 'plain GD');
-  legendItem(padL+108, padT+8, 'var(--blue-ink)', 'momentum');
+  if(showGD) legendItem(padL+6, padT+8, 'var(--orange-ink)', 'plain GD');
+  if(showMom) legendItem(padL+108, padT+8, 'var(--blue-ink)', 'momentum');
   var t2=el('text',{x:padL+4,y:VH-8,class:'tn gl'}); t2.textContent='grey dashed = bowl alone, grey solid = bowl + ripple (the real loss)'; g.appendChild(t2);
 
   drawTS();
@@ -225,26 +235,32 @@ function drawTS(){
       tsg.appendChild(el('circle',{cx:px(i),cy:py(v),r:r,fill:filled?color:'var(--surface)',stroke:color,'stroke-width':1}));
     });
   }
-  dots(histGdG, 'var(--orange-ink)', true, 1.7);
-  dots(histMomG, 'var(--blue)', false, 1.6);
-  dots(histMomV, 'var(--blue-ink)', true, 1.9);
+  var showGD=document.getElementById('showGD').checked;
+  var showMom=document.getElementById('showMom').checked;
+  if(showGD) dots(histGdG, 'var(--orange-ink)', true, 1.7);
+  if(showMom){ dots(histMomG, 'var(--blue)', false, 1.6); dots(histMomV, 'var(--blue-ink)', true, 1.9); }
 
   function tsLegend(x,color,filled,label){
     tsg.appendChild(el('circle',{cx:x,cy:legY,r:2.6,fill:filled?color:'var(--surface)',stroke:color,'stroke-width':1}));
     var t=el('text',{x:x+6,y:legY+3,style:'font-size:8.5px;fill:var(--text-secondary)'}); t.textContent=label; tsg.appendChild(t);
     return x+6+label.length*5.2+9;
   }
-  var nx=tsLegend(padL+2, 'var(--orange-ink)', true, 'g GD');
-  nx=tsLegend(nx, 'var(--blue)', false, 'g mom');
-  tsLegend(nx, 'var(--blue-ink)', true, 'v mom');
+  var nx=padL+2;
+  if(showGD) nx=tsLegend(nx, 'var(--orange-ink)', true, 'g GD');
+  if(showMom){ nx=tsLegend(nx, 'var(--blue)', false, 'g mom'); tsLegend(nx, 'var(--blue-ink)', true, 'v mom'); }
 
   var tt=el('text',{x:padL,y:padT-2,style:'font-size:8.5px;fill:var(--text-muted)'}); tt.textContent='gradient & velocity, last '+W2+' steps'; tsg.appendChild(tt);
 }
 
 function readout(){
-  var warn = (gd.diverged?'GD diverged. ':'') + (mom.diverged?'Momentum diverged.':'');
-  document.getElementById('readout').innerHTML = warn ? '<span class="warn">'+warn+'</span>'
-    : 'Iteration <b class="num">'+gd.iter+'</b> &middot; x, GD = <span class="num">'+fmt(gd.x)+'</span> &middot; x, momentum = <span class="num">'+fmt(mom.x)+'</span>';
+  var showGD=document.getElementById('showGD').checked;
+  var showMom=document.getElementById('showMom').checked;
+  var warn = (showGD&&gd.diverged?'GD diverged. ':'') + (showMom&&mom.diverged?'Momentum diverged.':'');
+  if(warn){ document.getElementById('readout').innerHTML = '<span class="warn">'+warn+'</span>'; return; }
+  var parts = ['Iteration <b class="num">'+gd.iter+'</b>'];
+  if(showGD) parts.push('x, GD = <span class="num">'+fmt(gd.x)+'</span>');
+  if(showMom) parts.push('x, momentum = <span class="num">'+fmt(mom.x)+'</span>');
+  document.getElementById('readout').innerHTML = parts.join(' &middot; ');
 }
 
 onParams();
