@@ -52,10 +52,10 @@ footer a{color:var(--text-secondary)}
   <p class="eyebrow">Northeastern University &middot; CS 7150 &middot; Fall 2026</p>
   <h1>Optimizers, explained</h1>
   <p>Six interactive pieces building up to Adam: how momentum averages out noisy gradients, the
-     trouble a single learning rate has with an anisotropic bowl, the mean/RMS diagnostic Adam
-     adds on top, why its update is scale-invariant, the exponential moving average underneath it,
-     and how network design (activations, initialization, depth) fights the same conditioning
-     problem from the other side.</p>
+     exponential moving average and bias correction that make that averaging precise, the trouble
+     a single learning rate has with an anisotropic bowl, the mean/RMS diagnostic Adam adds on
+     top, why its update is scale-invariant, and how network design (activations, initialization,
+     depth) fights the same conditioning problem from the other side.</p>
 </header>
 
 <ol class="qs">
@@ -67,6 +67,15 @@ footer a{color:var(--text-secondary)}
      stuck bouncing inside one ripple; momentum's exponential moving average of the gradient
      cancels the alternating ripple and rides the bowl down.</p>
   <a class="go" href="momentum.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">The machinery inside Adam</div>
+  <h2><a href="ema.html">EMA and bias correction</a></h2>
+  <p class="what">Raw data against three averages overlaid &mdash; the raw exponential moving
+     average, the bias-corrected version, and a plain equal-weighted average forever &mdash; each
+     with its own show/hide checkbox, so you can see exactly what the correction buys you.</p>
+  <a class="go" href="ema.html">Open the explainer &rarr;</a>
 </li>
 
 <li class="done">
@@ -93,14 +102,6 @@ footer a{color:var(--text-secondary)}
   <p class="what">The same descent run side by side under SGD and Adam while a slider multiplies
      every gradient by K. SGD's steps grow with K; Adam's barely change.</p>
   <a class="go" href="adam-invariance.html">Open the explainer &rarr;</a>
-</li>
-
-<li class="done">
-  <div class="qtag">The machinery inside Adam</div>
-  <h2><a href="ema.html">EMA and bias correction</a></h2>
-  <p class="what">Raw data, the uncorrected running average, and the bias-corrected one, overlaid
-     &mdash; and why the correction matters most in the first few steps.</p>
-  <a class="go" href="ema.html">Open the explainer &rarr;</a>
 </li>
 
 <li class="done">

@@ -11,10 +11,10 @@ body{gap:5px;padding:11px 16px 12px}
 h1{font-size:19px;margin-top:2px}
 .quiz{margin:0}
 #wrap{height:clamp(170px,29vh,270px);display:flex;gap:10px;align-items:stretch}
-#stage{flex:1;min-width:0}
-.formula{flex:0 0 160px;display:flex;flex-direction:column;justify-content:center;gap:7px;
-  border-left:1px solid var(--border);padding-left:10px}
-.formula .f{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--text-primary);line-height:1.4}
+#stage{flex:2;min-width:0}
+.formula{flex:1;display:flex;flex-direction:column;justify-content:center;gap:6px;
+  border-left:1px solid var(--border);padding-left:10px;min-width:0}
+.formula .f{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:clamp(17px,3.4vw,21px);font-weight:700;color:var(--text-primary);line-height:1.32}
 .formula table.bt{font-size:11.5px}
 .formula table.bt th,.formula table.bt td{padding:1px 6px 1px 0}
 @media (max-width:640px){.formula{display:none}}
@@ -39,15 +39,7 @@ button,select{height:30px;font-size:13px;padding:0 9px}
   <g id="g"></g>
 </svg>
 <div class="formula">
-  <div class="f">SGD: v&larr;v&minus;&eta;Kg<br>Adam: v&larr;v&minus;&eta;m/(&radic;v&#8202;+&#8202;&epsilon;)</div>
-  <table class="bt">
-    <tr><th>K</th><td class="num" id="lv-k">&mdash;</td></tr>
-    <tr><th>SGD loss</th><td class="num" id="lv-sgdloss">&mdash;</td></tr>
-    <tr><th>Adam loss</th><td class="num" id="lv-adamloss">&mdash;</td></tr>
-    <tr><th>|SGD step|</th><td class="num" id="lv-sgdstep">&mdash;</td></tr>
-    <tr><th>|Adam step|</th><td class="num" id="lv-adamstep">&mdash;</td></tr>
-    <tr><th>iter</th><td class="num" id="lv-iter">&mdash;</td></tr>
-  </table>
+  <div class="f">SGD:<br>z&larr;z&minus;&eta;Kg<br>Adam:<br>z&larr;z&minus;&eta;m/&radic;v</div>
 </div>
 </div>
 
@@ -296,13 +288,9 @@ function readout(){
   var sgdStep = Math.hypot.apply(null, grad(sgd.x,sgd.y).map(function(v){return lr*K*v;}));
   var adamStep = adam.lastStep || lr;
   var warn = (sgd.diverged?'SGD diverged. ':'') + (adam.diverged?'Adam diverged.':'');
-  document.getElementById('readout').innerHTML = warn ? '<span class="warn">'+warn+'</span>' : '';
-  document.getElementById('lv-k').textContent=K.toFixed(2)+'×';
-  document.getElementById('lv-sgdloss').textContent=fmt(loss(sgd.x,sgd.y));
-  document.getElementById('lv-adamloss').textContent=fmt(loss(adam.x,adam.y));
-  document.getElementById('lv-sgdstep').textContent=fmt(sgdStep);
-  document.getElementById('lv-adamstep').textContent=fmt(adamStep);
-  document.getElementById('lv-iter').textContent=sgd.iter;
+  document.getElementById('readout').innerHTML = warn ? '<span class="warn">'+warn+'</span>'
+    : 'K = <b class="num">'+K.toFixed(2)+'&times;</b> &middot; iter <b class="num">'+sgd.iter+'</b> &middot; '
+    + '|SGD step| = <span class="num">'+fmt(sgdStep)+'</span> &middot; |Adam step| = <span class="num">'+fmt(adamStep)+'</span>';
 }
 
 /* ---------- drag to orbit the 3D surface ---------- */

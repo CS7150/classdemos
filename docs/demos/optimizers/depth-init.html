@@ -11,10 +11,10 @@ body{gap:5px;padding:11px 16px 12px}
 h1{font-size:19px;margin-top:2px}
 .quiz{margin:0}
 #wrap{height:clamp(155px,25vh,235px);display:flex;gap:10px;align-items:stretch}
-#stage{flex:1;min-width:0}
-.formula{flex:0 0 160px;display:flex;flex-direction:column;justify-content:center;gap:7px;
-  border-left:1px solid var(--border);padding-left:10px}
-.formula .f{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--text-primary);line-height:1.4}
+#stage{flex:2;min-width:0}
+.formula{flex:1;display:flex;flex-direction:column;justify-content:center;gap:6px;
+  border-left:1px solid var(--border);padding-left:10px;min-width:0}
+.formula .f{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:clamp(17px,3.4vw,21px);font-weight:700;color:var(--text-primary);line-height:1.32}
 .formula table.bt{font-size:11.5px}
 .formula table.bt th,.formula table.bt td{padding:1px 6px 1px 0}
 @media (max-width:640px){.formula{display:none}}
@@ -38,12 +38,7 @@ button,select{height:30px;font-size:13px;padding:0 9px}
   <g id="g"></g>
 </svg>
 <div class="formula">
-  <div class="f">h = W&middot;a<br>a = &phi;(h)<br>Xavier: Var(W)=1/n<sub>in</sub><br>He: Var(W)=2/n<sub>in</sub></div>
-  <table class="bt">
-    <tr><th>depth</th><td class="num" id="lv-depth">&mdash;</td></tr>
-    <tr><th>std layer 0</th><td class="num" id="lv-std0">&mdash;</td></tr>
-    <tr><th>std layer N</th><td class="num" id="lv-stdN">&mdash;</td></tr>
-  </table>
+  <div class="f">h=W&middot;a<br>a=&phi;(h)<br>Xavier:<br>Var=1/n<br>He:<br>Var=2/n</div>
 </div>
 </div>
 
@@ -186,10 +181,7 @@ function draw(){
   var verdict = finalStd<0.01 ? 'Vanished &mdash; gradients here will be essentially zero.'
     : finalStd>20 ? 'Blown up &mdash; the network is saturating or overflowing.'
     : 'Stayed in a healthy range across all '+depth+' layers.';
-  document.getElementById('readout').innerHTML = verdict;
-  document.getElementById('lv-depth').textContent = depth;
-  document.getElementById('lv-std0').textContent = stds[0].toFixed(3);
-  document.getElementById('lv-stdN').textContent = finalStd.toExponential(2);
+  document.getElementById('readout').innerHTML = 'std: layer 0 = <b class="num">'+stds[0].toFixed(3)+'</b> &rarr; layer '+depth+' = <b class="num">'+finalStd.toExponential(2)+'</b> &mdash; '+verdict;
 }
 
 onParams();

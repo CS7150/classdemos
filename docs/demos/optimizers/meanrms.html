@@ -11,10 +11,10 @@ body{gap:5px;padding:11px 16px 12px}
 h1{font-size:19px;margin-top:2px}
 .quiz{margin:0}
 #wrap{height:clamp(135px,22vh,200px);display:flex;gap:10px;align-items:stretch}
-#stage{flex:1;min-width:0}
-.formula{flex:0 0 160px;display:flex;flex-direction:column;justify-content:center;gap:7px;
-  border-left:1px solid var(--border);padding-left:10px}
-.formula .f{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:var(--text-primary);line-height:1.4}
+#stage{flex:2;min-width:0}
+.formula{flex:1;display:flex;flex-direction:column;justify-content:center;gap:6px;
+  border-left:1px solid var(--border);padding-left:10px;min-width:0}
+.formula .f{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:clamp(17px,3.4vw,21px);font-weight:700;color:var(--text-primary);line-height:1.32}
 .formula table.bt{font-size:11.5px}
 .formula table.bt th,.formula table.bt td{padding:1px 6px 1px 0}
 @media (max-width:640px){.formula{display:none}}
@@ -39,14 +39,7 @@ input[type=checkbox]{width:15px;height:15px}
   <g id="g"></g>
 </svg>
 <div class="formula">
-  <div class="f">mean&larr;mean+(g-mean)/N<br>meanSq&larr;meanSq+(g&sup2;-meanSq)/N<br>RMS = &radic;meanSq</div>
-  <table class="bt">
-    <tr><th>N</th><td class="num" id="lv-n">&mdash;</td></tr>
-    <tr><th>g<sub>t</sub></th><td class="num" id="lv-g">&mdash;</td></tr>
-    <tr><th>mean</th><td class="num" id="lv-mean">&mdash;</td></tr>
-    <tr><th>RMS</th><td class="num" id="lv-rms">&mdash;</td></tr>
-    <tr><th>|mean|/RMS</th><td class="num" id="lv-ratio">&mdash;</td></tr>
-  </table>
+  <div class="f">mean&larr;mean+<br>(g&minus;mean)/N<br>RMS=&radic;mean(g&sup2;)</div>
 </div>
 </div>
 
@@ -165,20 +158,15 @@ function draw(){
       fill:v>=0?'var(--blue)':'var(--blue-ink)',opacity:i===n-1?1:0.7}));
   }
 
-  document.getElementById('lv-n').textContent = runN;
-  document.getElementById('lv-g').textContent = runN? fmt(hist[hist.length-1]) : '—';
-  document.getElementById('lv-mean').textContent = runN? fmt(mean) : '—';
-  document.getElementById('lv-rms').textContent = runN? fmt(rms) : '—';
   if(runN===0){
     document.getElementById('readout').innerHTML = 'No samples yet &mdash; press Play or Step to start streaming.';
-    document.getElementById('lv-ratio').textContent = '—';
   } else {
     var ratio=Math.abs(mean)/(rms||1e-9);
     var verdict = ratio>0.6 ? 'consistent sign &rarr; safe to move fast'
       : ratio>0.25 ? 'somewhat mixed'
       : 'flips sign often &rarr; Adam slows down here';
-    document.getElementById('lv-ratio').textContent = fmt(ratio);
-    document.getElementById('readout').innerHTML = verdict.charAt(0).toUpperCase()+verdict.slice(1)+'.';
+    document.getElementById('readout').innerHTML = 'N = <b class="num">'+runN+'</b> &middot; mean = <span class="num">'+fmt(mean)+
+      '</span> &middot; RMS = <span class="num">'+fmt(rms)+'</span> &middot; |mean|/RMS = <span class="num">'+fmt(ratio)+'</span> &mdash; '+verdict+'.';
   }
 }
 

@@ -11,13 +11,15 @@ body{gap:5px;padding:11px 16px 12px}
 h1{font-size:19px;margin-top:2px}
 .quiz{margin:0}
 #wrap{height:clamp(150px,26vh,220px);display:flex;gap:10px;align-items:stretch}
-#stage{flex:1;min-width:0}
-.formula{flex:0 0 170px;display:flex;flex-direction:column;justify-content:center;gap:7px;
-  border-left:1px solid var(--border);padding-left:10px}
-.formula .f{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--text-primary);line-height:1.45}
-.formula table.bt{font-size:11.5px}
+#stage{flex:2;min-width:0}
+.formula{flex:1;display:flex;flex-direction:column;justify-content:center;gap:6px;
+  border-left:1px solid var(--border);padding-left:10px;min-width:0}
+.formula .f{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:clamp(17px,3.4vw,21px);font-weight:700;color:var(--text-primary);line-height:1.32}
+.formula table.bt{font-size:11px}
 .formula table.bt th,.formula table.bt td{padding:1px 6px 1px 0}
 @media (max-width:640px){.formula{display:none}}
+label.cb{font-size:12px}
+input[type=checkbox]{width:14px;height:14px}
 .row{gap:7px}
 button,select{height:30px;font-size:13px;padding:0 9px}
 .seg button{height:28px;font-size:12px;padding:0 8px}
@@ -38,14 +40,10 @@ button,select{height:30px;font-size:13px;padding:0 9px}
   <g id="g"></g>
 </svg>
 <div class="formula">
-  <div class="f">EMA*<sub>t</sub> = &beta;EMA*<sub>t-1</sub> + (1-&beta;)x<sub>t</sub><br>EMA<sub>t</sub> = EMA*<sub>t</sub> / (1-&beta;<sup>t</sup>)</div>
-  <table class="bt">
-    <tr><th>t</th><td class="num" id="lv-t">&mdash;</td></tr>
-    <tr><th>x<sub>t</sub></th><td class="num" id="lv-x">&mdash;</td></tr>
-    <tr><th>correction</th><td class="num" id="lv-corr">&mdash;</td></tr>
-    <tr><th>EMA*</th><td class="num" id="lv-star">&mdash;</td></tr>
-    <tr><th>EMA</th><td class="num" id="lv-ema">&mdash;</td></tr>
-  </table>
+  <div class="f">EMA*&larr;&beta;EMA*<br>+(1-&beta;)x<br>EMA=EMA*/(1-&beta;<sup>t</sup>)<br>Avg&larr;Avg+<br>(x-Avg)/t</div>
+  <label class="cb"><input type="checkbox" id="showStar" checked onchange="draw()"> <span style="color:var(--warm-ink)">&mdash;</span> raw EMA*</label>
+  <label class="cb"><input type="checkbox" id="showEma" checked onchange="draw()"> <span style="color:var(--blue-ink)">&mdash;</span> bias-corrected EMA</label>
+  <label class="cb"><input type="checkbox" id="showAvg" checked onchange="draw()"> <span style="color:var(--green-ink)">&mdash;</span> equal average forever</label>
 </div>
 </div>
 
@@ -64,7 +62,7 @@ button,select{height:30px;font-size:13px;padding:0 9px}
 </div>
 
 <div class="rd" id="readout"></div>
-<div class="cap">Grey dots = raw data x<sub>t</sub>. Orange dashed = raw EMA* (biased toward 0 early). Blue = bias-corrected EMA.</div>
+<div class="cap">Grey dots = raw data x<sub>t</sub>. The equal-forever average weighs every past sample the same, so after the step's jump it drags along very slowly &mdash; the EMA (with its decay) adapts much faster, at the cost of needing bias correction early on.</div>
 
 <script>
 var NS='http://www.w3.org/2000/svg';
@@ -72,7 +70,7 @@ function el(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attrs
 function fmt(v){return v.toFixed(3);}
 
 var beta=0.9, dataKind='step', W=44;
-var xs=[], emaStar=[], ema=[];
+var xs=[], emaStar=[], ema=[], avg=[];
 
 function genNext(t){
   // All three patterns start at a nonzero value (not the 0 the EMA* itself
@@ -84,8 +82,10 @@ function genNext(t){
   return prev + (Math.random()*2-1)*0.3;
 }
 
+var runAvg=0, runN=0;
 function resetStream(){
-  xs=[]; emaStar=[]; ema=[];
+  xs=[]; emaStar=[]; ema=[]; avg=[];
+  runAvg=0; runN=0;
   draw();
 }
 function stepOnce(){
@@ -94,8 +94,9 @@ function stepOnce(){
   var prevStar = emaStar.length ? emaStar[emaStar.length-1] : 0;
   var star = beta*prevStar + (1-beta)*x;
   var corr = star/(1-Math.pow(beta,t));
-  xs.push(x); emaStar.push(star); ema.push(corr);
-  if(xs.length>W){ xs.shift(); emaStar.shift(); ema.shift(); }
+  runN++; runAvg += (x-runAvg)/runN; // plain equal-weighted average, forever
+  xs.push(x); emaStar.push(star); ema.push(corr); avg.push(runAvg);
+  if(xs.length>W){ xs.shift(); emaStar.shift(); ema.shift(); avg.shift(); }
   draw();
 }
 
@@ -136,22 +137,25 @@ function draw(){
     var pts=arr.map(function(v,i){return px(i)+','+py(v);}).join(' ');
     g.appendChild(el('polyline',{points:pts,fill:'none',stroke:color,'stroke-width':width,'stroke-dasharray':dash||'none'}));
   }
+  var showStar=document.getElementById('showStar').checked;
+  var showEma=document.getElementById('showEma').checked;
+  var showAvg=document.getElementById('showAvg').checked;
+
   xs.forEach(function(v,i){ g.appendChild(el('circle',{cx:px(i),cy:py(v),r:2.4,fill:'var(--border-strong)'})); });
-  line(emaStar, 'var(--warm-ink)', 1.8, '5 3');
-  line(ema, 'var(--blue-ink)', 2.4);
+  if(showStar) line(emaStar, 'var(--warm-ink)', 1.8, '5 3');
+  if(showAvg) line(avg, 'var(--green-ink)', 1.8, '2 3');
+  if(showEma) line(ema, 'var(--blue-ink)', 2.4);
   if(xs.length){
     var i=xs.length-1;
-    g.appendChild(el('circle',{cx:px(i),cy:py(emaStar[i]),r:4,fill:'var(--warm-ink)'}));
-    g.appendChild(el('circle',{cx:px(i),cy:py(ema[i]),r:4.5,fill:'var(--blue-ink)'}));
+    if(showStar) g.appendChild(el('circle',{cx:px(i),cy:py(emaStar[i]),r:4,fill:'var(--warm-ink)'}));
+    if(showAvg) g.appendChild(el('circle',{cx:px(i),cy:py(avg[i]),r:4,fill:'var(--green-ink)'}));
+    if(showEma) g.appendChild(el('circle',{cx:px(i),cy:py(ema[i]),r:4.5,fill:'var(--blue-ink)'}));
   }
 
   var t=xs.length;
-  document.getElementById('readout').innerHTML = t===0 ? 'No samples yet &mdash; press Play or Step.' : '';
-  document.getElementById('lv-t').textContent = t;
-  document.getElementById('lv-x').textContent = t? fmt(xs[t-1]) : '—';
-  document.getElementById('lv-corr').textContent = t? (1/(1-Math.pow(beta,t))).toFixed(2)+'×' : '—';
-  document.getElementById('lv-star').textContent = t? fmt(emaStar[t-1]) : '—';
-  document.getElementById('lv-ema').textContent = t? fmt(ema[t-1]) : '—';
+  document.getElementById('readout').innerHTML = t===0 ? 'No samples yet &mdash; press Play or Step.'
+    : 't = <b class="num">'+t+'</b> &middot; x<sub>t</sub> = <span class="num">'+fmt(xs[t-1])+'</span> &middot; correction = <span class="num">'+(1/(1-Math.pow(beta,t))).toFixed(2)+'&times;</span><br>'
+    + 'EMA* = <span class="num">'+fmt(emaStar[t-1])+'</span> &middot; EMA = <b class="num">'+fmt(ema[t-1])+'</b> &middot; equal average = <span class="num">'+fmt(avg[t-1])+'</span>';
 }
 
 resetStream();
