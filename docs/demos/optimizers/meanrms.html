@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mean vs. RMS</title>
+<meta name="description" content="The gap between the mean and the RMS of a gradient stream is the diagnostic Adam is built from.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:12px 18px 14px}
+h1{font-size:20px;margin-top:2px}
+.quiz{margin:0}
+#wrap{height:clamp(190px,32vh,300px)}
+.row{gap:8px}
+button,select{height:33px;font-size:13.5px;padding:0 10px}
+.klab{font-size:13px}
+.knum{font-size:13px;min-width:auto}
+.rd{font-size:14px;line-height:1.5}
+.cap{font-size:12.5px;line-height:1.5;padding-top:5px}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Optimization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Mean vs. RMS<span>: the diagnostic behind Adam</span></h1>
+<p class="quiz">A synthetic gradient stream. When it flips sign often, the mean cancels toward zero while the RMS does not &mdash; that gap is exactly what Adam watches to decide when to slow down.</p>
+
+<div id="wrap"><svg id="stage" viewBox="0 0 640 300" role="img" preserveAspectRatio="xMidYMid meet">
+  <desc>A live bar chart of a synthetic gradient stream, with its running mean and RMS drawn as reference lines.</desc>
+  <g id="g"></g>
+</svg></div>
+
+<div class="row">
+  <button class="main" id="run" onclick="toggleRun()">Play</button>
+  <button onclick="stepOnce()">Step</button>
+  <button onclick="resetStream()">Reset</button>
+  <button onclick="presetConsistent()">preset: consistent</button>
+  <button onclick="presetOscillating()">preset: oscillating</button>
+</div>
+
+<div class="row">
+  <span class="klab">drift</span>
+  <input type="range" id="drift" min="-1.2" max="1.2" step="0.05" value="0" oninput="onParams()" style="width:90px">
+  <span class="knum" id="driftVal">0.00</span>
+  <span class="klab">sign-flip freq</span>
+  <input type="range" id="omega" min="0" max="3" step="0.05" value="1.2" oninput="onParams()" style="width:90px">
+  <span class="knum" id="omegaVal">1.20</span>
+  <span class="klab">noise</span>
+  <input type="range" id="noise" min="0" max="1.2" step="0.05" value="0.4" oninput="onParams()" style="width:90px">
+  <span class="knum" id="noiseVal">0.40</span>
+</div>
+
+<div class="rd" id="readout"></div>
+<div class="cap">mean = (1/N)&sum;g<sub>t</sub>, RMS = &radic;((1/N)&sum;g<sub>t</sub><sup>2</sup>), over the last 40 samples shown.
+  Adam's step is proportional to mean/RMS &mdash; near 1 when the sign is consistent, near 0 when it flips often.</div>
+
+<script>
+var NS='http://www.w3.org/2000/svg';
+function el(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attrs)e.setAttribute(k,attrs[k]);return e;}
+function fmt(v){return v.toFixed(3);}
+
+var drift=0, omega=1.2, noiseAmt=0.4;
+var W=40, hist=[];
+
+function sample(t){
+  return drift + Math.sin(t*omega) + noiseAmt*(Math.random()*2-1);
+}
+function resetStream(){
+  hist=[];
+  for(var i=0;i<W;i++) hist.push(sample(i));
+  tcount=W;
+  draw();
+}
+var tcount=0;
+function stepOnce(){
+  hist.push(sample(tcount)); tcount++;
+  if(hist.length>W) hist.shift();
+  draw();
+}
+
+var running=false, timer=null;
+function setRunning(r){
+  running=r;
+  document.getElementById('run').textContent=r?'Pause':'Play';
+  if(r){ timer=setInterval(stepOnce, 160); } else clearInterval(timer);
+}
+function toggleRun(){ setRunning(!running); }
+
+function onParams(){
+  drift=parseFloat(document.getElementById('drift').value);
+  omega=parseFloat(document.getElementById('omega').value);
+  noiseAmt=parseFloat(document.getElementById('noise').value);
+  document.getElementById('driftVal').textContent=drift.toFixed(2);
+  document.getElementById('omegaVal').textContent=omega.toFixed(2);
+  document.getElementById('noiseVal').textContent=noiseAmt.toFixed(2);
+}
+function setSliders(d,o,n){
+  document.getElementById('drift').value=d; document.getElementById('omega').value=o; document.getElementById('noise').value=n;
+  onParams();
+}
+function presetConsistent(){ setSliders(0.9,0,0.3); setRunning(false); resetStream(); setRunning(true); }
+function presetOscillating(){ setSliders(0,2.4,0.5); setRunning(false); resetStream(); setRunning(true); }
+
+var VW=640, VH=300;
+function draw(){
+  var g=document.getElementById('g');
+  g.innerHTML='';
+  var n=hist.length, mean=hist.reduce(function(a,b){return a+b;},0)/n;
+  var rms=Math.sqrt(hist.reduce(function(a,b){return a+b*b;},0)/n);
+  var yMax=3.4, padL=10, padR=10, padT=16, padB=16;
+  var plotW=VW-padL-padR, plotH=VH-padT-padB;
+  var cy=padT+plotH/2, scaleY=(plotH/2)/yMax;
+  var barW=plotW/W*0.62, gap=plotW/W;
+  // zero line
+  g.appendChild(el('line',{x1:padL,y1:cy,x2:VW-padR,y2:cy,stroke:'var(--border-strong)','stroke-width':1}));
+  // RMS band
+  var rmsTop=cy-rms*scaleY, rmsBot=cy+rms*scaleY;
+  g.appendChild(el('rect',{x:padL,y:rmsTop,width:plotW,height:rmsBot-rmsTop,fill:'var(--warm)',opacity:0.08}));
+  g.appendChild(el('line',{x1:padL,y1:rmsTop,x2:VW-padR,y2:rmsTop,stroke:'var(--warm-ink)','stroke-width':1.1,'stroke-dasharray':'5 3',opacity:0.85}));
+  g.appendChild(el('line',{x1:padL,y1:rmsBot,x2:VW-padR,y2:rmsBot,stroke:'var(--warm-ink)','stroke-width':1.1,'stroke-dasharray':'5 3',opacity:0.85}));
+  // mean line
+  var meanY=cy-mean*scaleY;
+  g.appendChild(el('line',{x1:padL,y1:meanY,x2:VW-padR,y2:meanY,stroke:'var(--green-ink)','stroke-width':1.8}));
+  // bars
+  for(var i=0;i<n;i++){
+    var v=hist[i], x=padL+i*gap+ (gap-barW)/2;
+    var by=v>=0?cy-v*scaleY:cy, bh=Math.abs(v)*scaleY;
+    g.appendChild(el('rect',{x:x,y:by,width:barW,height:Math.max(bh,0.6),
+      fill:v>=0?'var(--blue)':'var(--blue-ink)',opacity:i===n-1?1:0.7}));
+  }
+  var t1=el('text',{x:VW-padR,y:rmsTop-4,class:'tn gl','text-anchor':'end'}); t1.textContent='RMS = '+fmt(rms); g.appendChild(t1);
+  var t2=el('text',{x:VW-padR,y:meanY-4,class:'ts gl','text-anchor':'end'}); t2.textContent='mean = '+fmt(mean); g.appendChild(t2);
+
+  var ratio=Math.abs(mean)/(rms||1e-9);
+  var verdict = ratio>0.6 ? 'consistent sign &rarr; safe to move fast'
+    : ratio>0.25 ? 'somewhat mixed'
+    : 'flips sign often &rarr; Adam slows down here';
+  document.getElementById('readout').innerHTML = '<b>mean</b> = <span class="num">'+fmt(mean)+'</span> &middot; '+
+    '<b>RMS</b> = <span class="num">'+fmt(rms)+'</span> &middot; |mean|/RMS = <span class="num">'+fmt(ratio)+'</span> &mdash; '+verdict+'.';
+}
+
+resetStream();
+</script>
+</body>
+</html>
