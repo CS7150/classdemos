@@ -11,12 +11,13 @@ body{gap:5px;padding:11px 16px 12px}
 h1{font-size:19px;margin-top:2px}
 .quiz{margin:0}
 #wrap{height:clamp(170px,29vh,270px);display:flex;gap:10px;align-items:stretch}
-#stage{flex:1;min-width:0}
-.formula{flex:0 0 165px;display:flex;flex-direction:column;justify-content:center;gap:7px;
-  border-left:1px solid var(--border);padding-left:10px}
-.formula .f{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--text-primary);line-height:1.45}
+#stage{flex:2;min-width:0}
+.formula{flex:1;display:flex;flex-direction:column;justify-content:center;gap:6px;
+  border-left:1px solid var(--border);padding-left:10px;min-width:0}
+.formula .f{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--text-primary);line-height:1.4}
 .formula table.bt{font-size:11.5px}
 .formula table.bt th,.formula table.bt td{padding:1px 6px 1px 0}
+#tsstage{width:100%;height:auto}
 @media (max-width:640px){.formula{display:none}}
 .row{gap:7px}
 button,select{height:30px;font-size:13px;padding:0 9px}
@@ -39,13 +40,10 @@ button,select{height:30px;font-size:13px;padding:0 9px}
 </svg>
 <div class="formula">
   <div class="f">GD: x&larr;x&minus;&eta;g<br>Momentum:<br>v&larr;&beta;v+(1-&beta;)g<br>x&larr;x&minus;&eta;v</div>
-  <table class="bt">
-    <tr><th>iter</th><td class="num" id="lv-iter">&mdash;</td></tr>
-    <tr><th>g (raw)</th><td class="num" id="lv-g">&mdash;</td></tr>
-    <tr><th>v (EMA)</th><td class="num" id="lv-v">&mdash;</td></tr>
-    <tr><th>x, GD</th><td class="num" id="lv-xgd">&mdash;</td></tr>
-    <tr><th>x, mom.</th><td class="num" id="lv-xmom">&mdash;</td></tr>
-  </table>
+  <svg id="tsstage" viewBox="0 0 220 108" role="img" preserveAspectRatio="xMidYMid meet">
+    <desc>A small time series of the raw gradient for plain gradient descent and the raw gradient and smoothed velocity for momentum, over recent steps.</desc>
+    <g id="tsg"></g>
+  </svg>
 </div>
 </div>
 
@@ -66,10 +64,10 @@ button,select{height:30px;font-size:13px;padding:0 9px}
   <button onclick="stepOnce()">Step</button>
   <button onclick="resetTraj()">Reset</button>
   <span class="klab">&beta;</span>
-  <input type="range" id="beta" min="0" max="0.98" step="0.01" value="0.85" oninput="onParams()" style="width:70px">
+  <input type="range" id="beta" min="-5" max="0" step="0.02" value="-0.824" oninput="onParams()" style="width:70px">
   <span class="knum" id="betaVal">0.85</span>
   <span class="klab">&eta;</span>
-  <input type="range" id="lr" min="-2.3" max="-0.5" step="0.01" value="-1.097" oninput="onParams()" style="width:70px">
+  <input type="range" id="lr" min="-3" max="-0.5" step="0.01" value="-1.097" oninput="onParams()" style="width:70px">
   <span class="knum" id="lrVal">0.080</span>
 </div>
 
@@ -83,15 +81,26 @@ function el(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attrs
 function fmt(v){return (Math.abs(v)<0.001&&v!==0?v.toExponential(1):v.toFixed(3));}
 
 var rampAmp=0.08, rPeriod=0.22, bowlA=0.4, beta=0.85, lr=0.08;
+var W2=36, histGdG=[], histMomG=[], histMomV=[];
 
 function loss(x){ return 0.5*bowlA*x*x + rampAmp*Math.sin(2*Math.PI*x/rPeriod); }
 function grad(x){ return bowlA*x + rampAmp*(2*Math.PI/rPeriod)*Math.cos(2*Math.PI*x/rPeriod); }
 
 var gd={}, mom={};
+function startX(){
+  // The peak of a ripple nearest x~1.2, nudged just past it onto the downward
+  // slope (moving toward x=0 the ripple monotonically descends for half a
+  // period there), so both trajectories start right at the edge of one tooth.
+  var target=1.2;
+  var k=Math.round(target/rPeriod - 0.25);
+  var peak=rPeriod*(k+0.25);
+  return peak - 0.08*rPeriod;
+}
 function resetTraj(){
-  var x0=1.3;
+  var x0=startX();
   gd = {x:x0, iter:0, path:[x0], diverged:false};
   mom = {x:x0, v:0, iter:0, path:[x0], diverged:false, lastG:0};
+  histGdG=[]; histMomG=[]; histMomV=[];
   draw();
 }
 
@@ -100,6 +109,7 @@ function stepOnce(){
     var g=grad(gd.x);
     var nx=gd.x-lr*g;
     gd.x=nx; gd.iter++; gd.path.push(nx);
+    histGdG.push(g); if(histGdG.length>W2) histGdG.shift();
     if(!isFinite(nx)||Math.abs(nx)>8) gd.diverged=true;
   }
   if(!mom.diverged){
@@ -108,6 +118,8 @@ function stepOnce(){
     mom.lastG=g2;
     var nx2=mom.x-lr*mom.v;
     mom.x=nx2; mom.iter++; mom.path.push(nx2);
+    histMomG.push(g2); if(histMomG.length>W2) histMomG.shift();
+    histMomV.push(mom.v); if(histMomV.length>W2) histMomV.shift();
     if(!isFinite(nx2)||Math.abs(nx2)>8) mom.diverged=true;
   }
   draw();
@@ -122,16 +134,21 @@ function setRunning(r){
 }
 function toggleRun(){ setRunning(!running); }
 
+function fmtBeta(b){
+  var oneMinus=1-b;
+  var decimals = oneMinus>0 ? Math.min(6, Math.max(2, Math.ceil(-Math.log10(oneMinus))+1)) : 6;
+  return b.toFixed(decimals);
+}
 function onParams(){
   rampAmp=parseFloat(document.getElementById('ramp').value);
   rPeriod=parseFloat(document.getElementById('rperiod').value);
   bowlA=parseFloat(document.getElementById('bowlA').value);
-  beta=parseFloat(document.getElementById('beta').value);
+  beta=1-Math.pow(10, parseFloat(document.getElementById('beta').value)); // log scale on (1-beta): more nines
   lr=Math.pow(10, parseFloat(document.getElementById('lr').value));
   document.getElementById('rampVal').textContent=rampAmp.toFixed(2);
   document.getElementById('rperiodVal').textContent=rPeriod.toFixed(2);
   document.getElementById('bowlAVal').textContent=bowlA.toFixed(2);
-  document.getElementById('betaVal').textContent=beta.toFixed(2);
+  document.getElementById('betaVal').textContent=fmtBeta(beta);
   document.getElementById('lrVal').textContent=lr.toFixed(3);
   setRunning(false); resetTraj();
 }
@@ -172,20 +189,55 @@ function draw(){
   plotTraj(gd.path, gd.diverged, 'var(--orange-ink)');
   plotTraj(mom.path, mom.diverged, 'var(--blue-ink)');
 
-  var t1=el('text',{x:padL+4,y:padT+2,class:'ts gl'}); t1.textContent='orange = plain GD, blue = momentum'; g.appendChild(t1);
+  function legendItem(x,y,color,label){
+    g.appendChild(el('line',{x1:x,y1:y,x2:x+16,y2:y,stroke:color,'stroke-width':2.4}));
+    g.appendChild(el('circle',{cx:x+16,cy:y,r:3,fill:color}));
+    var t=el('text',{x:x+23,y:y+4,class:'ts gl'}); t.textContent=label; g.appendChild(t);
+  }
+  legendItem(padL+6, padT+8, 'var(--orange-ink)', 'plain GD');
+  legendItem(padL+108, padT+8, 'var(--blue-ink)', 'momentum');
   var t2=el('text',{x:padL+4,y:VH-8,class:'tn gl'}); t2.textContent='grey dashed = bowl alone, grey solid = bowl + ripple (the real loss)'; g.appendChild(t2);
 
+  drawTS();
   readout();
+}
+
+function drawTS(){
+  var tsg=document.getElementById('tsg');
+  tsg.innerHTML='';
+  var TW=220, TH=108, padL=8, padR=6, padT=10, chartB=88, legY=102;
+  var w=TW-padL-padR, h=chartB-padT;
+  var maxAbs=0.15;
+  [histGdG,histMomG,histMomV].forEach(function(arr){ arr.forEach(function(v){ maxAbs=Math.max(maxAbs, Math.abs(v)); }); });
+  var midY=padT+h/2, scaleY=(h/2)/maxAbs;
+  function px(i){ return padL + (i/(W2-1))*w; }
+  function py(v){ return midY - v*scaleY; }
+  tsg.appendChild(el('line',{x1:padL,y1:midY,x2:TW-padR,y2:midY,stroke:'var(--border-strong)','stroke-width':0.6,opacity:0.6}));
+  function dots(arr,color,filled,r){
+    arr.forEach(function(v,i){
+      tsg.appendChild(el('circle',{cx:px(i),cy:py(v),r:r,fill:filled?color:'var(--surface)',stroke:color,'stroke-width':1}));
+    });
+  }
+  dots(histGdG, 'var(--orange-ink)', true, 1.7);
+  dots(histMomG, 'var(--blue)', false, 1.6);
+  dots(histMomV, 'var(--blue-ink)', true, 1.9);
+
+  function tsLegend(x,color,filled,label){
+    tsg.appendChild(el('circle',{cx:x,cy:legY,r:2.6,fill:filled?color:'var(--surface)',stroke:color,'stroke-width':1}));
+    var t=el('text',{x:x+6,y:legY+3,style:'font-size:8.5px;fill:var(--text-secondary)'}); t.textContent=label; tsg.appendChild(t);
+    return x+6+label.length*5.2+9;
+  }
+  var nx=tsLegend(padL+2, 'var(--orange-ink)', true, 'g GD');
+  nx=tsLegend(nx, 'var(--blue)', false, 'g mom');
+  tsLegend(nx, 'var(--blue-ink)', true, 'v mom');
+
+  var tt=el('text',{x:padL,y:padT-2,style:'font-size:8.5px;fill:var(--text-muted)'}); tt.textContent='gradient & velocity, last '+W2+' steps'; tsg.appendChild(tt);
 }
 
 function readout(){
   var warn = (gd.diverged?'GD diverged. ':'') + (mom.diverged?'Momentum diverged.':'');
-  document.getElementById('readout').innerHTML = warn ? '<span class="warn">'+warn+'</span>' : '';
-  document.getElementById('lv-iter').textContent = gd.iter;
-  document.getElementById('lv-g').textContent = fmt(grad(gd.x));
-  document.getElementById('lv-v').textContent = fmt(mom.v);
-  document.getElementById('lv-xgd').textContent = fmt(gd.x);
-  document.getElementById('lv-xmom').textContent = fmt(mom.x);
+  document.getElementById('readout').innerHTML = warn ? '<span class="warn">'+warn+'</span>'
+    : 'Iteration <b class="num">'+gd.iter+'</b> &middot; x, GD = <span class="num">'+fmt(gd.x)+'</span> &middot; x, momentum = <span class="num">'+fmt(mom.x)+'</span>';
 }
 
 onParams();

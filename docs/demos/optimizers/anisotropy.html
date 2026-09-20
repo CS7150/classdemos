@@ -11,12 +11,11 @@ body{gap:5px;padding:11px 16px 12px}
 h1{font-size:19px;margin-top:2px}
 .quiz{margin:0}
 #wrap{height:clamp(170px,29vh,270px);display:flex;gap:10px;align-items:stretch}
-#stage{flex:1;min-width:0}
-.formula{flex:0 0 150px;display:flex;flex-direction:column;justify-content:center;gap:7px;
-  border-left:1px solid var(--border);padding-left:10px}
+#stage{flex:2;min-width:0}
+.formula{flex:1;display:flex;flex-direction:column;justify-content:center;gap:6px;
+  border-left:1px solid var(--border);padding-left:10px;min-width:0}
 .formula .f{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;color:var(--text-primary);line-height:1.4}
-.formula table.bt{font-size:11.5px}
-.formula table.bt th,.formula table.bt td{padding:1px 6px 1px 0}
+#tsstage{width:100%;height:auto}
 @media (max-width:640px){.formula{display:none}}
 .row{gap:7px}
 button,select{height:30px;font-size:13px;padding:0 9px}
@@ -39,15 +38,11 @@ button,select{height:30px;font-size:13px;padding:0 9px}
   <g id="g"></g>
 </svg>
 <div class="formula">
-  <div class="f">v &larr; v &minus; &eta;&middot;Qv</div>
-  <table class="bt">
-    <tr><th>x</th><td class="num" id="lv-x">&mdash;</td></tr>
-    <tr><th>y</th><td class="num" id="lv-y">&mdash;</td></tr>
-    <tr><th>loss</th><td class="num" id="lv-loss">&mdash;</td></tr>
-    <tr><th>&eta;<sub>x</sub></th><td class="num" id="lv-etax">&mdash;</td></tr>
-    <tr><th>&eta;<sub>y</sub></th><td class="num" id="lv-etay">&mdash;</td></tr>
-    <tr><th>iter</th><td class="num" id="lv-iter">&mdash;</td></tr>
-  </table>
+  <div class="f">z &larr; z &minus; &eta;&middot;g<br>g = Qz</div>
+  <svg id="tsstage" viewBox="0 0 220 108" role="img" preserveAspectRatio="xMidYMid meet">
+    <desc>A small time series of the two gradient components, g_x and g_y, over recent steps.</desc>
+    <g id="tsg"></g>
+  </svg>
 </div>
 </div>
 
@@ -91,7 +86,7 @@ button,select{height:30px;font-size:13px;padding:0 9px}
 </div>
 
 <div class="rd" id="readout"></div>
-<div class="cap">L(x,y) = &frac12;v<sup>T</sup>Qv, Q has eigenvalues a and 1 along axes rotated by the tilt. Per-axis rates can't fully fix a nonzero tilt. Drag the 3D surface to rotate it.</div>
+<div class="cap">z=(x,y). L(z) = &frac12;z<sup>T</sup>Qz, Q has eigenvalues a and 1 along axes rotated by the tilt. Per-axis rates can't fully fix a nonzero tilt. Drag the 3D surface to rotate it.</div>
 
 <script>
 var NS='http://www.w3.org/2000/svg';
@@ -103,6 +98,7 @@ var Q00=1,Q01=0,Q11=1; // filled in by computeQ()
 var view='2d';
 var mode='shared';
 var st={};
+var W2=36, histGx=[], histGy=[];
 
 function computeQ(){
   var th=thetaDeg*Math.PI/180, c=Math.cos(th), s=Math.sin(th);
@@ -125,6 +121,7 @@ function resetTraj(){
   // little steep-axis offset (to show the overshoot) -- the classic zig-zag setup.
   var x0=0.4*steep[0]+1.4*shallow[0], y0=0.4*steep[1]+1.4*shallow[1];
   st={x:x0,y:y0,iter:0,path:[[x0,y0]],losses:[loss(x0,y0)],diverged:false};
+  histGx=[]; histGy=[];
   draw();
 }
 
@@ -139,6 +136,8 @@ function curLR(){
 function stepOnce(){
   if(st.diverged) return;
   var g=grad(st.x,st.y), lrs=curLR();
+  histGx.push(g[0]); if(histGx.length>W2) histGx.shift();
+  histGy.push(g[1]); if(histGy.length>W2) histGy.shift();
   var nx=st.x-lrs[0]*g[0], ny=st.y-lrs[1]*g[1];
   st.x=nx; st.y=ny; st.iter++;
   st.path.push([nx,ny]);
@@ -222,7 +221,38 @@ function draw(){
   if(view==='1d') draw1D(g);
   else if(view==='2d') draw2D(g);
   else draw3D(g);
+  drawTS();
   readout();
+}
+
+function drawTS(){
+  var tsg=document.getElementById('tsg');
+  tsg.innerHTML='';
+  var TW=220, TH=108, padL=8, padR=6, padT=10, chartB=88, legY=102;
+  var w=TW-padL-padR, h=chartB-padT;
+  var maxAbs=0.15;
+  [histGx,histGy].forEach(function(arr){ arr.forEach(function(v){ maxAbs=Math.max(maxAbs, Math.abs(v)); }); });
+  var midY=padT+h/2, scaleY=(h/2)/maxAbs;
+  function px(i){ return padL + (i/(W2-1))*w; }
+  function py(v){ return midY - v*scaleY; }
+  tsg.appendChild(el('line',{x1:padL,y1:midY,x2:TW-padR,y2:midY,stroke:'var(--border-strong)','stroke-width':0.6,opacity:0.6}));
+  function dots(arr,color,filled,r){
+    arr.forEach(function(v,i){
+      tsg.appendChild(el('circle',{cx:px(i),cy:py(v),r:r,fill:filled?color:'var(--surface)',stroke:color,'stroke-width':1}));
+    });
+  }
+  dots(histGx, 'var(--blue-ink)', true, 1.8);
+  dots(histGy, 'var(--warm-ink)', false, 1.7);
+
+  function tsLegend(x,color,filled,label){
+    tsg.appendChild(el('circle',{cx:x,cy:legY,r:2.6,fill:filled?color:'var(--surface)',stroke:color,'stroke-width':1}));
+    var t=el('text',{x:x+6,y:legY+3,style:'font-size:8.5px;fill:var(--text-secondary)'}); t.textContent=label; tsg.appendChild(t);
+    return x+6+label.length*5.2+10;
+  }
+  var nx=tsLegend(padL+2, 'var(--blue-ink)', true, 'g_x');
+  tsLegend(nx, 'var(--warm-ink)', false, 'g_y');
+
+  var tt=el('text',{x:padL,y:padT-2,style:'font-size:8.5px;fill:var(--text-muted)'}); tt.textContent='gradient components, last '+W2+' steps'; tsg.appendChild(tt);
 }
 
 function draw2D(g){
@@ -330,14 +360,7 @@ function readout(){
   var last=st.losses[st.losses.length-1];
   document.getElementById('readout').innerHTML = st.diverged
     ? '<span class="warn"><b>Diverged.</b></span> Past the stability limit &mdash; lower the rate, or use per-axis rates.'
-    : '';
-  var lrs=curLR();
-  document.getElementById('lv-x').textContent=fmt(st.x);
-  document.getElementById('lv-y').textContent=fmt(st.y);
-  document.getElementById('lv-loss').textContent=fmt(last);
-  document.getElementById('lv-etax').textContent=lrs[0].toFixed(3);
-  document.getElementById('lv-etay').textContent=lrs[1].toFixed(3);
-  document.getElementById('lv-iter').textContent=st.iter;
+    : 'Iteration <b class="num">'+st.iter+'</b> &middot; z = (<span class="num">'+fmt(st.x)+'</span>, <span class="num">'+fmt(st.y)+'</span>) &middot; loss = <span class="num">'+fmt(last)+'</span>';
 }
 
 /* ---------- drag to orbit the 3D surface ---------- */
