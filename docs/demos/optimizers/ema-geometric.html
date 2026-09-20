@@ -9,12 +9,12 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 <style>
-body{gap:5px;padding:11px 16px 12px}
+body{gap:4px;padding:9px 16px 10px}
 h1{font-size:19px;margin-top:2px}
 .quiz{margin:0}
-#panels{display:flex;flex-direction:column;gap:10px}
+#panels{display:flex;flex-direction:column;gap:8px}
 .panel{background:var(--surface-1,transparent)}
-.ptitle{font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px}
+.ptitle{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:1px}
 #stripStage,#dataStage{width:100%;height:auto;display:block}
 .formrow{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start;margin-top:6px}
 .formrow .f{font-size:clamp(14px,2.4vw,18px);line-height:1.3;white-space:nowrap}
@@ -35,14 +35,14 @@ button,select{height:30px;font-size:13px;padding:0 9px}
 <div id="panels">
   <div class="panel">
     <div class="ptitle">The strip: length 1, cut geometrically</div>
-    <svg id="stripStage" viewBox="0 0 640 108" role="img" preserveAspectRatio="xMidYMid meet">
+    <svg id="stripStage" viewBox="0 0 640 92" role="img" preserveAspectRatio="xMidYMid meet">
       <desc>A horizontal bar of length 1 being cut into pieces of size (1-beta) times beta to the k, for k = 0, 1, 2, ..., with the uncut remainder shown at the end.</desc>
       <g id="stripG"></g>
     </svg>
   </div>
   <div class="panel">
     <div class="ptitle">The same cuts, as weights on real data (k steps back)</div>
-    <svg id="dataStage" viewBox="0 0 640 190" role="img" preserveAspectRatio="xMidYMid meet">
+    <svg id="dataStage" viewBox="0 0 640 160" role="img" preserveAspectRatio="xMidYMid meet">
       <desc>A bar chart of past data values, each overlaid with the fraction of it that the cut of matching size actually contributes to the running EMA.</desc>
       <g id="dataG"></g>
     </svg>
@@ -80,7 +80,7 @@ var NS='http://www.w3.org/2000/svg';
 function el(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attrs)e.setAttribute(k,attrs[k]);return e;}
 function fmt(v){return (Math.abs(v)<0.001&&v!==0?v.toExponential(1):v.toFixed(3));}
 
-var N=10, beta=0.75, reveal=0, xs=[];
+var N=13, beta=0.75, reveal=0, xs=[];
 
 function randData(){
   xs=[];
@@ -114,51 +114,55 @@ function setRunning(r){
 }
 function toggleRun(){ if(reveal>=N && !running){ reveal=0; } setRunning(!running); }
 
-var VW=640;
+var VW=640, SH=92, DH=160;
 function drawStrip(){
   var g=document.getElementById('stripG');
   g.innerHTML='';
-  var padL=14, padR=14, y0=28, h=40, w=VW-padL-padR;
+  var padL=14, padR=14, y0=22, h=32, w=VW-padL-padR;
   g.appendChild(el('rect',{x:padL,y:y0,width:w,height:h,fill:'none',stroke:'var(--border-strong)','stroke-width':1.2}));
-  var x=padL;
+  // Build the strip from the right: k=0 (most recent) is the rightmost cut,
+  // and each successive k eats further leftward into the remainder, so the
+  // panel reads past (left) to present (right) like the data panel below.
+  var xEdge=VW-padR;
   for(var k=0;k<reveal;k++){
     var wk=weight(k), pw=wk*w;
-    g.appendChild(el('rect',{x:x,y:y0,width:Math.max(pw,0.6),height:h,fill:'var(--blue)',opacity:fadeColor(k),stroke:'var(--surface)','stroke-width':0.5}));
+    var rx=xEdge-pw;
+    g.appendChild(el('rect',{x:rx,y:y0,width:Math.max(pw,0.6),height:h,fill:'var(--blue)',opacity:fadeColor(k),stroke:'var(--surface)','stroke-width':0.5}));
     if(pw>26){
-      var t=el('text',{x:x+pw/2,y:y0+h/2+4,'text-anchor':'middle',style:'font-size:10px;fill:var(--text-primary)'});
+      var t=el('text',{x:rx+pw/2,y:y0+h/2+4,'text-anchor':'middle',style:'font-size:10px;fill:var(--text-primary)'});
       t.textContent='k='+k;
       g.appendChild(t);
     }
-    x+=pw;
+    xEdge=rx;
   }
-  var remW=Math.max(VW-padR-x,0);
-  if(remW>0.5) g.appendChild(el('rect',{x:x,y:y0,width:remW,height:h,fill:'var(--border)',opacity:0.5}));
+  var remW=Math.max(xEdge-padL,0);
+  if(remW>0.5) g.appendChild(el('rect',{x:padL,y:y0,width:remW,height:h,fill:'var(--border)',opacity:0.5}));
   var remBeta=Math.pow(beta,reveal);
-  var t2=el('text',{x:VW-padR,y:y0-8,'text-anchor':'end',style:'font-size:11px;fill:var(--text-muted)'});
+  var t2=el('text',{x:padL,y:y0-8,style:'font-size:11px;fill:var(--text-muted)'});
   t2.textContent='uncut remainder = β^'+reveal+' = '+fmt(remBeta);
   g.appendChild(t2);
-  var t3=el('text',{x:padL,y:y0-8,style:'font-size:11px;fill:var(--text-muted)'});
+  var t3=el('text',{x:VW-padR,y:y0-8,'text-anchor':'end',style:'font-size:11px;fill:var(--text-muted)'});
   t3.textContent='cut so far = 1−β^'+reveal+' = '+fmt(1-remBeta);
   g.appendChild(t3);
   var t4=el('text',{x:padL,y:y0+h+18,style:'font-size:10px;fill:var(--text-muted)'});
-  t4.textContent='most recent (k=0)';
+  t4.textContent='← further into the past';
   g.appendChild(t4);
   var t5=el('text',{x:VW-padR,y:y0+h+18,'text-anchor':'end',style:'font-size:10px;fill:var(--text-muted)'});
-  t5.textContent='further into the past →';
+  t5.textContent='most recent (k=0)';
   g.appendChild(t5);
 }
 
 function drawData(){
   var g=document.getElementById('dataG');
   g.innerHTML='';
-  var padL=14, padR=14, padT=14, padB=30, w=VW-padL-padR, h=190-padT-padB;
+  var padL=14, padR=14, padT=12, padB=26, w=VW-padL-padR, h=DH-padT-padB;
   var cy=padT+h/2;
   var maxAbs=Math.max.apply(null, xs.map(Math.abs).concat([0.3]));
   var scaleY=(h/2-8)/maxAbs;
   var colW=w/N;
   g.appendChild(el('line',{x1:padL,y1:cy,x2:VW-padR,y2:cy,stroke:'var(--border-strong)','stroke-width':1}));
   for(var k=0;k<N;k++){
-    var x0=padL+k*colW, xv=xs[k];
+    var x0=padL+(N-1-k)*colW, xv=xs[k]; // k=0 (most recent) sits rightmost
     var rawH=Math.abs(xv)*scaleY, rawY=xv>=0?cy-rawH:cy;
     g.appendChild(el('rect',{x:x0+colW*0.18,y:rawY,width:colW*0.64,height:Math.max(rawH,1),fill:'none',stroke:'var(--border-strong)','stroke-width':1}));
     if(k<reveal){
@@ -166,7 +170,7 @@ function drawData(){
       var cH=Math.abs(contrib)*scaleY, cY=contrib>=0?cy-cH:cy;
       g.appendChild(el('rect',{x:x0+colW*0.3,y:cY,width:colW*0.4,height:Math.max(cH,1),fill:'var(--blue)',opacity:fadeColor(k)}));
     }
-    var lab=el('text',{x:x0+colW/2,y:190-padB+14,'text-anchor':'middle',style:'font-size:10px;fill:var(--text-muted)'});
+    var lab=el('text',{x:x0+colW/2,y:DH-padB+14,'text-anchor':'middle',style:'font-size:9.5px;fill:var(--text-muted)'});
     lab.textContent='k='+k;
     g.appendChild(lab);
   }
