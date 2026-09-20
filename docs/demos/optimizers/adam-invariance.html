@@ -4,19 +4,22 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Adam vs. SGD rescaled</title>
-<meta name="description" content="Why Adam's update is invariant to rescaling the gradient, while SGD's is not.">
+<meta name="description" content="Why Adam's update is invariant to rescaling the gradient, while SGD's and plain momentum's are not.">
 <link rel="stylesheet" href="../demo.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 <style>
 body{gap:5px;padding:11px 16px 12px}
 h1{font-size:19px;margin-top:2px}
 .quiz{margin:0}
-#wrap{height:clamp(170px,29vh,270px);display:flex;gap:10px;align-items:stretch}
+#wrap{height:clamp(195px,32vh,290px);display:flex;gap:10px;align-items:stretch}
 #stage{flex:2;min-width:0}
-.formula{flex:1;display:flex;flex-direction:column;justify-content:center;gap:6px;
+.formula{flex:1;display:flex;flex-direction:column;justify-content:center;gap:7px;
   border-left:1px solid var(--border);padding-left:10px;min-width:0}
-.formula .f{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:clamp(17px,3.4vw,21px);font-weight:700;color:var(--text-primary);line-height:1.32;white-space:nowrap}
-.formula table.bt{font-size:11.5px}
-.formula table.bt th,.formula table.bt td{padding:1px 6px 1px 0}
+.formula .fitem{display:flex;flex-direction:column;gap:2px}
+.formula .f{font-size:clamp(12px,2.2vw,15px);line-height:1.25}
+label.cb{font-size:11.5px}
+input[type=checkbox]{width:13px;height:13px}
 @media (max-width:640px){.formula{display:none}}
 .row{gap:7px}
 button,select{height:30px;font-size:13px;padding:0 9px}
@@ -30,16 +33,36 @@ button,select{height:30px;font-size:13px;padding:0 9px}
 </head>
 <body>
 <div class="nav"><a href="./">&larr; Optimization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
-<h1>Adam vs. SGD, rescaled<span>: why Adam is scale-invariant</span></h1>
-<p class="quiz">The same tilted bowl as the anisotropy demo, run under SGD (orange) and Adam (blue) at once. Slide K to multiply every gradient by a constant &mdash; SGD's steps grow with K; Adam's barely change.</p>
+<h1>SGD vs. momentum vs. Adam, rescaled<span>: which mechanism buys scale-invariance</span></h1>
+<p class="quiz">The same tilted bowl, run under all three at once. Slide K to multiply every gradient by a constant &mdash; SGD's and momentum's steps both grow with K (momentum only averages the gradient); only Adam's RMS normalization cancels K.</p>
 
 <div id="wrap">
 <svg id="stage" viewBox="0 0 640 300" role="img" preserveAspectRatio="xMidYMid meet">
-  <desc>Two optimizer trajectories, SGD and Adam, descending the same tilted bowl while a slider rescales every gradient by a constant K, viewable in 1D, 2D, or 3D.</desc>
+  <desc>Three optimizer trajectories, SGD, momentum, and Adam, descending the same tilted bowl while a slider rescales every gradient by a constant K, viewable in 1D, 2D, or 3D.</desc>
   <g id="g"></g>
 </svg>
 <div class="formula">
-  <div class="f">SGD:<br>z&larr;z&minus;&eta;Kg<br>Adam:<br>z&larr;z&minus;&eta;m/&radic;v</div>
+  <div class="fitem">
+    <div class="f" style="color:var(--orange-ink)">
+      <div class="texline" data-tex="z \leftarrow z - \eta K g"></div>
+    </div>
+    <label class="cb"><input type="checkbox" id="showSGD" checked onchange="draw()"> <span style="color:var(--orange-ink)">&mdash;</span> SGD</label>
+  </div>
+  <div class="fitem">
+    <div class="f" style="color:var(--green-ink)">
+      <div class="texline" data-tex="v \leftarrow \beta_1 v + (1-\beta_1) Kg"></div>
+      <div class="texline" data-tex="z \leftarrow z - \eta v"></div>
+    </div>
+    <label class="cb"><input type="checkbox" id="showMom" checked onchange="draw()"> <span style="color:var(--green-ink)">&mdash;</span> momentum</label>
+  </div>
+  <div class="fitem">
+    <div class="f" style="color:var(--blue-ink)">
+      <div class="texline" data-tex="m \leftarrow \beta_1 m + (1-\beta_1) Kg"></div>
+      <div class="texline" data-tex="v \leftarrow \beta_2 v + (1-\beta_2) (Kg)^2"></div>
+      <div class="texline" data-tex="z \leftarrow z - \eta \dfrac{\hat m}{\sqrt{\hat v}}"></div>
+    </div>
+    <label class="cb"><input type="checkbox" id="showAdam" checked onchange="draw()"> <span style="color:var(--blue-ink)">&mdash;</span> Adam</label>
+  </div>
 </div>
 </div>
 
@@ -70,7 +93,7 @@ button,select{height:30px;font-size:13px;padding:0 9px}
 </div>
 
 <div class="rd" id="readout"></div>
-<div class="cap">Scaling g by K scales Adam's m and &radic;v equally, so K cancels in m/&radic;v &mdash; SGD has no such cancellation. Drag the 3D surface to rotate it.</div>
+<div class="cap">Hats denote bias-corrected EMAs (&mdash; divided by 1&minus;&beta;<sub>1</sub><sup>t</sup> or 1&minus;&beta;<sub>2</sub><sup>t</sup>). Scaling g by K scales Adam's m and &radic;v equally, so K cancels &mdash; SGD and momentum have no such cancellation. Drag the 3D surface to rotate it.</div>
 
 <script>
 var NS='http://www.w3.org/2000/svg';
@@ -96,7 +119,7 @@ function eigvec(which){
 var view='2d';
 var K=1, lr=0.12;
 var beta1=0.9, beta2=0.999, eps=1e-8;
-var sgd={}, adam={};
+var sgd={}, mom={}, adam={};
 
 function startPoint(){
   var steep=eigvec('a'), shallow=eigvec('b');
@@ -105,6 +128,7 @@ function startPoint(){
 function resetTraj(){
   var p=startPoint();
   sgd = {x:p[0],y:p[1],iter:0,path:[[p[0],p[1]]],diverged:false};
+  mom = {x:p[0],y:p[1],iter:0,path:[[p[0],p[1]]],vx:0,vy:0,diverged:false,lastStep:0};
   adam = {x:p[0],y:p[1],iter:0,path:[[p[0],p[1]]],mx:0,my:0,vx:0,vy:0,diverged:false,lastStep:0};
   draw();
 }
@@ -115,6 +139,16 @@ function stepOnce(){
     var nx=sgd.x-lr*K*g[0], ny=sgd.y-lr*K*g[1];
     sgd.x=nx; sgd.y=ny; sgd.iter++; sgd.path.push([nx,ny]);
     if(!isFinite(nx)||!isFinite(ny)||Math.abs(nx)>8||Math.abs(ny)>8) sgd.diverged=true;
+  }
+  if(!mom.diverged){
+    var gm=grad(mom.x,mom.y), gmx=K*gm[0], gmy=K*gm[1];
+    mom.vx = beta1*mom.vx + (1-beta1)*gmx;
+    mom.vy = beta1*mom.vy + (1-beta1)*gmy;
+    var dxm=lr*mom.vx, dym=lr*mom.vy;
+    mom.lastStep=Math.hypot(dxm,dym);
+    var nxm=mom.x-dxm, nym=mom.y-dym;
+    mom.x=nxm; mom.y=nym; mom.iter++; mom.path.push([nxm,nym]);
+    if(!isFinite(nxm)||!isFinite(nym)||Math.abs(nxm)>8||Math.abs(nym)>8) mom.diverged=true;
   }
   if(!adam.diverged){
     var g2=grad(adam.x,adam.y), gx=K*g2[0], gy=K*g2[1];
@@ -139,7 +173,7 @@ var running=false, timer=null;
 function setRunning(r){
   running=r;
   document.getElementById('run').textContent=r?'Pause':'Run';
-  if(r){ timer=setInterval(function(){stepOnce(); if(sgd.iter>=90||(sgd.diverged&&adam.diverged)) setRunning(false);},110); }
+  if(r){ timer=setInterval(function(){stepOnce(); if(sgd.iter>=90||(sgd.diverged&&mom.diverged&&adam.diverged)) setRunning(false);},110); }
   else clearInterval(timer);
 }
 function toggleRun(){ setRunning(!running); }
@@ -209,9 +243,13 @@ function draw2D(g){
     }
     g.appendChild(el('polyline',{points:pts.join(' '),fill:'none',stroke:'var(--border-strong)','stroke-opacity':0.6,'stroke-width':1}));
   }
-  plotPath2D(g, sgd.path, sgd.diverged, 'var(--orange-ink)', scale,cx,cy);
-  plotPath2D(g, adam.path, adam.diverged, 'var(--blue-ink)', scale,cx,cy);
-  var t1=el('text',{x:8,y:16,class:'ts gl'}); t1.textContent='orange = SGD, blue = Adam'; g.appendChild(t1);
+  var showSGD=document.getElementById('showSGD').checked;
+  var showMom=document.getElementById('showMom').checked;
+  var showAdam=document.getElementById('showAdam').checked;
+  if(showSGD) plotPath2D(g, sgd.path, sgd.diverged, 'var(--orange-ink)', scale,cx,cy);
+  if(showMom) plotPath2D(g, mom.path, mom.diverged, 'var(--green-ink)', scale,cx,cy);
+  if(showAdam) plotPath2D(g, adam.path, adam.diverged, 'var(--blue-ink)', scale,cx,cy);
+  var t1=el('text',{x:8,y:16,class:'ts gl'}); t1.textContent='orange = SGD, green = momentum, blue = Adam'; g.appendChild(t1);
 }
 
 function draw1D(g){
@@ -235,8 +273,12 @@ function draw1D(g){
           fill:color,opacity:i===path.length-1?1:0.4}));
       }
     }
-    trail(sgd.path, px0<VW/2?0:1, 'var(--orange-ink)');
-    trail(adam.path, px0<VW/2?0:1, 'var(--blue-ink)');
+    var showSGD=document.getElementById('showSGD').checked;
+    var showMom=document.getElementById('showMom').checked;
+    var showAdam=document.getElementById('showAdam').checked;
+    if(showSGD) trail(sgd.path, px0<VW/2?0:1, 'var(--orange-ink)');
+    if(showMom) trail(mom.path, px0<VW/2?0:1, 'var(--green-ink)');
+    if(showAdam) trail(adam.path, px0<VW/2?0:1, 'var(--blue-ink)');
     var t=el('text',{x:ox,y:VH-6,class:'ts gl','text-anchor':'middle'}); t.textContent=label; g.appendChild(t);
   }
   panel(20, Q00, 'x  (holding y=0, curvature '+fmt(Q00)+')');
@@ -279,18 +321,23 @@ function draw3D(g){
     g.appendChild(el('line',{x1:lastP[0],y1:lastP[1],x2:drop[0],y2:drop[1],stroke:'var(--border-strong)','stroke-width':1,'stroke-dasharray':'3 3'}));
     g.appendChild(el('circle',{cx:lastP[0],cy:lastP[1],r:5,fill:diverged?'var(--red)':colorInk}));
   }
-  plotPath3D(sgd.path, sgd.diverged, 'var(--orange-ink)');
-  plotPath3D(adam.path, adam.diverged, 'var(--blue-ink)');
-  var t1=el('text',{x:8,y:16,class:'ts gl'}); t1.textContent='orange = SGD, blue = Adam'; g.appendChild(t1);
+  var showSGD=document.getElementById('showSGD').checked;
+  var showMom=document.getElementById('showMom').checked;
+  var showAdam=document.getElementById('showAdam').checked;
+  if(showSGD) plotPath3D(sgd.path, sgd.diverged, 'var(--orange-ink)');
+  if(showMom) plotPath3D(mom.path, mom.diverged, 'var(--green-ink)');
+  if(showAdam) plotPath3D(adam.path, adam.diverged, 'var(--blue-ink)');
+  var t1=el('text',{x:8,y:16,class:'ts gl'}); t1.textContent='orange = SGD, green = momentum, blue = Adam'; g.appendChild(t1);
 }
 
 function readout(){
   var sgdStep = Math.hypot.apply(null, grad(sgd.x,sgd.y).map(function(v){return lr*K*v;}));
+  var momStep = mom.lastStep || lr;
   var adamStep = adam.lastStep || lr;
-  var warn = (sgd.diverged?'SGD diverged. ':'') + (adam.diverged?'Adam diverged.':'');
+  var warn = (sgd.diverged?'SGD diverged. ':'') + (mom.diverged?'Momentum diverged. ':'') + (adam.diverged?'Adam diverged.':'');
   document.getElementById('readout').innerHTML = warn ? '<span class="warn">'+warn+'</span>'
     : 'K = <b class="num">'+K.toFixed(2)+'&times;</b> &middot; iter <b class="num">'+sgd.iter+'</b> &middot; '
-    + '|SGD step| = <span class="num">'+fmt(sgdStep)+'</span> &middot; |Adam step| = <span class="num">'+fmt(adamStep)+'</span>';
+    + '|SGD step| = <span class="num">'+fmt(sgdStep)+'</span> &middot; |mom. step| = <span class="num">'+fmt(momStep)+'</span> &middot; |Adam step| = <span class="num">'+fmt(adamStep)+'</span>';
 }
 
 /* ---------- drag to orbit the 3D surface ---------- */
@@ -313,6 +360,9 @@ function endDrag(){ dragging=false; stage.style.cursor = view==='3d' ? 'grab' : 
 stage.addEventListener('pointerup', endDrag);
 stage.addEventListener('pointercancel', endDrag);
 
+document.querySelectorAll('.texline').forEach(function(el){
+  katex.render(el.getAttribute('data-tex'), el, {throwOnError:false});
+});
 onParams();
 </script>
 </body>
