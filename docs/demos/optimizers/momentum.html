@@ -31,7 +31,7 @@ button,select{height:30px;font-size:13px;padding:0 9px}
 <body>
 <div class="nav"><a href="./">&larr; Optimization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
 <h1>Momentum<span>: averaging out the noise, before Adam</span></h1>
-<p class="quiz">A smooth bowl with a high-frequency ripple riding on top. Plain gradient descent (orange) gets stuck bouncing inside one ripple; momentum (blue) averages the alternating ripple gradient toward zero and keeps riding the bowl's gradient down.</p>
+<p class="quiz">A smooth bowl with a high-frequency ripple riding on top, growing steeper the further out you go and vanishing at the optimum. Plain gradient descent (orange) gets stuck bouncing inside one ripple; momentum (blue) averages the alternating ripple gradient toward zero and keeps riding the bowl's gradient down.</p>
 
 <div id="wrap">
 <svg id="stage" viewBox="0 0 640 300" role="img" preserveAspectRatio="xMidYMid meet">
@@ -83,8 +83,14 @@ function fmt(v){return (Math.abs(v)<0.001&&v!==0?v.toExponential(1):v.toFixed(3)
 var rampAmp=0.05, rPeriod=0.22, bowlA=0.4, beta=0.99, lr=0.1;
 var W2=36, histGdG=[], histMomG=[], histMomV=[];
 
-function loss(x){ return 0.5*bowlA*x*x + rampAmp*Math.sin(2*Math.PI*x/rPeriod); }
-function grad(x){ return bowlA*x + rampAmp*(2*Math.PI/rPeriod)*Math.cos(2*Math.PI*x/rPeriod); }
+// Ripple amplitude scales with distance from the optimum (A(x)=rampAmp*|x|), so
+// the ripple vanishes right at x=0 and gets steeper further out -- product rule
+// gives the extra rampAmp*sign(x)*sin(...) term in the gradient below.
+function loss(x){ return 0.5*bowlA*x*x + rampAmp*Math.abs(x)*Math.sin(2*Math.PI*x/rPeriod); }
+function grad(x){
+  var th=2*Math.PI*x/rPeriod;
+  return bowlA*x + rampAmp*Math.sign(x)*Math.sin(th) + rampAmp*Math.abs(x)*(2*Math.PI/rPeriod)*Math.cos(th);
+}
 
 var gd={}, mom={};
 function startX(){
@@ -161,7 +167,8 @@ function draw(){
   var plotW=VW-padL-padR, plotH=VH-padT-padB;
   var xMin=-1.7, xMax=1.7;
   var yMaxBowl=0.5*bowlA*xMax*xMax;
-  var yMax=yMaxBowl+rampAmp+0.02, yMin=-rampAmp-0.02;
+  var rippleMax=rampAmp*xMax; // amplitude at the domain edge, where it's largest
+  var yMax=yMaxBowl+rippleMax+0.02, yMin=-rippleMax-0.02;
   function px(x){ return padL + (x-xMin)/(xMax-xMin)*plotW; }
   function py(v){ return padT + (yMax-v)/(yMax-yMin)*plotH; }
   g.appendChild(el('line',{x1:padL,y1:py(0),x2:VW-padR,y2:py(0),stroke:'var(--border)','stroke-width':0.7,opacity:0.5}));
