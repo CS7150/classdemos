@@ -89,6 +89,10 @@ button,select{height:30px;font-size:13px;padding:0 9px}
   <span class="klab">tilt</span>
   <input type="range" id="tilt" min="-60" max="60" step="1" value="-25" oninput="onParams()" style="width:72px">
   <span class="knum" id="tiltVal">&minus;25&deg;</span>
+  <label class="cb"><input type="checkbox" id="useK" onchange="onParams()"></label>
+  <span class="klab">gradient scale K</span>
+  <input type="range" id="kscale" min="-1" max="1" step="0.02" value="0" oninput="onParams()" style="width:90px" disabled>
+  <span class="knum" id="kVal">1.0&times;</span>
 </div>
 
 <div class="row">
@@ -98,14 +102,16 @@ button,select{height:30px;font-size:13px;padding:0 9px}
   <span class="klab">&eta;</span>
   <input type="range" id="lr" min="-2" max="-0.5" step="0.01" value="-1" oninput="onParams()" style="width:70px">
   <span class="knum" id="lrVal">0.120</span>
-  <label class="cb"><input type="checkbox" id="useK" onchange="onParams()"></label>
-  <span class="klab">gradient scale K</span>
-  <input type="range" id="kscale" min="-1" max="1" step="0.02" value="0" oninput="onParams()" style="width:90px" disabled>
-  <span class="knum" id="kVal">1.0&times;</span>
+  <span class="klab">&beta;<sub>1</sub></span>
+  <input type="range" id="beta1" min="0" max="0.99" step="0.01" value="0.9" oninput="onParams()" style="width:70px">
+  <span class="knum" id="beta1Val">0.90</span>
+  <span class="klab">&beta;<sub>2</sub></span>
+  <input type="range" id="beta2" min="1" max="5" step="0.1" value="3" oninput="onParams()" style="width:70px">
+  <span class="knum" id="beta2Val">0.999</span>
 </div>
 
 <div class="rd" id="readout"></div>
-<div class="cap">Check the box by the K slider to rescale every gradient by K and watch what happens. Hats denote bias-corrected EMAs (divided by 1&minus;&beta;<sub>1</sub><sup>t</sup> or 1&minus;&beta;<sub>2</sub><sup>t</sup>). Scaling g by K scales Adam's m and &radic;v equally, so K cancels &mdash; SGD and momentum have no such cancellation. Drag the 3D surface to rotate it.</div>
+<div class="cap">Check the box by the K slider to rescale every gradient by K and watch what happens. Hats denote bias-corrected EMAs (divided by 1&minus;&beta;<sub>1</sub><sup>t</sup> or 1&minus;&beta;<sub>2</sub><sup>t</sup>); &beta;<sub>1</sub> sets the gradient averaging for momentum and Adam alike (&beta;<sub>1</sub> = 0 turns it off), &beta;<sub>2</sub> sets the window of Adam's RMS. Scaling g by K scales Adam's m and &radic;v equally, so K cancels &mdash; SGD and momentum have no such cancellation. Drag the 3D surface to rotate it.</div>
 
 <script>
 var NS='http://www.w3.org/2000/svg';
@@ -223,6 +229,13 @@ function onParams(){
   computeQ();
   lr=Math.pow(10, parseFloat(document.getElementById('lr').value));
   document.getElementById('lrVal').textContent=lr.toFixed(3);
+  beta1=parseFloat(document.getElementById('beta1').value);
+  document.getElementById('beta1Val').textContent=beta1.toFixed(2);
+  // beta2 lives very close to 1, so the slider carries -log10(1-beta2) instead:
+  // right means more memory, and every notch is a meaningful change.
+  var b2s=parseFloat(document.getElementById('beta2').value);
+  beta2=1-Math.pow(10,-b2s);
+  document.getElementById('beta2Val').textContent=beta2.toFixed(Math.min(6,Math.max(2,Math.ceil(b2s))));
   var useK=document.getElementById('useK').checked;
   document.getElementById('kscale').disabled=!useK;
   var slider=parseFloat(document.getElementById('kscale').value);
