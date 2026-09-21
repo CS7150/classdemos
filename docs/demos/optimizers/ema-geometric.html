@@ -66,9 +66,8 @@ button,select{height:30px;font-size:13px;padding:0 9px}
 </div>
 
 <div class="row">
-  <button class="main" id="run" onclick="toggleRun()">Run</button>
+  <button class="main" onclick="revealAll()">Reveal all</button>
   <button onclick="revealOne()">Reveal next</button>
-  <button onclick="revealAll()">Reveal all</button>
   <button onclick="resetReveal()">Reset</button>
   <button onclick="newData()">New data</button>
   <span class="klab">&beta;</span>
@@ -119,19 +118,10 @@ function onParams(){
   draw();
 }
 
-function resetReveal(){ setRunning(false); reveal=0; draw(); }
+function resetReveal(){ reveal=0; draw(); }
 function revealStep(){ return Math.max(1, Math.round(N/30)); } // ~30 clicks/ticks end to end, any N
-function revealOne(){ if(reveal<N){ reveal=Math.min(N,reveal+revealStep()); draw(); } if(reveal>=N) setRunning(false); }
-function revealAll(){ setRunning(false); reveal=N; draw(); }
-
-var running=false, timer=null;
-function setRunning(r){
-  running=r;
-  document.getElementById('run').textContent=r?'Pause':'Run';
-  if(r){ timer=setInterval(function(){ revealOne(); }, 500); }
-  else clearInterval(timer);
-}
-function toggleRun(){ if(reveal>=N && !running){ reveal=0; } setRunning(!running); }
+function revealOne(){ if(reveal<N){ reveal=Math.min(N,reveal+revealStep()); draw(); } }
+function revealAll(){ reveal=N; draw(); }
 
 var VW=640, SH=92, DH=160;
 function drawStrip(){

@@ -63,7 +63,6 @@ input[type=checkbox]{width:18px;height:18px}
 
 <div class="row">
   <button class="main" id="run" onclick="toggleRun()">Run</button>
-  <button onclick="stepOnce()">Step</button>
   <button onclick="resetStream()">Reset</button>
   <button onclick="presetConsistent()">consistent</button>
   <button onclick="presetOscillating()">oscillating</button>
@@ -76,36 +75,36 @@ input[type=checkbox]{width:18px;height:18px}
   <span class="klab">noise</span>
   <input type="range" id="noise" min="0" max="1.2" step="0.05" value="0.4" oninput="onParams()" style="width:60px">
   <span class="knum" id="noiseVal">0.40</span>
-  <span class="klab" style="color:var(--text-muted)">range&plusmn;</span>
-  <input type="range" id="yrange" min="1" max="6" step="0.2" value="3.4" oninput="onChartRange()" style="width:50px">
-  <span class="knum" id="yrangeVal">3.4</span>
+  <span class="klab">&beta;</span>
+  <input type="range" id="beta" min="0.5" max="0.99" step="0.01" value="0.95" oninput="onParams()" style="width:70px">
+  <span class="knum" id="betaVal">0.95</span>
 </div>
 
 <div class="rd" id="readout"></div>
-<div class="cap">Here &beta; = 1&minus;1/t grows toward 1 as samples accumulate, so this is the special case of an EMA that weighs every sample equally forever (unlike momentum/Adam's fixed &beta;). Adam's step is proportional to mean/RMS.</div>
+<div class="cap">&beta; sets how much past the two EMAs keep: small &beta; forgets quickly and tracks the recent stream, &beta; near 1 averages over a long window. Both are bias-corrected (divided by 1&minus;&beta;<sup>t</sup>) so they read correctly from the very first sample. Adam's step is proportional to mean/RMS.</div>
 
 <script>
 var NS='http://www.w3.org/2000/svg';
 function el(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attrs)e.setAttribute(k,attrs[k]);return e;}
 function fmt(v){return v.toFixed(3);}
 
-var drift=0, omega=1.2, noiseAmt=0.4;
+var drift=0, omega=1.2, noiseAmt=0.4, beta=0.95;
 var W=40, hist=[];
-var runMean=0, runMeanSq=0, runN=0, tcount=0;
+var emaMean=0, emaMeanSq=0, runN=0, tcount=0;
 
 function sample(t){
   return drift + Math.sin(t*omega) + noiseAmt*(Math.random()*2-1);
 }
 function resetStream(){
   hist = new Array(W).fill(0); // no data yet: the window starts flat and fills as samples stream in
-  runMean=0; runMeanSq=0; runN=0; tcount=0;
+  emaMean=0; emaMeanSq=0; runN=0; tcount=0;
   draw();
 }
 function stepOnce(){
   var g = sample(tcount); tcount++;
   runN++;
-  runMean += (g-runMean)/runN;       // running (cumulative) mean: starts at 0, converges as runN grows
-  runMeanSq += (g*g-runMeanSq)/runN; // same, for the mean square under the RMS
+  emaMean   = beta*emaMean   + (1-beta)*g;   // EMA of g
+  emaMeanSq = beta*emaMeanSq + (1-beta)*g*g; // the same EMA, fed g^2
   hist.push(g); if(hist.length>W) hist.shift();
   draw();
 }
@@ -122,20 +121,19 @@ function onParams(){
   drift=parseFloat(document.getElementById('drift').value);
   omega=parseFloat(document.getElementById('omega').value);
   noiseAmt=parseFloat(document.getElementById('noise').value);
+  beta=parseFloat(document.getElementById('beta').value);
   document.getElementById('driftVal').textContent=drift.toFixed(2);
   document.getElementById('omegaVal').textContent=omega.toFixed(2);
   document.getElementById('noiseVal').textContent=noiseAmt.toFixed(2);
+  document.getElementById('betaVal').textContent=beta.toFixed(2);
+  draw();
 }
 function setSliders(d,o,n){
   document.getElementById('drift').value=d; document.getElementById('omega').value=o; document.getElementById('noise').value=n;
   onParams();
 }
+// drift + sin + noise can reach 1.2 + 1 + 1.2, so a fixed +-3.4 window always fits.
 var yMax=3.4;
-function onChartRange(){
-  yMax=parseFloat(document.getElementById('yrange').value);
-  document.getElementById('yrangeVal').textContent=yMax.toFixed(1);
-  draw();
-}
 function presetConsistent(){ setSliders(0.9,0,0.3); setRunning(true); }
 function presetOscillating(){ setSliders(0,2.4,0.5); setRunning(true); }
 
@@ -143,7 +141,10 @@ var VW=640, VH=300;
 function draw(){
   var g=document.getElementById('g');
   g.innerHTML='';
-  var n=hist.length, mean=runMean, rms=Math.sqrt(runMeanSq);
+  // Bias correction: both EMAs start at 0, so divide out the 1-beta^t they have
+  // accumulated -- exactly what Adam does -- and they read correctly from t = 1.
+  var corr = runN>0 ? 1-Math.pow(beta,runN) : 1;
+  var n=hist.length, mean=emaMean/corr, rms=Math.sqrt(emaMeanSq/corr);
   var padL=10, padR=10, padT=16, padB=16;
   var plotW=VW-padL-padR, plotH=VH-padT-padB;
   var cy=padT+plotH/2, scaleY=(plotH/2)/yMax;
@@ -175,7 +176,7 @@ function draw(){
   }
 
   if(runN===0){
-    document.getElementById('readout').innerHTML = 'No samples yet &mdash; press Run or Step to start streaming.';
+    document.getElementById('readout').innerHTML = 'No samples yet &mdash; press Run to start streaming.';
   } else {
     var ratio=Math.abs(mean)/(rms||1e-9);
     var verdict = ratio>0.6 ? 'consistent sign &rarr; safe to move fast'

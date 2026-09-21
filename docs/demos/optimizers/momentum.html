@@ -122,15 +122,18 @@ function startX(){
   var peak=rPeriod*(k+0.25);
   return peak - 0.08*rPeriod;
 }
+var RUN_CHUNK=700, stepCount=0, runLimit=RUN_CHUNK;
 function resetTraj(){
   var x0=startX();
   gd = {x:x0, iter:0, path:[x0], diverged:false};
   mom = {x:x0, k:0, iter:0, path:[x0], diverged:false, lastG:0};
   histGdG=[]; histMomG=[]; histMomK=[];
+  stepCount=0; runLimit=RUN_CHUNK;
   draw();
 }
 
 function stepOnce(){
+  stepCount++;
   if(!gd.diverged){
     var g=grad(gd.x);
     var nx=gd.x-lr*g;
@@ -155,7 +158,12 @@ var running=false, timer=null;
 function setRunning(r){
   running=r;
   document.getElementById('run').textContent=r?'Pause':'Run';
-  if(r){ timer=setInterval(function(){stepOnce(); if(gd.iter>=700||(gd.diverged&&mom.diverged)) setRunning(false);}, 90); }
+  if(r){
+    // Each press of Run gives another chunk of iterations, so a finished run can
+    // simply be continued instead of forcing a Reset.
+    if(stepCount>=runLimit) runLimit=stepCount+RUN_CHUNK;
+    timer=setInterval(function(){stepOnce(); if(stepCount>=runLimit||(gd.diverged&&mom.diverged)) setRunning(false);}, 90);
+  }
   else clearInterval(timer);
 }
 function toggleRun(){ setRunning(!running); }

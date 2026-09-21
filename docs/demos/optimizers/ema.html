@@ -104,14 +104,18 @@ function genNext(t){
 }
 
 var runAvg=0, runN=0;
+// tCount is the true sample index; xs is a scrolling window of the last W, so
+// its length stops growing once the window is full and cannot serve as t.
+var tCount=0, runLimit=W;
 function resetStream(){
   xs=[]; emaRaw=[]; emaHat=[]; avg=[];
-  runAvg=0; runN=0;
+  runAvg=0; runN=0; tCount=0; runLimit=W;
   draw();
 }
 function stepOnce(){
-  var t = xs.length+1;
-  var x = genNext(xs.length);
+  var t = tCount+1;
+  var x = genNext(tCount);
+  tCount++;
   var prevRaw = emaRaw.length ? emaRaw[emaRaw.length-1] : 0;
   var raw = beta*prevRaw + (1-beta)*x;
   var corr = raw/(1-Math.pow(beta,t));
@@ -125,7 +129,12 @@ var running=false, timer=null;
 function setRunning(r){
   running=r;
   document.getElementById('run').textContent=r?'Pause':'Run';
-  if(r){ timer=setInterval(function(){ stepOnce(); if(xs.length>=W && dataKind!=='walk') setRunning(false); }, 160); }
+  if(r){
+    // Each press of Run streams another windowful, so a finished run can simply
+    // be continued instead of forcing a Reset. (The random walk never stops.)
+    if(tCount>=runLimit) runLimit=tCount+W;
+    timer=setInterval(function(){ stepOnce(); if(tCount>=runLimit && dataKind!=='walk') setRunning(false); }, 160);
+  }
   else clearInterval(timer);
 }
 function toggleRun(){ setRunning(!running); }

@@ -128,6 +128,7 @@ function eigvec(which){ // 'a' (steep) or 'b' (shallow) principal direction, uni
   return which==='a' ? [-Math.sin(th),Math.cos(th)] : [Math.cos(th),Math.sin(th)];
 }
 
+var RUN_CHUNK=100, stepCount=0, runLimit=RUN_CHUNK;
 function resetTraj(){
   var steep=eigvec('a'), shallow=eigvec('b');
   // start far out along the long, shallow axis (to show the slow crawl) with a
@@ -135,6 +136,7 @@ function resetTraj(){
   var x0=0.4*steep[0]+1.4*shallow[0], y0=0.4*steep[1]+1.4*shallow[1];
   st={x:x0,y:y0,iter:0,path:[[x0,y0]],losses:[loss(x0,y0)],diverged:false};
   histGx=[]; histGy=[];
+  stepCount=0; runLimit=RUN_CHUNK;
   draw();
 }
 
@@ -147,6 +149,7 @@ function curLR(){
 }
 
 function stepOnce(){
+  stepCount++;
   if(st.diverged) return;
   var g=grad(st.x,st.y), lrs=curLR();
   histGx.push(g[0]); if(histGx.length>W2) histGx.shift();
@@ -164,7 +167,12 @@ var running=false, timer=null;
 function setRunning(r){
   running=r;
   document.getElementById('run').textContent=r?'Pause':'Run';
-  if(r){ timer=setInterval(function(){stepOnce(); if(st.iter>=100||st.diverged) setRunning(false);}, 110); }
+  if(r){
+    // Each press of Run gives another chunk of iterations, so a finished run can
+    // simply be continued instead of forcing a Reset.
+    if(stepCount>=runLimit) runLimit=stepCount+RUN_CHUNK;
+    timer=setInterval(function(){stepOnce(); if(stepCount>=runLimit||st.diverged) setRunning(false);}, 110);
+  }
   else clearInterval(timer);
 }
 function toggleRun(){ setRunning(!running); }
