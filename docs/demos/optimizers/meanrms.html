@@ -48,13 +48,13 @@ input[type=checkbox]{width:18px;height:18px}
 <div class="formula">
   <div class="fitem">
     <div class="f" style="color:var(--green-ink)">
-      <div class="texline" data-tex="\text{mean} = \mathrm{EMA}_\beta(g)"></div>
+      <div class="texline" data-tex="\text{mean} = \hat{\mathrm{EMA}}_\beta(g)"></div>
     </div>
     <label class="cb"><input type="checkbox" id="showMean" checked onchange="draw()"> mean</label>
   </div>
   <div class="fitem">
     <div class="f" style="color:var(--warm-ink)">
-      <div class="texline" data-tex="\mathrm{RMS} = \sqrt{\mathrm{EMA}_\beta(g^2)}"></div>
+      <div class="texline" data-tex="\mathrm{RMS} = \sqrt{\hat{\mathrm{EMA}}_\beta(g^2)}"></div>
     </div>
     <label class="cb"><input type="checkbox" id="showRMS" onchange="draw()"> RMS</label>
   </div>
@@ -81,7 +81,7 @@ input[type=checkbox]{width:18px;height:18px}
 </div>
 
 <div class="rd" id="readout"></div>
-<div class="cap">&beta; sets how much past the two EMAs keep: small &beta; forgets quickly and tracks the recent stream, &beta; near 1 averages over a long window. Both are bias-corrected (divided by 1&minus;&beta;<sup>t</sup>) so they read correctly from the very first sample. Adam's step is proportional to mean/RMS.</div>
+<div class="cap">&beta; sets how much past the two EMAs keep: small &beta; forgets quickly and tracks the recent stream, &beta; near 1 averages over a long window. The hats mark bias correction &mdash; each EMA is divided by 1&minus;&beta;<sup>t</sup>, so both read correctly from the very first sample. Adam's step is proportional to mean/RMS.</div>
 
 <script>
 var NS='http://www.w3.org/2000/svg';
