@@ -274,30 +274,36 @@ function drawLossTS(){
   var showMom=document.getElementById('showMom').checked;
   var showAdam=document.getElementById('showAdam').checked;
   // Autoscale the log range to whatever the visible series actually span,
-  // starting from a 1e-6 floor by default but opening up to as low as 1e-9
-  // if loss actually gets that small, instead of clipping or wasting range.
-  var FLOOR=-9, DEFAULT_FLOOR=-6;
+  // starting from a 1e-6 floor by default but opening downward as far as the
+  // loss actually goes. A long run converges geometrically, so it keeps gaining
+  // decades; the only hard stop is double precision itself (~1e-308), past
+  // which the loss underflows to exactly 0 and has no logarithm to plot.
+  var FLOOR=-300, DEFAULT_FLOOR=-6;
   var vals=[];
   if(showSGD) vals=vals.concat(lossSgd);
   if(showMom) vals=vals.concat(lossMom);
   if(showAdam) vals=vals.concat(lossAdam);
+  vals=vals.filter(function(v){ return isFinite(v) && v>0; });
   if(!vals.length) vals=[1];
-  var logs=vals.map(function(v){ return Math.log10(Math.max(v,Math.pow(10,FLOOR))); });
-  var logMin=Math.max(FLOOR, Math.min(DEFAULT_FLOOR, Math.floor(Math.min.apply(null,logs))));
+  var logs=vals.map(function(v){ return Math.max(FLOOR, Math.log10(v)); });
+  var logMin=Math.min(DEFAULT_FLOOR, Math.floor(Math.min.apply(null,logs)));
   var logMax=Math.ceil(Math.max.apply(null,logs));
   if(logMax-logMin<1){ logMax+=1; }
-  function ly(v){ var l=Math.log10(Math.max(v,Math.pow(10,FLOOR))); l=Math.max(logMin,Math.min(logMax,l));
+  function ly(v){ var l=(isFinite(v)&&v>0) ? Math.log10(v) : FLOOR; l=Math.max(logMin,Math.min(logMax,l));
     return padT + (logMax-l)/(logMax-logMin)*h; }
   var maxN=Math.max(lossSgd.length,lossMom.length,lossAdam.length,2);
   function lx(i){ return padL + (i/(maxN-1))*w; }
   lg.appendChild(el('line',{x1:padL,y1:padT,x2:padL,y2:TH-padB,stroke:'var(--border-strong)','stroke-width':1}));
   lg.appendChild(el('line',{x1:padL,y1:TH-padB,x2:TW-padR,y2:TH-padB,stroke:'var(--border-strong)','stroke-width':1}));
   var gridVals=[], gridStep=Math.max(1, Math.ceil((logMax-logMin)/4));
-  for(var e=logMin; e<=logMax; e+=gridStep) gridVals.push(Math.pow(10,e));
+  // Snap the bottom of the range onto the gridline spacing so that both ends of
+  // the axis carry a label, however many decades the run has opened up.
+  logMin=logMax-gridStep*Math.ceil((logMax-logMin)/gridStep);
+  for(var e=logMax; e>=logMin; e-=gridStep) gridVals.push(Math.pow(10,e));
   gridVals.forEach(function(v){
     var y=ly(v);
     lg.appendChild(el('line',{x1:padL,y1:y,x2:TW-padR,y2:y,stroke:'var(--border)','stroke-width':0.6,opacity:0.5}));
-    var t=el('text',{x:padL-4,y:y+3,style:'font-size:7.5px;fill:var(--text-muted)','text-anchor':'end'}); t.textContent=v>=1?v.toFixed(0):v.toExponential(0); lg.appendChild(t);
+    var t=el('text',{x:padL-4,y:y+3,style:'font-size:7.5px;fill:var(--text-muted)','text-anchor':'end'}); t.textContent=(v>=1&&v<1e4)?v.toFixed(0):v.toExponential(0); lg.appendChild(t);
   });
   function plotLine(arr,color){
     if(arr.length<2) return;
