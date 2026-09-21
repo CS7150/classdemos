@@ -138,16 +138,19 @@ function startPoint(){
   return [0.4*steep[0]+1.4*shallow[0], 0.4*steep[1]+1.4*shallow[1]];
 }
 var W3=150, lossSgd=[], lossMom=[], lossAdam=[];
+var RUN_CHUNK=100, stepCount=0, runLimit=RUN_CHUNK;
 function resetTraj(){
   var p=startPoint();
   sgd = {x:p[0],y:p[1],iter:0,path:[[p[0],p[1]]],diverged:false};
   mom = {x:p[0],y:p[1],iter:0,path:[[p[0],p[1]]],mx:0,my:0,diverged:false,lastStep:0};
   adam = {x:p[0],y:p[1],iter:0,path:[[p[0],p[1]]],mx:0,my:0,vx:0,vy:0,diverged:false,lastStep:0};
   lossSgd=[loss(p[0],p[1])]; lossMom=[loss(p[0],p[1])]; lossAdam=[loss(p[0],p[1])];
+  stepCount=0; runLimit=RUN_CHUNK;
   draw();
 }
 
 function stepOnce(){
+  stepCount++;
   if(!sgd.diverged){
     var g=grad(sgd.x,sgd.y);
     var nx=sgd.x-lr*K*g[0], ny=sgd.y-lr*K*g[1];
@@ -190,7 +193,10 @@ var running=false, timer=null;
 function setRunning(r){
   running=r;
   document.getElementById('run').textContent=r?'Pause':'Run';
-  if(r){ timer=setInterval(function(){stepOnce(); if(sgd.iter>=90||(sgd.diverged&&mom.diverged&&adam.diverged)) setRunning(false);},110); }
+  if(r){
+    if(stepCount>=runLimit) runLimit=stepCount+RUN_CHUNK;
+    timer=setInterval(function(){stepOnce(); if(stepCount>=runLimit||(sgd.diverged&&mom.diverged&&adam.diverged)) setRunning(false);},110);
+  }
   else clearInterval(timer);
 }
 function toggleRun(){ setRunning(!running); }
