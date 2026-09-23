@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Initialization, explained</title>
+<meta name="description" content="Interactive explainers for Glorot &amp; Bengio 2010: why bad initialization saturates or vanishes a deep network, and how Xavier init keeps both directions of the signal alive.">
+<style>
+:root{--bg:#faf9f5;--surface:#ffffff;--surface-1:#f1efe8;--text-primary:#26251f;--text-secondary:#5f5e5a;--text-muted:#888780;
+ --border:#d3d1c7;--border-strong:#b4b2a9;--accent:#185FA5;--accent-warm:#BA7517;--accent-green:#0F6E56;}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#1a1a18;--surface:#232320;--surface-1:#2c2c2a;
+ --text-primary:#eceae2;--text-secondary:#b4b2a9;--text-muted:#888780;--border:#3a3a36;--border-strong:#5f5e5a;
+ --accent:#79b1ec;--accent-warm:#d9a24d;--accent-green:#4fbb99;}}
+:root[data-theme="dark"]{--bg:#1a1a18;--surface:#232320;--surface-1:#2c2c2a;--text-primary:#eceae2;--text-secondary:#b4b2a9;
+ --text-muted:#888780;--border:#3a3a36;--border-strong:#5f5e5a;--accent:#79b1ec;--accent-warm:#d9a24d;--accent-green:#4fbb99;}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--text-primary);line-height:1.6;
+ font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
+.page{max-width:900px;margin:0 auto;padding:0 20px 72px}
+header{padding-block:44px 24px;border-bottom:1px solid var(--border)}
+.nav{font-size:14px;margin:0 0 18px}
+.nav a{color:var(--text-muted);text-decoration:none}
+.nav a:hover{color:var(--text-secondary);text-decoration:underline}
+.eyebrow{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);margin:0 0 10px}
+h1{font-size:32px;font-weight:600;letter-spacing:-.015em;margin:0 0 12px}
+header p{margin:0 0 10px;font-size:17px;color:var(--text-secondary);max-width:64ch}
+a{color:var(--accent)}
+ol.qs{list-style:none;counter-reset:q;margin:26px 0 0;padding:0}
+ol.qs li{counter-increment:q;border-bottom:1px solid var(--border);padding:20px 0 20px 52px;position:relative}
+ol.qs li:before{content:counter(q);position:absolute;left:0;top:19px;width:34px;height:34px;border-radius:50%;
+ display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500;
+ background:var(--surface-1);color:var(--text-secondary);border:1px solid var(--border)}
+ol.qs li.done:before{background:var(--surface);border-color:var(--accent);color:var(--accent)}
+.qtag{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-warm)}
+h2{font-size:20px;font-weight:600;margin:5px 0 6px;letter-spacing:-.01em}
+h2 a{text-decoration:none}
+h2 a:hover{text-decoration:underline}
+.what{margin:0;font-size:15.5px;color:var(--text-secondary)}
+.go{display:inline-block;margin-top:9px;font-size:15px}
+footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--border);font-size:14.5px;color:var(--text-muted)}
+footer a{color:var(--text-secondary)}
+@media (max-width:640px){h1{font-size:26px}ol.qs li{padding-left:44px}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <div class="nav"><a href="../../">&larr; CS7150 class demos</a></div>
+  <p class="eyebrow">Northeastern University &middot; CS 7150 &middot; Fall 2026</p>
+  <h1>Initialization, explained</h1>
+  <p>Four interactive pieces on <a href="https://proceedings.mlr.press/v9/glorot10a/glorot10a.pdf">Glorot &amp; Bengio 2010</a>:
+     why a deep network's signal can vanish or blow up depending on nothing but the scale of its
+     weights, why that same scale controls how much of the backward gradient survives saturation,
+     why forward and backward stability pull the initialization variance in different directions
+     when a layer isn't square, and &mdash; instead of just the theory &mdash; what the failure
+     actually looks like while a real network trains.</p>
+</header>
+
+<ol class="qs">
+
+<li class="done">
+  <div class="qtag">The mechanism</div>
+  <h2><a href="depth-init.html">Depth, activation, and initialization</a></h2>
+  <p class="what">Watch a signal spread through a network of adjustable depth &mdash; the core
+     empirical result the paper opens with, color-coded against the same saturated/responsive
+     split as the demo below, so you can watch the saturated fraction compound layer over layer.</p>
+  <a class="go" href="depth-init.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">Why bad scale hurts backprop</div>
+  <h2><a href="saturation.html">Weight scale and saturation</a></h2>
+  <p class="what">1000 units sampled at a chosen weight scale, scattered along tanh or sigmoid
+     with the local derivative shaded beneath. Dial the scale up and watch units pile into the
+     flat tails, where the forward signal survives but the backward gradient is nearly zero.</p>
+  <a class="go" href="saturation.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">Where 2/(n_in+n_out) comes from</div>
+  <h2><a href="variance-balance.html">Forward vs. backward: Glorot's compromise</a></h2>
+  <p class="what">Forward stability wants <code>Var(W)=1/n_in</code>; backward stability wants
+     <code>Var(W)=1/n_out</code>. Set an asymmetric layer and watch neither forward-only nor
+     backward-only Xavier satisfy both &mdash; and see why Glorot's averaged formula is the
+     compromise that bounds the damage either way.</p>
+  <a class="go" href="variance-balance.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">The failure, in practice</div>
+  <h2><a href="training-failure.html">Bad init, watched training</a></h2>
+  <p class="what">Not just the theory &mdash; a real 6-layer tanh network training live on two
+     moons with plain gradient descent. Too-small init and the loss barely moves; too-big init
+     and units saturate immediately and the boundary stays near its random start; Xavier trains
+     cleanly. Decision boundary, loss curve, and layer-wise activation std, all updating together.</p>
+  <a class="go" href="training-failure.html">Open the explainer &rarr;</a>
+</li>
+
+</ol>
+
+<footer>
+  Builds on the <a href="../optimizers/">optimizers</a> unit's conditioning demos. &middot;
+  <a href="https://github.com/CS7150/classdemos">Repository</a>
+</footer>
+
+</div>
+</body>
+</html>

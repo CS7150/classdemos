@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Depth, activation, init</title>
-<meta name="description" content="Watching a signal spread through a deep network under different activations and weight initializations.">
+<meta name="description" content="Watching a signal spread through a deep network, with saturated units colored red, under different activations and weight initializations.">
 <link rel="stylesheet" href="../demo.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
@@ -12,7 +12,7 @@
 body{gap:5px;padding:11px 16px 12px}
 h1{font-size:19px;margin-top:2px}
 .quiz{margin:0}
-#wrap{height:clamp(155px,25vh,235px);display:flex;gap:10px;align-items:stretch}
+#wrap{height:clamp(230px,40vh,360px);display:flex;gap:10px;align-items:stretch}
 #stage{flex:2;min-width:0}
 .formula{flex:1;display:flex;flex-direction:column;justify-content:center;gap:8px;
   border-left:1px solid var(--border);padding-left:10px;min-width:0}
@@ -25,6 +25,7 @@ button,select{height:30px;font-size:13px;padding:0 9px}
 .knum{font-size:12.5px;min-width:auto}
 .rd{font-size:13.5px;line-height:1.4;min-height:1.4em}
 .cap{font-size:12px;line-height:1.4;padding-top:4px}
+.cap a{color:var(--accent-warm,var(--text-secondary))}
 .nav{display:flex;align-items:baseline;gap:10px}
 .colab-link{margin-left:auto;font-size:12.5px;color:var(--text-muted);text-decoration:none;white-space:nowrap;
   border:1px solid var(--border);border-radius:5px;padding:2px 8px}
@@ -32,13 +33,13 @@ button,select{height:30px;font-size:13px;padding:0 9px}
 </style>
 </head>
 <body>
-<div class="nav"><a href="./">&larr; Optimization demos</a> &middot; <a href="../../">CS7150 class demos</a><a class="colab-link" href="https://colab.research.google.com/github/CS7150/classdemos/blob/main/optimization/depth-init.ipynb" target="_blank" rel="noopener">Open in Colab</a></div>
-<h1>Depth, activation, init<span>: conditioning from the other side</span></h1>
-<p class="quiz">A signal (each column, a histogram of one layer's activations) spreading through a deep network. Some combinations keep it alive; others vanish it to zero or blow it up.</p>
+<div class="nav"><a href="./">&larr; Initialization demos</a> &middot; <a href="../../">CS7150 class demos</a><a class="colab-link" href="https://colab.research.google.com/github/CS7150/classdemos/blob/main/initialization/depth-init.ipynb" target="_blank" rel="noopener">Open in Colab</a></div>
+<h1>Depth, activation, init<span>: watching saturation compound</span></h1>
+<p class="quiz">A signal spreading through a deep network, one histogram column per layer. Bars are colored the same way as the <a href="saturation.html">weight-scale demo</a>: green where a unit still has a useful gradient, red where it's saturated. Watch the red fraction grow &mdash; or not &mdash; with depth.</p>
 
 <div id="wrap">
-<svg id="stage" viewBox="0 0 640 300" role="img" preserveAspectRatio="xMidYMid meet">
-  <desc>A grid of per-layer activation histograms across network depth, and a line chart of the standard deviation of activations by layer.</desc>
+<svg id="stage" viewBox="0 0 640 360" role="img" preserveAspectRatio="xMidYMid meet">
+  <desc>A grid of per-layer activation histograms across network depth, colored by whether each bin is in the saturated region of the activation function, and a line chart of the standard deviation of activations by layer with a shaded healthy range.</desc>
   <g id="g"></g>
 </svg>
 <div class="formula">
@@ -69,7 +70,7 @@ button,select{height:30px;font-size:13px;padding:0 9px}
 </div>
 
 <div class="rd" id="readout"></div>
-<div class="cap">W is drawn fresh each layer from the chosen init, width 48. Top: activation histograms by layer. Bottom: their std by layer (log scale).</div>
+<div class="cap">W is drawn fresh each layer from the chosen init, width 48 throughout (a square network, so <a href="variance-balance.html">forward and backward</a> agree here). Top: activation histograms by layer, red = saturated (|&phi;&prime;(h)|&lt;0.05, or a dead unit for relu). Bottom: their std by layer (log scale) &mdash; shaded band is the range that survives 24 layers without vanishing or blowing up.</div>
 
 <script>
 var NS='http://www.w3.org/2000/svg';
@@ -83,6 +84,12 @@ function activate(x,kind){
   if(kind==='sigmoid') return 1/(1+Math.exp(-x));
   if(kind==='tanh') return Math.tanh(x);
   return Math.max(0,x); // relu
+}
+// derivative as a function of the post-activation value a (cheaper than storing h separately)
+function dphiFromA(a,kind){
+  if(kind==='sigmoid') return a*(1-a);
+  if(kind==='tanh') return 1-a*a;
+  return a>0?1:0; // relu: dead if a==0, unit slope otherwise
 }
 
 var N=48, depth=12, actKind='sigmoid', initKind='naive';
@@ -130,7 +137,7 @@ document.getElementById('initSeg').addEventListener('click', function(e){
   draw();
 });
 
-var VW=640, VH=300;
+var VW=640, VH=360;
 function std(arr){
   var m=arr.reduce(function(a,b){return a+b;},0)/arr.length;
   var v=arr.reduce(function(a,b){return a+(b-m)*(b-m);},0)/arr.length;
@@ -141,39 +148,60 @@ function draw(){
   g.innerHTML='';
   var layers = simulate();
   var nCols = layers.length;
-  var padL=44, padR=14, padT=16, padHistB=138, chartT=170, chartB=284;
+  var padL=44, padR=14, padT=30, padHistB=178, chartT=214, chartB=336;
   var colW=(VW-padL-padR)/nCols;
   var histH = padHistB - padT;
   // value range for histogram binning depends on activation
   var vMin = actKind==='sigmoid' ? 0 : (actKind==='relu' ? 0 : -1);
   var vMax = actKind==='sigmoid' ? 1 : (actKind==='relu' ? 3 : 1);
   var bins=16;
+  var satPctByCol=[];
   for(var c=0;c<nCols;c++){
     var counts=new Array(bins).fill(0);
+    var satCounts=new Array(bins).fill(0);
+    var satCount=0;
     layers[c].forEach(function(v){
       var vv=Math.max(vMin,Math.min(vMax-1e-9,v));
       var bi=Math.floor((vv-vMin)/(vMax-vMin)*bins);
       counts[bi]++;
+      var isSat = Math.abs(dphiFromA(v,actKind))<0.05;
+      if(isSat){ satCounts[bi]++; satCount++; }
     });
+    satPctByCol.push(100*satCount/layers[c].length);
     var maxCount=Math.max.apply(null,counts.concat([1]));
     var x0=padL+c*colW;
     for(var b=0;b<bins;b++){
+      if(counts[b]===0) continue;
       var frac=counts[b]/maxCount;
-      var bh=frac*(histH-4);
+      var bh=Math.max(frac*(histH-4),0.5);
       var by=padHistB-bh;
-      g.appendChild(el('rect',{x:x0+1,y:by,width:colW-2,height:Math.max(bh,0.5),
-        fill:'var(--blue)',opacity:0.25+0.55*(b/bins)*0+0.5}));
+      // split each bin's bar by the true per-unit saturated fraction, not the
+      // bin center -- for relu a whole point mass of dead units (a=0) shares
+      // a bin with small positive, still-responsive values.
+      var satFrac=satCounts[b]/counts[b];
+      var satH=bh*satFrac;
+      if(satH>0.15) g.appendChild(el('rect',{x:x0+1,y:padHistB-satH,width:colW-2,height:satH,fill:'var(--red)',opacity:0.62}));
+      if(bh-satH>0.15) g.appendChild(el('rect',{x:x0+1,y:by,width:colW-2,height:bh-satH,fill:'var(--green)',opacity:0.62}));
     }
     g.appendChild(el('line',{x1:x0,y1:padHistB,x2:x0+colW,y2:padHistB,stroke:'var(--border-strong)','stroke-width':1}));
+    // per-column saturated-fraction tick above the histogram
+    var pct=satPctByCol[c];
+    if(pct>0.5){
+      var t=el('text',{x:x0+colW/2,y:padT-16,class:'tn gl','text-anchor':'middle'});
+      t.textContent=Math.round(pct)+'%'; t.setAttribute('fill','var(--red)'); g.appendChild(t);
+    }
   }
   var lab0=el('text',{x:padL,y:padT-4,class:'ts gl'}); lab0.textContent='input'; g.appendChild(lab0);
   var labL=el('text',{x:VW-padR,y:padT-4,class:'ts gl','text-anchor':'end'}); labL.textContent='layer '+depth; g.appendChild(labL);
+  var labSat=el('text',{x:VW-padR,y:padT-16,class:'tn gl','text-anchor':'end'}); labSat.textContent='% saturated →'; labSat.setAttribute('fill','var(--red)'); g.appendChild(labSat);
 
-  // std-vs-depth line chart, log scale
+  // std-vs-depth line chart, log scale, with a shaded healthy band
   var stds = layers.map(std);
   var logMin=-4, logMax=2; // 1e-4 .. 1e2
   function ly(s){ var l=Math.log10(Math.max(s,1e-6)); l=Math.max(logMin,Math.min(logMax,l));
     return chartB - (l-logMin)/(logMax-logMin)*(chartB-chartT); }
+  var healthyTop=ly(10), healthyBot=ly(0.01);
+  g.appendChild(el('rect',{x:padL,y:healthyTop,width:VW-padL-padR,height:healthyBot-healthyTop,fill:'var(--green)',opacity:0.08}));
   g.appendChild(el('line',{x1:padL,y1:chartT,x2:padL,y2:chartB,stroke:'var(--border-strong)','stroke-width':1}));
   g.appendChild(el('line',{x1:padL,y1:chartB,x2:VW-padR,y2:chartB,stroke:'var(--border-strong)','stroke-width':1}));
   [1e-4,1e-2,1,1e2].forEach(function(v){
@@ -187,10 +215,19 @@ function draw(){
   var tchart=el('text',{x:padL,y:chartT-4,class:'ts gl'}); tchart.textContent='std of activations by layer (log scale)'; g.appendChild(tchart);
 
   var finalStd=stds[stds.length-1];
+  var finalSatPct=satPctByCol[satPctByCol.length-1];
+  // relu kills ~50% of units at every layer no matter how good the init is --
+  // that's not what "saturated" means for sigmoid/tanh, so give it its own
+  // warning threshold instead of flagging normal relu behavior as a failure.
+  var satWarnThresh = actKind==='relu' ? 85 : 60;
   var verdict = finalStd<0.01 ? 'Vanished &mdash; gradients here will be essentially zero.'
+    : finalSatPct>satWarnThresh ? (actKind==='relu'
+        ? 'Far more units are dead than ReLU’s usual ~50% &mdash; the init scale is starving this layer too.'
+        : 'Signal survives, but most units are saturated &mdash; backprop still starves.')
     : finalStd>20 ? 'Blown up &mdash; the network is saturating or overflowing.'
+    : actKind==='relu' ? 'Stayed healthy &mdash; the ~50% dead units here are normal for relu, not an init failure.'
     : 'Stayed in a healthy range across all '+depth+' layers.';
-  document.getElementById('readout').innerHTML = 'std: layer 0 = <b class="num">'+stds[0].toFixed(3)+'</b> &rarr; layer '+depth+' = <b class="num">'+finalStd.toExponential(2)+'</b> &mdash; '+verdict;
+  document.getElementById('readout').innerHTML = 'std: layer 0 = <b class="num">'+stds[0].toFixed(3)+'</b> &rarr; layer '+depth+' = <b class="num">'+finalStd.toExponential(2)+'</b> &middot; saturated at layer '+depth+' = <b class="num">'+finalSatPct.toFixed(0)+'%</b> &mdash; '+verdict;
 }
 
 document.querySelectorAll('.texline').forEach(function(el){

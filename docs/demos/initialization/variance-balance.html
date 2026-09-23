@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forward vs. backward: Glorot's compromise</title>
+<meta name="description" content="Why no single weight variance keeps both the forward signal and the backward gradient stable when a layer isn't square, and how Glorot's 2/(n_in+n_out) splits the difference.">
+<link rel="stylesheet" href="../demo.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<style>
+body{gap:5px;padding:11px 16px 12px}
+h1{font-size:19px;margin-top:2px}
+.quiz{margin:0}
+#wrap{height:clamp(180px,30vh,260px);display:flex;gap:10px;align-items:stretch}
+#stage{flex:2;min-width:0}
+.formula{flex:1;display:flex;flex-direction:column;justify-content:center;gap:8px;
+  border-left:1px solid var(--border);padding-left:10px;min-width:0}
+.formula .f{font-size:clamp(13px,2.6vw,18px);color:var(--text-primary);line-height:1.35}
+@media (max-width:640px){.formula{display:none}}
+.row{gap:7px}
+button,select{height:30px;font-size:13px;padding:0 9px}
+.seg button{height:28px;font-size:12px;padding:0 8px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:auto}
+.rd{font-size:13.5px;line-height:1.4;min-height:1.4em}
+.cap{font-size:12px;line-height:1.4;padding-top:4px}
+.nav{display:flex;align-items:baseline;gap:10px}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Initialization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Forward vs. backward<span>: Glorot's compromise</span></h1>
+<p class="quiz">One layer, <code>n_in</code> inputs and <code>n_out</code> outputs. Keeping the forward signal's variance stable wants <code>Var(W)=1/n_in</code>; keeping the backward gradient's variance stable wants <code>Var(W)=1/n_out</code>. When the layer isn't square, nothing satisfies both &mdash; Glorot's formula picks the variance that minimizes how badly either one drifts.</p>
+
+<div id="wrap">
+<svg id="stage" viewBox="0 0 640 300" role="img" preserveAspectRatio="xMidYMid meet">
+  <desc>Bars showing the forward and backward variance amplification factor for three initialization schemes, as n_in and n_out are varied.</desc>
+  <g id="g"></g>
+</svg>
+<div class="formula">
+  <div class="f">
+    <div class="texline" data-tex="\mathrm{Var}(h)=n_{in}\mathrm{Var}(W)\mathrm{Var}(a)"></div>
+    <div class="texline" data-tex="\mathrm{Var}(\delta_{in})=n_{out}\mathrm{Var}(W)\mathrm{Var}(\delta_{out})"></div>
+    <div class="texline" data-tex="\text{Glorot: }\mathrm{Var}(W)=\tfrac{2}{n_{in}+n_{out}}"></div>
+  </div>
+</div>
+</div>
+
+<div class="row">
+  <span class="klab">n_in</span>
+  <input type="range" id="nin" min="4" max="400" step="1" value="48" oninput="onParams()" style="width:110px">
+  <span class="knum" id="ninVal">48</span>
+  <span class="klab">n_out</span>
+  <input type="range" id="nout" min="4" max="400" step="1" value="48" oninput="onParams()" style="width:110px">
+  <span class="knum" id="noutVal">48</span>
+  <button onclick="setRatio(1)">square (n_in=n_out)</button>
+  <button onclick="setRatio(8)">bottleneck (n_out=8&times;n_in)</button>
+</div>
+
+<div class="rd" id="readout"></div>
+<div class="cap">Each group of bars is one scheme's <code>Var(W)</code>; the two bars show the resulting forward factor <code>n_in&middot;Var(W)</code> and backward factor <code>n_out&middot;Var(W)</code> (1.0 = perfectly preserved, the dashed line). Forward-only Xavier nails the forward bar but the backward bar drifts by the layer's aspect ratio, and vice versa for backward-only; Glorot's harmonic-ish average keeps both within a factor of 2 of 1 for any ratio.</div>
+
+<script>
+var NS='http://www.w3.org/2000/svg';
+function el(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attrs)e.setAttribute(k,attrs[k]);return e;}
+
+var nin=48, nout=48;
+function setRatio(r){
+  document.getElementById('nin').value=48;
+  document.getElementById('nout').value=Math.min(400,Math.round(48*r));
+  onParams();
+}
+function onParams(){
+  nin=parseInt(document.getElementById('nin').value,10);
+  nout=parseInt(document.getElementById('nout').value,10);
+  document.getElementById('ninVal').textContent=nin;
+  document.getElementById('noutVal').textContent=nout;
+  draw();
+}
+
+var VW=640, VH=300;
+function draw(){
+  var g=document.getElementById('g');
+  g.innerHTML='';
+  var schemes=[
+    {name:'forward Xavier', varW: 1/nin, color:'var(--blue-ink)'},
+    {name:'backward Xavier', varW: 1/nout, color:'var(--orange-ink)'},
+    {name:'Glorot', varW: 2/(nin+nout), color:'var(--green-ink)'}
+  ];
+  var padL=48, padR=14, padT=20, padB=54;
+  var plotT=padT, plotB=VH-padB;
+  var logMin=-2, logMax=2; // 0.01x .. 100x on log scale
+  function ly(v){ var l=Math.log10(Math.max(v,1e-6)); l=Math.max(logMin,Math.min(logMax,l));
+    return plotB - (l-logMin)/(logMax-logMin)*(plotB-plotT); }
+  g.appendChild(el('line',{x1:padL,y1:plotT,x2:padL,y2:plotB,stroke:'var(--border-strong)','stroke-width':1}));
+  g.appendChild(el('line',{x1:padL,y1:plotB,x2:VW-padR,y2:plotB,stroke:'var(--border-strong)','stroke-width':1}));
+  [0.1,1,10].forEach(function(v){
+    var y=ly(v);
+    g.appendChild(el('line',{x1:padL,y1:y,x2:VW-padR,y2:y,stroke:v===1?'var(--border-strong)':'var(--border)','stroke-width':v===1?1.2:0.6,'stroke-dasharray':v===1?'':'3 3',opacity:0.7}));
+    var t=el('text',{x:padL-6,y:y+3,class:'tn gl','text-anchor':'end'}); t.textContent=v+'×'; g.appendChild(t);
+  });
+
+  var groupW=(VW-padL-padR)/schemes.length;
+  var maxFwd=0,maxBwd=0;
+  schemes.forEach(function(s){
+    var x0=padL+schemes.indexOf(s)*groupW;
+    var fwd=nin*s.varW, bwd=nout*s.varW;
+    if(s.name==='forward Xavier') maxFwd=fwd; if(s.name==='backward Xavier') maxBwd=bwd;
+    var bw=groupW*0.28, gap=groupW*0.06;
+    var xf=x0+groupW*0.5-bw-gap/2, xb=x0+groupW*0.5+gap/2;
+    g.appendChild(el('rect',{x:xf,y:Math.min(ly(fwd),plotB),width:bw,height:Math.abs(plotB-ly(fwd)),fill:s.color,opacity:0.85}));
+    g.appendChild(el('rect',{x:xb,y:Math.min(ly(bwd),plotB),width:bw,height:Math.abs(plotB-ly(bwd)),fill:s.color,opacity:0.4}));
+    var tf=el('text',{x:xf+bw/2,y:ly(fwd)-4,class:'tn gl','text-anchor':'middle'}); tf.textContent=fwd.toFixed(2); g.appendChild(tf);
+    var tb=el('text',{x:xb+bw/2,y:ly(bwd)-4,class:'tn gl','text-anchor':'middle'}); tb.textContent=bwd.toFixed(2); g.appendChild(tb);
+    var lab=el('text',{x:x0+groupW/2,y:plotB+16,class:'ts gl','text-anchor':'middle'}); lab.textContent=s.name; g.appendChild(lab);
+  });
+  var leg=el('text',{x:padL,y:plotT-6,class:'ts gl'}); leg.textContent='solid = forward factor, faint = backward factor (dashed line = 1.0, perfectly preserved)'; g.appendChild(leg);
+
+  var g0=schemes[2];
+  var gFwd=nin*g0.varW, gBwd=nout*g0.varW;
+  var worst=Math.max(Math.abs(Math.log2(gFwd)),Math.abs(Math.log2(gBwd)));
+  document.getElementById('readout').innerHTML = 'n_in='+nin+', n_out='+nout+' &mdash; Glorot: forward '+gFwd.toFixed(2)+'×, backward '+gBwd.toFixed(2)+'× (off by at most 2^'+worst.toFixed(2)+'&asymp;'+Math.pow(2,worst).toFixed(2)+'× either way)';
+}
+
+document.querySelectorAll('.texline').forEach(function(el){
+  katex.render(el.getAttribute('data-tex'), el, {throwOnError:false});
+});
+onParams();
+</script>
+</body>
+</html>

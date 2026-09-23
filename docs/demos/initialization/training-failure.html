@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bad init, watched training</title>
+<meta name="description" content="A real 6-layer tanh network trained live on two moons: too-small init barely moves, too-big init saturates and stalls, Xavier trains cleanly.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:5px;padding:11px 16px 12px}
+h1{font-size:19px;margin-top:2px}
+.quiz{margin:0}
+#wrap{height:clamp(230px,44vh,380px);display:flex;gap:10px;align-items:stretch}
+#stage{flex:1;min-width:0}
+.row{gap:7px}
+button,select{height:30px;font-size:13px;padding:0 9px}
+.seg button{height:28px;font-size:12px;padding:0 8px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:auto}
+.rd{font-size:13.5px;line-height:1.4;min-height:1.4em}
+.cap{font-size:12px;line-height:1.4;padding-top:4px}
+.nav{display:flex;align-items:baseline;gap:10px}
+.warn{color:var(--red)}
+.ok{color:var(--green-ink)}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Initialization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Bad init, watched training<span>: the failure, not just the theory</span></h1>
+<p class="quiz">A real 6-hidden-layer tanh network training with plain gradient descent on two interleaved moons. Pick an init scale and press Train: watch the decision boundary, the loss curve, and each hidden layer's activation std, live.</p>
+
+<div id="wrap">
+<svg id="stage" viewBox="0 0 760 330" role="img" preserveAspectRatio="xMidYMid meet">
+  <desc>Three linked panels: a decision boundary heatmap over the two-moons data, a training loss curve, and a bar chart of hidden layer activation standard deviation, updating live as the network trains.</desc>
+  <g id="g"></g>
+</svg>
+</div>
+
+<div class="row">
+  <button class="main" id="run" onclick="toggleRun()">Train</button>
+  <button onclick="stepOnce(1); redraw();">Step</button>
+  <button onclick="resetAll()">Reset</button>
+  <div class="seg" id="presetSeg">
+    <button data-p="small">too small</button>
+    <button data-p="xavier" class="on">Xavier</button>
+    <button data-p="big">too big</button>
+  </div>
+  <span class="klab">scale &times;Xavier</span>
+  <input type="range" id="scale" min="-1.7" max="1.3" step="0.02" value="0" oninput="onScale()" style="width:110px">
+  <span class="knum" id="scaleVal">1.0&times;</span>
+  <span class="klab">depth</span>
+  <input type="range" id="depth" min="2" max="8" step="1" value="6" oninput="onDepth()" style="width:70px">
+  <span class="knum" id="depthVal">6</span>
+</div>
+
+<div class="rd" id="readout"></div>
+<div class="cap">Full-batch gradient descent, fixed learning rate, width 10, tanh hidden units, sigmoid output. Too-small init: gradients are tiny from step 1 (see the std bars near the bottom), so loss barely moves in the time it takes Xavier to converge. Too-big init: units saturate immediately, the loss curve is flat or jagged, and the boundary stays close to its random start.</div>
+
+<script>
+// ---------- data: two moons ----------
+function mulberry32(a){ return function(){ a|=0;a=a+0x6D2B79F5|0; var t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+var rndData = mulberry32(7);
+function randnSeeded(rng){ var u=0,v=0; while(u===0)u=rng(); while(v===0)v=rng(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+var DATA=[];
+(function(){
+  var n=60;
+  for(var i=0;i<n;i++){
+    var t=Math.PI*rndData();
+    DATA.push({x:[Math.cos(t)+0.06*randnSeeded(rndData), Math.sin(t)+0.06*randnSeeded(rndData)], y:0});
+    DATA.push({x:[1-Math.cos(t)+0.06*randnSeeded(rndData), 1-Math.sin(t)-0.5+0.06*randnSeeded(rndData)], y:1});
+  }
+})();
+
+// ---------- network ----------
+var randnG = function(){ return randnSeeded(Math.random); };
+var WIDTH=10, depth=6, scaleMult=1;
+var net=null, lossHist=[], stepCount=0;
+
+function xavierStd(nin,nout){ return Math.sqrt(2/(nin+nout)); }
+function buildSizes(d){ var s=[2]; for(var i=0;i<d;i++) s.push(WIDTH); s.push(1); return s; }
+
+function initNet(){
+  var sizes=buildSizes(depth);
+  var W=[], b=[];
+  for(var l=0;l<sizes.length-1;l++){
+    var nin=sizes[l], nout=sizes[l+1];
+    var std=xavierStd(nin,nout)*scaleMult;
+    var Wl=[]; for(var o=0;o<nout;o++){ var row=[]; for(var i=0;i<nin;i++) row.push(randnG()*std); Wl.push(row); }
+    W.push(Wl); b.push(new Array(nout).fill(0));
+  }
+  net={sizes:sizes,W:W,b:b};
+  lossHist=[]; stepCount=0;
+}
+
+function forward(x, net, keep){
+  var a=x.slice();
+  var acts = keep ? [a.slice()] : null;
+  for(var l=0;l<net.W.length;l++){
+    var Wl=net.W[l], bl=net.b[l], nout=Wl.length, nin=Wl[0].length;
+    var h=new Array(nout);
+    for(var o=0;o<nout;o++){ var s=bl[o]; var row=Wl[o]; for(var i=0;i<nin;i++) s+=row[i]*a[i]; h[o]=s; }
+    var isLast = l===net.W.length-1;
+    var an = isLast ? h.map(function(v){return 1/(1+Math.exp(-v));}) : h.map(Math.tanh);
+    a=an;
+    if(keep) acts.push(a.slice());
+  }
+  return keep ? acts : a;
+}
+
+var LR=0.6;
+function trainStep(){
+  var sizes=net.sizes, L=net.W.length;
+  var gW=net.W.map(function(Wl){return Wl.map(function(row){return row.map(function(){return 0;});});});
+  var gb=net.b.map(function(bl){return bl.map(function(){return 0;});});
+  var totalLoss=0;
+  var allActs=[];
+  DATA.forEach(function(pt){
+    var acts=forward(pt.x, net, true);
+    allActs.push(acts);
+    var p=acts[L][0];
+    var pc=Math.min(1-1e-7,Math.max(1e-7,p));
+    totalLoss += -(pt.y*Math.log(pc)+(1-pt.y)*Math.log(1-pc));
+    var delta=[p-pt.y]; // dL/dh for sigmoid+BCE
+    for(var l=L-1;l>=0;l--){
+      var Wl=net.W[l], nout=Wl.length, nin=Wl[0].length, aPrev=acts[l];
+      for(var o=0;o<nout;o++){
+        gb[l][o]+=delta[o];
+        var row=gW[l][o];
+        for(var i=0;i<nin;i++) row[i]+=delta[o]*aPrev[i];
+      }
+      if(l>0){
+        var dPrev=new Array(nin).fill(0);
+        for(var o2=0;o2<nout;o2++){ var row2=Wl[o2]; for(var i2=0;i2<nin;i2++) dPrev[i2]+=row2[i2]*delta[o2]; }
+        var aHere=acts[l];
+        for(var i3=0;i3<nin;i3++) dPrev[i3]*= (1-aHere[i3]*aHere[i3]); // tanh'
+        delta=dPrev;
+      }
+    }
+  });
+  var N=DATA.length;
+  for(var l2=0;l2<L;l2++){
+    for(var o3=0;o3<net.W[l2].length;o3++){
+      net.b[l2][o3]-=LR*gb[l2][o3]/N;
+      for(var i4=0;i4<net.W[l2][o3].length;i4++) net.W[l2][o3][i4]-=LR*gW[l2][o3][i4]/N;
+    }
+  }
+  stepCount++;
+  lossHist.push(totalLoss/N);
+  if(lossHist.length>400) lossHist.shift();
+  return allActs;
+}
+
+var lastActs=null;
+function stepOnce(n){ for(var i=0;i<n;i++) lastActs=trainStep(); }
+
+// ---------- UI wiring ----------
+function onScale(){
+  var s=parseFloat(document.getElementById('scale').value);
+  scaleMult=Math.pow(10,s);
+  document.getElementById('scaleVal').textContent=(scaleMult>=10?scaleMult.toFixed(1):scaleMult.toFixed(2))+'×';
+  Array.from(document.getElementById('presetSeg').children).forEach(function(x){x.classList.remove('on');});
+  resetAll();
+}
+function onDepth(){
+  depth=parseInt(document.getElementById('depth').value,10);
+  document.getElementById('depthVal').textContent=depth;
+  resetAll();
+}
+document.getElementById('presetSeg').addEventListener('click', function(e){
+  var b=e.target.closest('button'); if(!b) return;
+  var vals={small:-1.5, xavier:0, big:1.15};
+  document.getElementById('scale').value=vals[b.dataset.p];
+  Array.from(document.getElementById('presetSeg').children).forEach(function(x){x.classList.toggle('on',x===b);});
+  var s=parseFloat(document.getElementById('scale').value);
+  scaleMult=Math.pow(10,s);
+  document.getElementById('scaleVal').textContent=(scaleMult>=10?scaleMult.toFixed(1):scaleMult.toFixed(2))+'×';
+  resetAll();
+});
+
+function resetAll(){
+  setRunning(false);
+  initNet();
+  lastActs = DATA.map(function(pt){ return forward(pt.x, net, true); });
+  redraw();
+}
+
+var running=false, timer=null;
+var STEP_LIMIT=400;
+function setRunning(r){
+  running=r;
+  document.getElementById('run').textContent = r?'Pause':'Train';
+  if(r){
+    if(stepCount>=STEP_LIMIT) return setRunning(false);
+    timer=setInterval(function(){
+      stepOnce(3);
+      redraw();
+      if(stepCount>=STEP_LIMIT) setRunning(false);
+    }, 60);
+  } else clearInterval(timer);
+}
+function toggleRun(){ setRunning(!running); }
+
+// ---------- drawing ----------
+var NS='http://www.w3.org/2000/svg';
+function el(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attrs)e.setAttribute(k,attrs[k]);return e;}
+
+var xMinD=-1.6,xMaxD=2.6,yMinD=-1.6,yMaxD=1.6;
+function redraw(){
+  var g=document.getElementById('g');
+  g.innerHTML='';
+  // panel 1: decision boundary, x in [10,270]x[10,270]
+  var bx0=10, by0=10, bw=260, bh=260;
+  function bpx(x){ return bx0+(x-xMinD)/(xMaxD-xMinD)*bw; }
+  function bpy(y){ return by0+bh-(y-yMinD)/(yMaxD-yMinD)*bh; }
+  var grid=22;
+  for(var gx=0;gx<grid;gx++){
+    for(var gy=0;gy<grid;gy++){
+      var xx=xMinD+(gx+0.5)/grid*(xMaxD-xMinD);
+      var yy=yMinD+(gy+0.5)/grid*(yMaxD-yMinD);
+      var p=forward([xx,yy],net,false)[0];
+      var col = p>0.5 ? 'var(--orange)' : 'var(--blue)';
+      var op = 0.12+0.35*Math.abs(p-0.5)*2;
+      g.appendChild(el('rect',{x:bx0+gx*(bw/grid), y:by0+bh-(gy+1)*(bh/grid), width:bw/grid+0.5, height:bh/grid+0.5, fill:col, opacity:op}));
+    }
+  }
+  DATA.forEach(function(pt){
+    g.appendChild(el('circle',{cx:bpx(pt.x[0]),cy:bpy(pt.x[1]),r:3.2,fill:pt.y?'var(--orange-ink)':'var(--blue-ink)',stroke:'var(--surface)','stroke-width':1}));
+  });
+  g.appendChild(el('rect',{x:bx0,y:by0,width:bw,height:bh,fill:'none',stroke:'var(--border-strong)','stroke-width':1}));
+  var t1=el('text',{x:bx0,y:by0-3,class:'ts gl'}); t1.textContent='decision boundary'; g.appendChild(t1);
+
+  // panel 2: loss curve, x in [300,750]x[10,150]
+  var lx0=300, ly0=10, lw=450, lh=140;
+  g.appendChild(el('line',{x1:lx0,y1:ly0,x2:lx0,y2:ly0+lh,stroke:'var(--border-strong)','stroke-width':1}));
+  g.appendChild(el('line',{x1:lx0,y1:ly0+lh,x2:lx0+lw,y2:ly0+lh,stroke:'var(--border-strong)','stroke-width':1}));
+  var logMin=-2, logMax=Math.log10(Math.LN2*2+0.7); // ~loss ceiling around ln(2)*a bit
+  logMax=0.15;
+  function lly(v){ var l=Math.log10(Math.max(v,1e-6)); l=Math.max(logMin,Math.min(logMax,l)); return ly0+lh-(l-logMin)/(logMax-logMin)*lh; }
+  [0.01,0.1,1].forEach(function(v){
+    var y=lly(v);
+    g.appendChild(el('line',{x1:lx0,y1:y,x2:lx0+lw,y2:y,stroke:'var(--border)','stroke-width':0.6,opacity:0.5}));
+    var t=el('text',{x:lx0-4,y:y+3,class:'tn gl','text-anchor':'end'}); t.textContent=v; g.appendChild(t);
+  });
+  if(lossHist.length>1){
+    var pts=lossHist.map(function(v,i){ return (lx0+i/(STEP_LIMIT-1)*lw)+','+lly(v); }).join(' ');
+    g.appendChild(el('polyline',{points:pts,fill:'none',stroke:'var(--blue-ink)','stroke-width':1.8}));
+  }
+  var t2=el('text',{x:lx0,y:ly0-3,class:'ts gl'}); t2.textContent='training loss (log scale), step '+stepCount+' / '+STEP_LIMIT; g.appendChild(t2);
+
+  // panel 3: hidden layer activation std, x in [300,750]x[190,320]
+  var sx0=300, sy0=195, sw=450, sh=110;
+  g.appendChild(el('line',{x1:sx0,y1:sy0,x2:sx0,y2:sy0+sh,stroke:'var(--border-strong)','stroke-width':1}));
+  g.appendChild(el('line',{x1:sx0,y1:sy0+sh,x2:sx0+sw,y2:sy0+sh,stroke:'var(--border-strong)','stroke-width':1}));
+  var sLogMin=-4, sLogMax=1;
+  function sly(v){ var l=Math.log10(Math.max(v,1e-6)); l=Math.max(sLogMin,Math.min(sLogMax,l)); return sy0+sh-(l-sLogMin)/(sLogMax-sLogMin)*sh; }
+  [1e-3,1e-1,1].forEach(function(v){
+    var y=sly(v);
+    g.appendChild(el('line',{x1:sx0,y1:y,x2:sx0+sw,y2:y,stroke:'var(--border)','stroke-width':0.6,opacity:0.5}));
+    var t=el('text',{x:sx0-4,y:y+3,class:'tn gl','text-anchor':'end'}); t.textContent=v>=1?v.toFixed(0):v.toExponential(0); g.appendChild(t);
+  });
+  var stds=[];
+  if(lastActs){
+    var nLayers=net.sizes.length; // includes input + all hidden + output
+    for(var l=1;l<nLayers-1;l++){ // hidden layers only
+      var vals=[];
+      lastActs.forEach(function(acts){ vals=vals.concat(acts[l]); });
+      var m=vals.reduce(function(a,b){return a+b;},0)/vals.length;
+      var v2=vals.reduce(function(a,b){return a+(b-m)*(b-m);},0)/vals.length;
+      stds.push(Math.sqrt(v2));
+    }
+  }
+  var barW=sw/Math.max(stds.length,1);
+  stds.forEach(function(s,i){
+    var x=sx0+i*barW+barW*0.15, w=barW*0.7;
+    var y=sly(s);
+    g.appendChild(el('rect',{x:x,y:Math.min(y,sy0+sh),width:w,height:Math.max(sy0+sh-y,0.5),fill:'var(--green-ink)',opacity:0.75}));
+  });
+  var t3=el('text',{x:sx0,y:sy0-3,class:'ts gl'}); t3.textContent='hidden layer activation std (log scale), layer 1..'+stds.length; g.appendChild(t3);
+
+  // readout
+  var lastLoss = lossHist.length?lossHist[lossHist.length-1]:NaN;
+  var finalStd = stds.length ? stds[stds.length-1] : NaN;
+  var verdict;
+  if(finalStd<0.02) verdict='<span class="warn">vanishing &mdash; deep activations are nearly flat</span>';
+  else if(finalStd>0.9 && Math.abs(scaleMult)>1) verdict='<span class="warn">saturating &mdash; units pinned near ±1</span>';
+  else verdict='<span class="ok">healthy range</span>';
+  document.getElementById('readout').innerHTML = 'step '+stepCount+' &middot; loss = <b class="num">'+(isFinite(lastLoss)?lastLoss.toFixed(4):'&mdash;')+'</b> &middot; deepest hidden std = <b class="num">'+(isFinite(finalStd)?finalStd.toExponential(2):'&mdash;')+'</b> &mdash; '+verdict;
+}
+
+resetAll();
+</script>
+</body>
+</html>

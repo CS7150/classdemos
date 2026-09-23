@@ -51,12 +51,13 @@ footer a{color:var(--text-secondary)}
   <div class="nav"><a href="../../">&larr; CS7150 class demos</a></div>
   <p class="eyebrow">Northeastern University &middot; CS 7150 &middot; Fall 2026</p>
   <h1>Optimizers, explained</h1>
-  <p>Seven interactive pieces building up to <a href="https://papers.baulab.info/papers/Kingma-2015.pdf">Adam</a>: how momentum averages out noisy gradients, the
+  <p>Six interactive pieces building up to <a href="https://papers.baulab.info/papers/Kingma-2015.pdf">Adam</a>: how momentum averages out noisy gradients, the
      exponential moving average and bias correction that make that averaging precise (plus a
      companion piece on why the recurrence is exactly a geometric series), the trouble a single
-     learning rate has with an anisotropic bowl, the mean/RMS diagnostic Adam adds on top, why its
-     update is scale-invariant, and how network design (activations, initialization, depth) fights
-     the same conditioning problem from the other side.</p>
+     learning rate has with an anisotropic bowl, the mean/RMS diagnostic Adam adds on top, and why
+     its update is scale-invariant. Conditioning has another side too &mdash; how network design
+     (activations, initialization, depth) fights the same problem &mdash; covered in the
+     <a href="../initialization/">initialization</a> unit.</p>
 </header>
 
 <ol class="qs">
@@ -114,14 +115,6 @@ footer a{color:var(--text-secondary)}
      every gradient by K. SGD's and momentum's steps both grow with K; only Adam's barely
      change &mdash; isolating RMS normalization as the mechanism that buys scale-invariance.</p>
   <a class="go" href="adam-invariance.html">Open the explainer &rarr;</a>
-</li>
-
-<li class="done">
-  <div class="qtag">The other half of conditioning</div>
-  <h2><a href="depth-init.html">Depth, activation, and initialization</a></h2>
-  <p class="what">Watch a signal spread through a network of adjustable depth, and see which
-     combinations of activation and initialization keep it alive versus vanish or blow up.</p>
-  <a class="go" href="depth-init.html">Open the explainer &rarr;</a>
 </li>
 
 </ol>
