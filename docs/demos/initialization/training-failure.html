@@ -27,11 +27,11 @@ button,select{height:30px;font-size:13px;padding:0 9px}
 <body>
 <div class="nav"><a href="./">&larr; Initialization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
 <h1>Bad init, watched training<span>: the failure, not just the theory</span></h1>
-<p class="quiz">A real 6-hidden-layer tanh network training with plain gradient descent on two interleaved moons. Pick an init scale and press Train: watch the decision boundary, the loss curve, and each hidden layer's activations &mdash; as histograms, or as the network itself &mdash; live.</p>
+<p class="quiz">A real 6-hidden-layer tanh network training with plain gradient descent on two interleaved moons. Pick an init scale and press Train: watch the decision boundary, the loss curve, and the network itself, and each hidden layer's activations and gradients as histograms, live.</p>
 
 <div id="wrap">
 <svg id="stage" viewBox="0 -12 760 342" role="img" preserveAspectRatio="xMidYMid meet">
-  <desc>Three linked panels: a decision boundary heatmap over the two-moons data, a training loss curve, and either one activation histogram per hidden layer or a diagram of the network with one node per neuron and one line per weight, updating live as the network trains.</desc>
+  <desc>Three linked panels: a decision boundary heatmap over the two-moons data, a training loss curve, and either one gradient or activation histogram per hidden layer or a diagram of the network with one node per neuron and one line per weight, updating live as the network trains.</desc>
   <g id="g"></g>
 </svg>
 </div>
@@ -42,23 +42,24 @@ button,select{height:30px;font-size:13px;padding:0 9px}
   <button onclick="resetAll()">Reset</button>
   <div class="seg" id="presetSeg">
     <button data-p="small">too small</button>
-    <button data-p="xavier" class="on">Xavier</button>
+    <button data-p="xavier">Xavier</button>
     <button data-p="big">too big</button>
   </div>
-  <span class="klab">scale &times;Xavier</span>
-  <input type="range" id="scale" min="-1.7" max="1.3" step="0.02" value="0" oninput="onScale()" style="width:110px">
-  <span class="knum" id="scaleVal">1.0&times;</span>
+  <span class="klab">init &sigma;</span>
+  <input type="range" id="scale" min="-2.5" max="1.2" step="any" value="0" oninput="onScale()" style="flex:0 1 110px;min-width:60px">
+  <span class="knum" id="scaleVal">1.00</span>
   <span class="klab">depth</span>
-  <input type="range" id="depth" min="2" max="8" step="1" value="6" oninput="onDepth()" style="width:70px">
+  <input type="range" id="depth" min="2" max="8" step="1" value="6" oninput="onDepth()" style="flex:0 1 70px;min-width:40px">
   <span class="knum" id="depthVal">6</span>
   <div class="seg" id="viewSeg">
-    <button data-v="hist" class="on">histograms</button>
-    <button data-v="net">network</button>
+    <button data-v="net" class="on">network</button>
+    <button data-v="hist">activations</button>
+    <button data-v="grad">gradients</button>
   </div>
 </div>
 
 <div class="rd" id="readout"></div>
-<div class="cap">Full-batch gradient descent, fixed learning rate, width 10, tanh hidden units, sigmoid output. Train runs 400 steps; press it again to keep going for another 400. <b>Histograms</b>: every hidden unit's activation over all 120 training points, one panel per layer, red where the unit is saturated (|a|&gt;0.975, so tanh&prime;&lt;0.05) and green where it still passes gradient. <b>Network</b>: one line per weight (orange positive, blue negative, thickness and opacity &prop; |w|), one node per neuron colored by its activation on the probe point (hover the boundary plot to move it), ringed red when saturated. Too-small init: the weights are nearly invisible, activations collapse to a spike at 0, and loss barely moves. Too-big init: thick weights, every unit pinned at &plusmn;1, and the boundary stays close to its random start.</div>
+<div class="cap">Full-batch gradient descent, fixed learning rate, width 10, tanh hidden units, sigmoid output. Every weight starts as a Gaussian sample from N(0, &sigma;&sup2;) and every bias at 0; the Xavier button sets &sigma; = &radic;(2/(10+10)) &asymp; 0.32, Glorot's value for a 10&rarr;10 layer; the slider starts at the na&iuml;ve &sigma; = 1. Train runs 400 steps; press it again to keep going for another 400. <b>Network</b>: one line per weight (orange positive, blue negative, thickness and opacity &prop; |w|), one node per neuron colored by its activation on the probe point (hover the boundary plot to move it), ringed red when saturated. <b>Activations</b>: every hidden unit's activation over all 120 training points, one panel per layer, red where the unit is saturated (|a|&gt;0.995, so tanh&prime;&lt;0.01) and green where it still passes gradient. <b>Gradients</b>: the backprop gradient &part;L/&part;a at every hidden unit for every training point, binned by log&#8321;&#8320; of its magnitude on one shared axis from 10&#8315;&#8310; to about 1 (ticks at 10&#8315;&#8308;, 10&#8315;&sup2;, and a taller one at 1); red bars at the ends collect everything smaller than 10&#8315;&#8310; (vanished) or larger than about 3 (exploding). Gradient flows right to left, so vanishing shows as mass sliding left toward L1. Too-small init: the weights are nearly invisible, activations collapse to a spike at 0, gradients shrink by orders of magnitude per layer, and loss barely moves. Too-big init: thick weights, every unit pinned at &plusmn;1, and the boundary stays close to its random start.</div>
 
 <script>
 // ---------- data: two moons ----------
@@ -77,10 +78,9 @@ var DATA=[];
 
 // ---------- network ----------
 var randnG = function(){ return randnSeeded(Math.random); };
-var WIDTH=10, depth=6, scaleMult=1;
+var WIDTH=10, depth=6, initStd=1;
 var net=null, lossHist=[], stepCount=0;
 
-function xavierStd(nin,nout){ return Math.sqrt(2/(nin+nout)); }
 function buildSizes(d){ var s=[2]; for(var i=0;i<d;i++) s.push(WIDTH); s.push(1); return s; }
 
 function initNet(){
@@ -88,7 +88,7 @@ function initNet(){
   var W=[], b=[];
   for(var l=0;l<sizes.length-1;l++){
     var nin=sizes[l], nout=sizes[l+1];
-    var std=xavierStd(nin,nout)*scaleMult;
+    var std=initStd;   // every weight ~ N(0, initStd^2)
     var Wl=[]; for(var o=0;o<nout;o++){ var row=[]; for(var i=0;i<nin;i++) row.push(randnG()*std); Wl.push(row); }
     W.push(Wl); b.push(new Array(nout).fill(0));
   }
@@ -112,15 +112,17 @@ function forward(x, net, keep){
 }
 
 var LR=0.6;
-function trainStep(){
+// one full-batch step; with apply=false it only measures activations and gradients
+function trainStep(apply){
   var sizes=net.sizes, L=net.W.length;
   var gW=net.W.map(function(Wl){return Wl.map(function(row){return row.map(function(){return 0;});});});
   var gb=net.b.map(function(bl){return bl.map(function(){return 0;});});
   var totalLoss=0;
-  var allActs=[];
+  var allActs=[], allGrads=[];
   DATA.forEach(function(pt){
     var acts=forward(pt.x, net, true);
     allActs.push(acts);
+    var grads=[]; allGrads.push(grads);   // grads[l] = dL/da for hidden layer l
     var p=acts[L][0];
     var pc=Math.min(1-1e-7,Math.max(1e-7,p));
     totalLoss += -(pt.y*Math.log(pc)+(1-pt.y)*Math.log(1-pc));
@@ -135,12 +137,15 @@ function trainStep(){
       if(l>0){
         var dPrev=new Array(nin).fill(0);
         for(var o2=0;o2<nout;o2++){ var row2=Wl[o2]; for(var i2=0;i2<nin;i2++) dPrev[i2]+=row2[i2]*delta[o2]; }
+        grads[l]=dPrev.slice();
         var aHere=acts[l];
         for(var i3=0;i3<nin;i3++) dPrev[i3]*= (1-aHere[i3]*aHere[i3]); // tanh'
         delta=dPrev;
       }
     }
   });
+  lastActs=allActs; lastGrads=allGrads;
+  if(apply===false) return;
   var N=DATA.length;
   for(var l2=0;l2<L;l2++){
     for(var o3=0;o3<net.W[l2].length;o3++){
@@ -150,17 +155,19 @@ function trainStep(){
   }
   stepCount++;
   lossHist.push(totalLoss/N);
-  return allActs;
 }
 
-var lastActs=null;
-function stepOnce(n){ for(var i=0;i<n;i++) lastActs=trainStep(); }
+var lastActs=null, lastGrads=null;
+function stepOnce(n){ for(var i=0;i<n;i++) trainStep(); }
 
 // ---------- UI wiring ----------
+// the slider carries log10(sigma); Xavier for a 10->10 layer is sqrt(2/(10+10)) = 10^-0.5
+function showStd(){
+  initStd=Math.pow(10,parseFloat(document.getElementById('scale').value));
+  document.getElementById('scaleVal').textContent=initStd<0.1?initStd.toPrecision(2):initStd.toFixed(2);
+}
 function onScale(){
-  var s=parseFloat(document.getElementById('scale').value);
-  scaleMult=Math.pow(10,s);
-  document.getElementById('scaleVal').textContent=(scaleMult>=10?scaleMult.toFixed(1):scaleMult.toFixed(2))+'×';
+  showStd();
   Array.from(document.getElementById('presetSeg').children).forEach(function(x){x.classList.remove('on');});
   resetAll();
 }
@@ -171,12 +178,10 @@ function onDepth(){
 }
 document.getElementById('presetSeg').addEventListener('click', function(e){
   var b=e.target.closest('button'); if(!b) return;
-  var vals={small:-1.5, xavier:0, big:1.15};
+  var vals={small:-2, xavier:-0.5, big:0.65};   // sigma = 0.01, 0.32, 4.5
   document.getElementById('scale').value=vals[b.dataset.p];
   Array.from(document.getElementById('presetSeg').children).forEach(function(x){x.classList.toggle('on',x===b);});
-  var s=parseFloat(document.getElementById('scale').value);
-  scaleMult=Math.pow(10,s);
-  document.getElementById('scaleVal').textContent=(scaleMult>=10?scaleMult.toFixed(1):scaleMult.toFixed(2))+'×';
+  showStd();
   resetAll();
 });
 
@@ -184,7 +189,7 @@ function resetAll(){
   setRunning(false);
   initNet();
   runTarget=STEP_LIMIT;
-  lastActs = DATA.map(function(pt){ return forward(pt.x, net, true); });
+  trainStep(false);
   redraw();
 }
 
@@ -207,7 +212,7 @@ function setRunning(r){
 }
 function toggleRun(){ setRunning(!running); }
 
-var view='hist';
+var view='net';
 document.getElementById('viewSeg').addEventListener('click', function(e){
   var b=e.target.closest('button'); if(!b) return;
   view=b.dataset.v;
@@ -237,7 +242,7 @@ document.getElementById('stage').addEventListener('pointermove', function(e){
   if(!running) redraw();
 });
 
-var SAT=0.975;   // |tanh| above this means tanh' = 1-a^2 < 0.05
+var SAT=Math.sqrt(0.99);   // |tanh| above ~0.995 means tanh' = 1-a^2 < 0.01
 
 function hiddenStats(){
   // per hidden layer: all activations over the dataset, std, saturated fraction
@@ -276,7 +281,43 @@ function drawHistograms(g, stats){
     txt(g,x0+4+innerW/2,histBot+27,'tn','σ '+(st.std<0.01?st.std.toExponential(0):st.std.toFixed(2)),{'text-anchor':'middle',style:'font-size:11px'});
     txt(g,x0+4+innerW/2,histBot+38,'tn',Math.round(100*st.sat)+'% sat',{'text-anchor':'middle',style:'font-size:11px',fill:st.sat>0.3?'var(--red)':'var(--text-muted)'});
   });
-  txt(g,PX0,PY0-6,'ts gl','hidden activations, one histogram per layer over [−1, 1]');
+  txt(g,PX0,PY0-6,'ts gl','activations, one histogram per layer over [−1, 1]');
+}
+
+// gradients span ~20 decades; bin log10|dL/da| over a useful range, and pile
+// everything outside it into red overflow bars at either end
+var GMIN=-6, GMAX=0.5;
+function drawGradients(g){
+  var n=net.sizes.length-2, colW=PW/n, bins=26, histTop=PY0+4, histBot=PY0+PH-38;
+  for(var c=0;c<n;c++){
+    var l=c+1, x0=PX0+c*colW, innerW=colW-8;
+    var bwid=(innerW-4)/(bins+2), ax0=x0+4+bwid+2, ax1=ax0+bins*bwid;   // under | axis | over
+    var counts=new Array(bins).fill(0), under=0, over=0, mags=[];
+    lastGrads.forEach(function(gr){ gr[l].forEach(function(v){
+      var m=Math.abs(v); mags.push(m);
+      var lg=m>0?Math.log10(m):-Infinity;
+      if(lg<GMIN) under++; else if(lg>=GMAX) over++;
+      else counts[Math.min(bins-1,Math.floor((lg-GMIN)/(GMAX-GMIN)*bins))]++;
+    }); });
+    mags.sort(function(a,b){return a-b;});
+    var med=mags[Math.floor(mags.length/2)], mx=Math.max(under,over,Math.max.apply(null,counts));
+    var hOf=function(k){ return (histBot-histTop)*k/mx; };
+    var gx=function(lg){ return ax0+(lg-GMIN)/(GMAX-GMIN)*(ax1-ax0); };
+    g.appendChild(el('line',{x1:ax0,y1:histBot,x2:ax1,y2:histBot,stroke:'var(--border-strong)','stroke-width':1}));
+    for(var t=-4;t<=0;t+=2)   // ticks at 1e-4, 1e-2, 1 (the last one taller)
+      g.appendChild(el('line',{x1:gx(t),y1:histBot,x2:gx(t),y2:histBot+(t===0?5:3),stroke:'var(--border-strong)','stroke-width':1}));
+    for(var b=0;b<bins;b++){
+      if(!counts[b]) continue;
+      g.appendChild(el('rect',{x:ax0+b*bwid+0.2,y:histBot-hOf(counts[b]),width:bwid-0.4,height:hOf(counts[b]),fill:'var(--violet)',opacity:0.7}));
+    }
+    if(under) g.appendChild(el('rect',{x:x0+4,y:histBot-hOf(under),width:bwid,height:hOf(under),fill:'var(--red)',opacity:0.7}));
+    if(over) g.appendChild(el('rect',{x:ax1+2,y:histBot-hOf(over),width:bwid,height:hOf(over),fill:'var(--red)',opacity:0.7}));
+    var out=(under+over)/mags.length;
+    txt(g,x0+4+innerW/2,histBot+14,'tn','L'+l,{'text-anchor':'middle',style:'font-size:12px'});
+    txt(g,x0+4+innerW/2,histBot+27,'tn','med '+(med>=0.01&&med<100?med.toFixed(2):med.toExponential(0)),{'text-anchor':'middle',style:'font-size:11px'});
+    txt(g,x0+4+innerW/2,histBot+38,'tn',Math.round(100*out)+'% out',{'text-anchor':'middle',style:'font-size:11px',fill:out>0.3?'var(--red)':'var(--text-muted)'});
+  }
+  txt(g,PX0,PY0-6,'ts gl','gradient |∂L/∂a| per layer, log axis 10⁻⁶ … 1; red = outside');
 }
 
 function drawNetwork(g){
@@ -289,10 +330,10 @@ function drawNetwork(g){
     var Wl=net.W[l];
     for(var o=0;o<Wl.length;o++) for(var i=0;i<Wl[o].length;i++){
       var w=Wl[o][i], aw=Math.abs(w);
-      var op=Math.min(0.85,aw*1.3);
+      var op=Math.min(0.45,aw*0.8);
       if(op<0.01) continue;
       g.appendChild(el('line',{x1:colX(l),y1:nodeY(l,i),x2:colX(l+1),y2:nodeY(l+1,o),
-        stroke:w>0?'var(--orange)':'var(--blue)','stroke-width':Math.max(0.3,Math.min(3,aw*1.6)),opacity:op}));
+        stroke:w>0?'var(--orange)':'var(--blue)','stroke-width':Math.min(1.3,0.35+aw*0.5),opacity:op}));
     }
   }
   for(var l2=0;l2<L;l2++){
@@ -360,7 +401,7 @@ function redraw(){
 
   // panel 3: hidden activations, as histograms or as the network
   var stats=hiddenStats();
-  if(view==='net') drawNetwork(g); else drawHistograms(g, stats);
+  if(view==='net') drawNetwork(g); else if(view==='grad') drawGradients(g); else drawHistograms(g, stats);
 
   // readout
   var lastLoss = lossHist.length?lossHist[lossHist.length-1]:NaN;
