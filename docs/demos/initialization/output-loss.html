@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Squared error vs. cross-entropy</title>
+<meta name="description" content="A single sigmoid output trained with squared error or cross-entropy: both are negative log-likelihoods, but squared error's gradient carries the sigmoid's slope and vanishes when the output is confidently wrong, while cross-entropy's log cancels it.">
+<link rel="stylesheet" href="../demo.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<style>
+body{gap:6px;padding:11px 16px 28px;max-width:1100px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+h2{font-size:16px;font-weight:600;margin:16px 0 0;letter-spacing:-.005em}
+.quiz{margin:0}
+svg{max-height:66vh}
+.row{gap:7px}
+button{height:30px;font-size:13px;padding:0 9px}
+.seg button{height:28px;font-size:12px;padding:0 8px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:auto}
+.rd{font-size:14px;line-height:1.5;min-height:1.5em}
+.nav{display:flex;align-items:baseline;gap:10px}
+.prose{font-size:14.5px;line-height:1.6;color:var(--text-primary);max-width:78ch}
+.prose p{margin:6px 0}
+.eq{font-size:16px;overflow-x:auto;overflow-y:hidden}
+.note{font-size:13px;color:var(--text-secondary)}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Initialization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Squared error vs. cross-entropy<span>: a footnote on the output layer</span></h1>
+<p class="quiz">Glorot &amp; Bengio remark that the log-likelihood (cross-entropy) cost trains classifiers much better than the quadratic cost. Here is one sigmoid output unit, p = &sigma;(z), with a target label y. Drag its logit z and compare the two losses and, more importantly, their gradients.</p>
+
+<svg id="fig" viewBox="0 0 900 470" role="img">
+  <desc>Top: the sigmoid curve with the current output point, its tangent line, and the target label as a dashed line. Bottom left: squared-error and cross-entropy losses as functions of the logit. Bottom right: their gradients with respect to the logit, with the squared-error gradient vanishing where the output is confidently wrong.</desc>
+  <g id="g"></g>
+</svg>
+
+<div class="row">
+  <span class="klab">logit z</span>
+  <input type="range" id="z" min="-8" max="8" step="0.01" value="-4" oninput="onZ()" style="flex:1 1 260px;min-width:120px">
+  <span class="knum" id="zVal">&minus;4.00</span>
+  <div class="seg" id="ySeg">
+    <button data-y="1" class="on">label y = 1</button>
+    <button data-y="0">label y = 0</button>
+  </div>
+</div>
+<div class="rd" id="readout"></div>
+
+<h2>1. Both losses are negative log-likelihoods</h2>
+<div class="prose">
+<p>A loss says what kind of noise you believe the target has. <b>Squared error</b> is what you get from Gaussian noise of fixed variance around the network's output &ycirc;:</p>
+<div class="eq" id="e1"></div>
+<p>The KL divergence between two Gaussians with the same variance is the same squared distance, so minimizing squared error is minimizing a KL between Gaussians:</p>
+<div class="eq" id="e2"></div>
+<p><b>Cross-entropy</b> is what you get from a Bernoulli (or, with softmax, categorical) model of a class label, and for a one-hot target it is exactly a KL, since the target's own entropy is 0:</p>
+<div class="eq" id="e3"></div>
+<p>So neither loss is better in general: each is maximum likelihood under its own assumption. Squared error assumes a real-valued target with Gaussian noise; cross-entropy assumes a class label. Using squared error on 0/1 labels fits the wrong noise model. <span class="note">(Caveat: the Gaussian equivalence needs a fixed &sigma;. If the variance is also learned, the log&nbsp;&sigma; term matters and the loss is no longer plain squared error.)</span></p>
+</div>
+
+<h2>2. The mechanics: the log cancels the sigmoid's flat tail</h2>
+<div class="prose">
+<p>The difference that matters for training is the gradient at the logit. Both start from the sigmoid's slope,</p>
+<div class="eq" id="e4"></div>
+<p>With squared error, the chain rule keeps that slope as a factor:</p>
+<div class="eq" id="e5"></div>
+<p>With cross-entropy, the derivative of the log divides it right back out:</p>
+<div class="eq" id="e6"></div>
+<p>So when the output is <b>confidently wrong</b> (say y = 1 but z is very negative, so p &asymp; 0), squared error's gradient is (p &minus; 1)&middot;p(1 &minus; p) &asymp; &minus;p &asymp; 0: the unit is saturated, and the loss is at its largest exactly where the push to fix it vanishes. Cross-entropy's gradient is p &minus; 1 &asymp; &minus;1, the strongest push it ever gives. This is the same <a href="tanh-saturation.html">saturation</a> as in the hidden layers, now at the output, and it is why Glorot &amp; Bengio found that the quadratic cost's error surface has much flatter plateaus. Softmax with cross-entropy has the same cancellation: the gradient at the logits is exactly softmax(z) &minus; y.</p>
+</div>
+
+<script>
+var NS='http://www.w3.org/2000/svg';
+function el(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attrs)e.setAttribute(k,attrs[k]);return e;}
+function txt(g,x,y,cls,str,attrs){ var t=el('text',Object.assign({x:x,y:y,class:cls},attrs||{})); t.textContent=str; g.appendChild(t); return t; }
+function sig(z){ return 1/(1+Math.exp(-z)); }
+function f3(v){ var a=Math.abs(v); return (a<0.001&&a>0?v.toExponential(1):v.toFixed(3)).replace(/^-/,'−'); }
+
+var z=-4, y=1, ZM=8;
+var SE='var(--warm-ink)', CE='var(--blue-ink)';
+function lossSE(z){ var p=sig(z); return 0.5*(p-y)*(p-y); }
+function lossCE(z){ var p=sig(z); return -(y*Math.log(Math.max(p,1e-12))+(1-y)*Math.log(Math.max(1-p,1e-12))); }
+function gradSE(z){ var p=sig(z); return (p-y)*p*(1-p); }
+function gradCE(z){ return sig(z)-y; }
+
+function panel(g,x0,y0,W,H,lo,hi,fns,title,ticks){
+  var px=function(v){ return x0+(v+ZM)/(2*ZM)*W; }, py=function(v){ return y0+H-(Math.max(lo,Math.min(hi,v))-lo)/(hi-lo)*H; };
+  g.appendChild(el('rect',{x:x0,y:y0,width:W,height:H,fill:'none',stroke:'var(--border)','stroke-width':1}));
+  ticks.forEach(function(t){
+    g.appendChild(el('line',{x1:x0,y1:py(t),x2:x0+W,y2:py(t),stroke:'var(--border)','stroke-width':t===0?1.1:0.6,'stroke-dasharray':t===0?'':'3 3'}));
+    txt(g,x0-6,py(t)+4,'tn gl',String(t).replace('-','−'),{'text-anchor':'end',style:'font-size:11.5px'});
+  });
+  [-8,-4,0,4,8].forEach(function(t){ txt(g,px(t),y0+H+15,'tn gl',String(t).replace('-','−'),{'text-anchor':'middle',style:'font-size:11.5px'}); });
+  fns.forEach(function(f){
+    var pts=[]; for(var k=0;k<=240;k++){ var v=-ZM+2*ZM*k/240; pts.push(px(v).toFixed(1)+','+py(f.fn(v)).toFixed(1)); }
+    g.appendChild(el('polyline',{points:pts.join(' '),fill:'none',stroke:f.col,'stroke-width':2.2}));
+    g.appendChild(el('circle',{cx:px(z),cy:py(f.fn(z)),r:5,fill:f.col,stroke:'var(--surface)','stroke-width':1.5}));
+  });
+  g.appendChild(el('line',{x1:px(z),y1:y0,x2:px(z),y2:y0+H,stroke:'var(--text-muted)','stroke-width':1,'stroke-dasharray':'4 3'}));
+  txt(g,x0,y0-10,'ts gl',title,{style:'font-size:14.5px'});
+  txt(g,x0+W,y0+H+30,'tn','logit z',{'text-anchor':'end',style:'font-size:12px;font-style:italic'});
+}
+
+function draw(){
+  var g=document.getElementById('g'); g.innerHTML='';
+  var p=sig(z);
+  // top: the sigmoid, with the point, its tangent, and the target
+  var X0=60, W=800, Y0=26, H=150;
+  var px=function(v){ return X0+(v+ZM)/(2*ZM)*W; }, py=function(v){ return Y0+H-v*H; };
+  g.appendChild(el('rect',{x:X0,y:Y0,width:W,height:H,fill:'none',stroke:'var(--border)','stroke-width':1}));
+  [0,0.5,1].forEach(function(t){ txt(g,X0-6,py(t)+4,'tn gl',String(t),{'text-anchor':'end',style:'font-size:11.5px'}); });
+  g.appendChild(el('line',{x1:X0,y1:py(y),x2:X0+W,y2:py(y),stroke:'var(--green-ink)','stroke-width':1.4,'stroke-dasharray':'6 4'}));
+  txt(g,X0+W-6,py(y)+(y?14:-6),'tn gl','target y = '+y,{'text-anchor':'end',style:'font-size:12.5px;fill:var(--green-ink)'});
+  var pts=[]; for(var k=0;k<=240;k++){ var v=-ZM+2*ZM*k/240; pts.push(px(v).toFixed(1)+','+py(sig(v)).toFixed(1)); }
+  g.appendChild(el('polyline',{points:pts.join(' '),fill:'none',stroke:'var(--text-muted)','stroke-width':1.8}));
+  // error bar from p to y
+  g.appendChild(el('line',{x1:px(z),y1:py(p),x2:px(z),y2:py(y),stroke:'var(--red)','stroke-width':2,opacity:0.6}));
+  // tangent, fixed screen length, slope p(1-p)
+  var sl=p*(1-p), dx=W/(2*ZM), dy=-H*sl, len=Math.sqrt(dx*dx+dy*dy), L=46; dx*=L/len; dy*=L/len;
+  var tc='color-mix(in oklab, var(--green-ink) '+Math.round(400*sl)+'%, var(--red))';
+  g.appendChild(el('line',{x1:px(z)-dx,y1:py(p)-dy,x2:px(z)+dx,y2:py(p)+dy,stroke:tc,'stroke-width':2.6,'stroke-linecap':'round'}));
+  g.appendChild(el('circle',{cx:px(z),cy:py(p),r:5,fill:tc,stroke:'var(--surface)','stroke-width':1.5}));
+  txt(g,px(z)+(z<5?10:-10),py(p)+(p<0.5?-10:18),'num gl','p = σ(z) = '+f3(p)+', slope p(1−p) = '+f3(sl),{'text-anchor':z<5?'start':'end',style:'font-size:12.5px'});
+  txt(g,X0,Y0-10,'ts gl','the output p = σ(z), with its slope',{style:'font-size:14.5px'});
+  // bottom: losses and gradients
+  panel(g,60,236,370,180,0,8.5,[{fn:lossSE,col:SE},{fn:lossCE,col:CE}],'loss',[0,2,4,6,8]);   // cross-entropy grows about linearly in -z, so give it room
+  panel(g,500,236,360,180,-1.05,1.05,[{fn:gradSE,col:SE},{fn:gradCE,col:CE}],'gradient dL/dz',[-1,0,1]);
+  // legend
+  txt(g,60+370,236+14,'tn gl','squared error ½(p − y)²',{'text-anchor':'end',style:'font-size:12.5px;fill:'+SE});
+  txt(g,60+370,236+30,'tn gl','cross-entropy',{'text-anchor':'end',style:'font-size:12.5px;fill:'+CE});
+  // readout
+  var gs=gradSE(z), gc=gradCE(z), wrong=Math.abs(p-y)>0.9;
+  document.getElementById('readout').innerHTML='p = '+f3(p)+' for label '+y+'. <span style="color:'+SE+'">Squared error</span>: loss '+f3(lossSE(z))+', gradient <b class="num">'+f3(gs)+'</b>. '+
+    '<span style="color:'+CE+'">Cross-entropy</span>: loss '+f3(lossCE(z))+', gradient <b class="num">'+f3(gc)+'</b>. '+
+    (wrong?'<span style="color:var(--red)">Confidently wrong: squared error\'s push is '+(Math.abs(gs)>0?Math.round(Math.abs(gc/gs)):'∞')+'× weaker than cross-entropy\'s, because it carries the flat slope p(1−p) = '+f3(p*(1-p))+'.</span>'
+          :Math.abs(p-y)<0.1?'Nearly right: both gradients are small, as they should be.':'In between: both gradients push toward the target.');
+}
+function onZ(){ z=+document.getElementById('z').value; document.getElementById('zVal').textContent=f3(z).replace(/0$/,''); draw(); }
+document.getElementById('ySeg').addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b) return;
+  y=+b.dataset.y; Array.from(this.children).forEach(function(x){ x.classList.toggle('on',x===b); });
+  document.getElementById('z').value=y?-4:4; onZ();
+});
+
+var TEX={
+  e1:'-\\log p(y\\mid\\hat y)=-\\log\\Big[\\tfrac{1}{\\sqrt{2\\pi}\\,\\sigma}\\,e^{-(y-\\hat y)^2/2\\sigma^2}\\Big]=\\frac{(y-\\hat y)^2}{2\\sigma^2}+\\log\\big(\\sqrt{2\\pi}\\,\\sigma\\big)',
+  e2:'\\mathrm{KL}\\big(\\mathcal N(\\mu_1,\\sigma^2)\\,\\big\\|\\,\\mathcal N(\\mu_2,\\sigma^2)\\big)=\\frac{(\\mu_1-\\mu_2)^2}{2\\sigma^2}',
+  e3:'-\\log p(y\\mid p)=-y\\log p-(1-y)\\log(1-p)=\\mathrm{KL}(y\\,\\|\\,p)+\\underbrace{H(y)}_{0\\text{ for a label}}',
+  e4:'p=\\sigma(z),\\qquad \\frac{dp}{dz}=\\sigma(z)\\big(1-\\sigma(z)\\big)=p(1-p)',
+  e5:'L=\\tfrac12(p-y)^2\\;\\Rightarrow\\;\\frac{dL}{dz}=(p-y)\\cdot\\underbrace{p(1-p)}_{\\text{flat when saturated}}',
+  e6:'\\begin{aligned}L&=-y\\log p-(1-y)\\log(1-p)\\\\ \\Rightarrow\\;\\frac{dL}{dz}&=\\Big(-\\frac{y}{p}+\\frac{1-y}{1-p}\\Big)\\,p(1-p)=-y(1-p)+(1-y)\\,p=p-y\\end{aligned}'
+};
+Object.keys(TEX).forEach(function(id){ katex.render(TEX[id],document.getElementById(id),{throwOnError:false,displayMode:true}); });
+onZ();
+</script>
+</body>
+</html>
