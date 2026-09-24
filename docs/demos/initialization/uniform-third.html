@@ -30,7 +30,7 @@ button.main{min-width:84px}
 <h1>Why a uniform has variance a&sup2;/3<span>: stack the squares</span></h1>
 <p class="quiz">The <a href="variance.html">variance</a> of a zero-mean <i>W</i> is its average square, E[<i>W</i>&sup2;]. For <i>W</i> uniform on [&minus;<i>a</i>, <i>a</i>], the sign doesn't change the square, so we need the average of <i>w</i>&sup2; for <i>w</i> spread evenly over [0, <i>a</i>]. The answer is a third of the biggest square, <i>a</i>&sup2;/3, and here is the picture of why.</p>
 
-<h2>1. Stack the squares into a pyramid</h2>
+<h2>1. Stack the squares into a pyramid <span style="font-weight:400;font-size:13px;color:var(--text-muted)">(drag the 3D figures to turn them)</span></h2>
 <svg id="s1" viewBox="0 0 900 340" role="img">
   <desc>Left: k values spread evenly over zero to a, each the side of a square anchored at zero, drawn nested. Right: the same squares in 3D, lifted into a stack with the largest at the bottom, forming a staircase pyramid inside an a by a by a box.</desc>
   <g id="g1"></g>
@@ -68,8 +68,32 @@ function ease(f){ return f<0.5?2*f*f:1-Math.pow(-2*f+2,2)/2; }
 function lerp(a,b,f){ return a+(b-a)*f; }
 function poly(g,pts,attrs){ g.appendChild(el('polygon',Object.assign({points:pts.map(function(p){ return p[0].toFixed(1)+','+p[1].toFixed(1); }).join(' ')},attrs))); }
 
-// isometric projection with z up; the unit is a
-function isoMaker(X0,Y0,S){ return function(x,y,z){ return [X0+(x-y)*0.866*S, Y0+(x+y)*0.5*S-z*S]; }; }
+// a camera looking at the unit cube (the unit is a) from azimuth phi and elevation
+// th, z up; VIEW points from the cube toward the viewer, for culling and ordering
+function camera(c,S,X0,Y0){
+  var phi=c.phi, th=c.th;
+  var VIEW=[Math.cos(th)*Math.cos(phi),Math.cos(th)*Math.sin(phi),Math.sin(th)];
+  var RT=[-Math.sin(phi),Math.cos(phi),0], UP=[-Math.sin(th)*Math.cos(phi),-Math.sin(th)*Math.sin(phi),Math.cos(th)];
+  return {VIEW:VIEW, P:function(x,y,z){ var q=[x-0.5,y-0.5,z-0.5];
+    return [X0+S*(q[0]*RT[0]+q[1]*RT[1]), Y0-S*(q[0]*UP[0]+q[1]*UP[1]+q[2]*UP[2])]; }};
+}
+// drag a figure to turn it; elevation stays between 5 and 85 degrees, so the view
+// is always from above and the pictures' drawing orders stay valid
+function draggable(svgId, cam, redraw){
+  var svg=document.getElementById(svgId), last=null;
+  svg.style.cursor='grab'; svg.style.touchAction='none';
+  svg.addEventListener('pointerdown',function(e){ last=[e.clientX,e.clientY]; svg.setPointerCapture(e.pointerId); svg.style.cursor='grabbing'; });
+  svg.addEventListener('pointermove',function(e){
+    if(!last) return;
+    cam.phi-=(e.clientX-last[0])*0.01;
+    cam.th=Math.max(5*Math.PI/180,Math.min(85*Math.PI/180,cam.th+(e.clientY-last[1])*0.01));
+    last=[e.clientX,e.clientY]; redraw();
+  });
+  var up=function(){ last=null; svg.style.cursor='grab'; };
+  svg.addEventListener('pointerup',up); svg.addEventListener('pointercancel',up);
+}
+var cam1={phi:45*Math.PI/180, th:Math.asin(1/Math.sqrt(3))};       // isometric to start
+var cam2={phi:(225+22)*Math.PI/180, th:28*Math.PI/180};             // from behind, so the shared corner faces you
 function cubeFrame(g,P,dash){
   var V=[[0,0,0],[1,0,0],[1,1,0],[0,1,0],[0,0,1],[1,0,1],[1,1,1],[0,1,1]];
   [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]].forEach(function(e){
@@ -99,18 +123,22 @@ function draw1(){
   txt(g,L0+U,LY+16,'tn','a',{'text-anchor':'middle',style:'font-size:12px;font-style:italic'});
   txt(g,L0+U/2,LY+30,'tn','each value w is the side of a square of area w²',{'text-anchor':'middle',style:'font-size:12px'});
   // right: the same squares lifted into a stack
-  var P=isoMaker(640,168,138);
+  var C1=camera(cam1,170,640,176), P=C1.P, V=C1.VIEW;
   cubeFrame(g,P);
-  var th=1/k;
+  var th=1/k, sw=k>20?0.4:0.8;
+  // slabs bottom to top (the view is from above), each showing the faces that point at you
   sides.forEach(function(s,i){
     var z0=lerp(0,i*th,e), z1=z0+lerp(0.004,th,e);
-    var top=[P(0,0,z1),P(s,0,z1),P(s,s,z1),P(0,s,z1)];
-    var fx=[P(s,0,z0),P(s,s,z0),P(s,s,z1),P(s,0,z1)];
-    var fy=[P(0,s,z0),P(s,s,z0),P(s,s,z1),P(0,s,z1)];
-    var sw=k>20?0.4:0.8;
-    poly(g,fx,{fill:'var(--violet)',opacity:0.55,stroke:'var(--violet-ink)','stroke-width':sw});
-    poly(g,fy,{fill:'var(--violet)',opacity:0.4,stroke:'var(--violet-ink)','stroke-width':sw});
-    poly(g,top,{fill:'var(--violet)',opacity:0.28,stroke:'var(--violet-ink)','stroke-width':sw});
+    [[[0,0,z0],[0,s,z0],[0,s,z1],[0,0,z1],[-1,0,0]],
+     [[s,0,z0],[s,s,z0],[s,s,z1],[s,0,z1],[1,0,0]],
+     [[0,0,z0],[s,0,z0],[s,0,z1],[0,0,z1],[0,-1,0]],
+     [[0,s,z0],[s,s,z0],[s,s,z1],[0,s,z1],[0,1,0]],
+     [[0,0,z1],[s,0,z1],[s,s,z1],[0,s,z1],[0,0,1]]].forEach(function(f){
+      var nrm=f[4], facing=nrm[0]*V[0]+nrm[1]*V[1]+nrm[2]*V[2];
+      if(facing<=0) return;
+      var op=nrm[2]?0.28:0.3+0.25*Math.abs(nrm[0]);
+      poly(g,f.slice(0,4).map(function(v){ return P(v[0],v[1],v[2]); }),{fill:'var(--violet)',opacity:op,stroke:'var(--violet-ink)','stroke-width':sw});
+    });
   });
   if(e>0.99){   // the smooth pyramid the staircase approaches
     [[[0,0,1],[1,0,0]],[[0,0,1],[1,1,0]],[[0,0,1],[0,1,0]]].forEach(function(q){
@@ -148,10 +176,7 @@ function draw2(){
   // seen from the other side (from -x, -y), so the shared apex is the corner nearest
   // you and all three pyramids show on the assembled cube
   // a camera a little off the diagonal, so the separated pieces read as solids
-  var phi=(225+22)*Math.PI/180, th=28*Math.PI/180, S=138, X0=580, Y0=176;
-  var VIEW=[Math.cos(th)*Math.cos(phi),Math.cos(th)*Math.sin(phi),Math.sin(th)];
-  var RT=[-Math.sin(phi),Math.cos(phi),0], UP=[-Math.sin(th)*Math.cos(phi),-Math.sin(th)*Math.sin(phi),Math.cos(th)];
-  var P=function(x,y,z){ var q=[x-0.5,y-0.5,z-0.5]; return [X0+S*(q[0]*RT[0]+q[1]*RT[1]), Y0-S*(q[0]*UP[0]+q[1]*UP[1]+q[2]*UP[2])]; };
+  var C2=camera(cam2,138,580,176), P=C2.P, VIEW=C2.VIEW;
   var sep=0.55*(1-ease(t2));
   cubeFrame(g,P);
   // pyramids are convex and never interpenetrate, so draw whole pyramids far to
@@ -182,7 +207,7 @@ function draw2(){
   });
   if(sep<0.03){ var ap=P(0,0,1); g.appendChild(el('circle',{cx:ap[0],cy:ap[1],r:3.5,fill:'var(--text-primary)'}));
     txt(g,ap[0]+8,ap[1]-8,'tn gl','shared apex',{style:'font-size:12px'}); }
-  var lg=[['violet: base on the bottom (the stack from part 1)','var(--violet-ink)'],['blue: base on a back wall','var(--blue-ink)'],['orange: base on the other back wall','var(--orange-ink)'],['(turned around from part 1, so the shared corner faces you)','var(--text-muted)']];
+  var lg=[['violet: base on the bottom (the stack from part 1)','var(--violet-ink)'],['blue: base on a back wall','var(--blue-ink)'],['orange: base on the other back wall','var(--orange-ink)'],['(it starts turned around from part 1, with the shared corner toward you; drag to turn it)','var(--text-muted)']];
   lg.forEach(function(q,i){ txt(g,20,30+i*20,'tn gl',q[0],{style:'font-size:13px',fill:q[1]}); });
   document.getElementById('rd2').innerHTML=t2<0.05
     ? 'Three copies of the same square pyramid: square base <i>a</i>×<i>a</i>, height <i>a</i>, apex straight above one corner of the base. Press <b>Assemble</b>.'
@@ -207,6 +232,7 @@ function toggle2(){
   });
 })();
 
+draggable('s1',cam1,draw1); draggable('s2',cam2,draw2);
 draw1(); draw2();
 </script>
 </body>
