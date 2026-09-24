@@ -62,6 +62,10 @@ button.main{min-width:84px}
   <span class="klab">weight std &sigma;<sub>w</sub></span>
   <input type="range" id="sw" min="-1" max="0.2" step="any" value="0" oninput="onSigma()" style="flex:2 1 120px;min-width:80px">
   <span class="knum" id="swVal">1.00</span>
+  <div class="seg" id="wdistSeg">
+    <button data-w="gauss" class="on">Gaussian w</button>
+    <button data-w="unif">uniform w (Glorot)</button>
+  </div>
   <div class="seg" id="presetSeg">
     <button data-p="one" class="on">1</button>
     <button data-p="fwd">1/&radic;n</button>
@@ -71,7 +75,7 @@ button.main{min-width:84px}
 </div>
 <div class="rd" id="readout"></div>
 <div id="tex"></div>
-<div class="cap">Weights are Gaussian here, <i>w</i> ~ N(0, &sigma;<sub>w</sub>&sup2;), and so are the inputs <i>x</i> and the upstream gradients &part;L/&part;h, each N(0, 1). Every cell uses the same horizontal scale, &minus;4 to 4, so a wider curve means a bigger variance; tall spikes are clipped at the top. <b>Products are not normal</b>: w&middot;x has variance &sigma;<sub>w</sub>&sup2;&middot;1 but a sharp peak at 0 and heavy tails (its density is a Bessel function, drawn exactly). <b>Sums become normal</b>: adding several independent products gives a curve close to a Gaussian (the central limit theorem), with variance the sum of theirs. Forward, <i>h</i><sub>i</sub> = &Sigma;<sub>j</sub> <i>w</i><sub>ij</sub><i>x</i><sub>j</sub> adds <i>n</i> products. Backward, the chain rule gives &part;L/&part;x<sub>j</sub> = &Sigma;<sub>i</sub> <i>w</i><sub>ij</sub>&part;L/&part;h<sub>i</sub>: column <i>j</i> of <i>W</i>, which is row <i>j</i> of <i>W</i><sup>T</sup>, so it adds <i>m</i> products. The dashed curve on each result is N(0, 1), the spread that went in.</div>
+<div class="cap">Weights are either Gaussian, <i>w</i> ~ N(0, &sigma;<sub>w</sub>&sup2;), or uniform as Glorot &amp; Bengio drew them, on [&minus;<i>a</i>, <i>a</i>] with <i>a</i> = &radic;3&middot;&sigma;<sub>w</sub> so the variance is the same (see <a href="uniform-third.html">why a&sup2;/3</a>); the inputs <i>x</i> and the upstream gradients &part;L/&part;h are N(0, 1). Every cell uses the same horizontal scale, &minus;4 to 4, so a wider curve means a bigger variance; tall spikes are clipped at the top. <b>Products are not normal</b>: w&middot;x has variance &sigma;<sub>w</sub>&sup2;&middot;1 either way, but a sharp peak at 0. With Gaussian w its density is K<sub>0</sub>(|z|/&sigma;<sub>w</sub>)/(&pi;&sigma;<sub>w</sub>), a Bessel function with exponential tails; with uniform w it is E<sub>1</sub>(z&sup2;/2a&sup2;)/(2a&radic;(2&pi;)), an exponential integral whose tails fall off like a Gaussian's, since |w| &le; a. Both are drawn exactly. <b>Sums become normal</b>: adding several independent products gives a curve close to a Gaussian (the central limit theorem), with variance the sum of theirs. Forward, <i>h</i><sub>i</sub> = &Sigma;<sub>j</sub> <i>w</i><sub>ij</sub><i>x</i><sub>j</sub> adds <i>n</i> products. Backward, the chain rule gives &part;L/&part;x<sub>j</sub> = &Sigma;<sub>i</sub> <i>w</i><sub>ij</sub>&part;L/&part;h<sub>i</sub>: column <i>j</i> of <i>W</i>, which is row <i>j</i> of <i>W</i><sup>T</sup>, so it adds <i>m</i> products. The dashed curve on each result is N(0, 1), the spread that went in.</div>
 
 <h2>Stacking layers: the n&middot;Var(W) factor compounds</h2>
 <svg id="lay" viewBox="0 0 900 270" role="img">
@@ -120,17 +124,26 @@ function K0(x){
   return Math.exp(-x)/Math.sqrt(x)*(1.25331414+y*(-0.07832358+y*(0.02189568+y*(-0.01062446+y*(0.00587872+y*(-0.00251540+y*0.00053208))))));
 }
 function prodPdf(z,s){ var a=Math.max(Math.abs(z),s*1e-3); return K0(a/s)/(Math.PI*s); }
+// exponential integral E1 (A&S 5.1.53 series below 1, 5.1.56 rational form above);
+// the product of U[-a, a] and N(0, 1) has density E1(z^2 / 2a^2) / (2a sqrt(2 pi))
+function E1(x){
+  if(x<=1) return -0.57721566-Math.log(x)+x*(0.99999193+x*(-0.24991055+x*(0.05519968+x*(-0.00976004+x*0.00107857))));
+  return Math.exp(-x)/x*(x*x+2.334733*x+0.250621)/(x*x+3.330657*x+1.681534);
+}
+function uniPdf(z,a){ return Math.abs(z)<=a?1/(2*a):0; }
+function uniProdPdf(z,a){ var t=Math.max(z*z/(2*a*a),1e-8); return E1(t)/(2*a*Math.sqrt(2*Math.PI)); }
 
 // ---------- state ----------
 var n=6, m=3, sw=1, mode='fwd', t=0, playing=false, raf=null, last=0, STOP=3;
-var Z=[], X=[], G=[];     // W = sw * Z;  x and the upstream gradient g are N(0,1)
+var Z=[], U=[], X=[], G=[];   // W = sw*Z (Gaussian) or sqrt(3)*sw*U, U uniform on [-1, 1]; x and g are N(0,1)
+var wdist='gauss';
 function resample(){
-  Z=[]; for(var i=0;i<5;i++){ Z.push([]); for(var j=0;j<6;j++) Z[i].push(randn()); }
+  Z=[]; U=[]; for(var i=0;i<5;i++){ Z.push([]); U.push([]); for(var j=0;j<6;j++){ Z[i].push(randn()); U[i].push(2*Math.random()-1); } }
   X=[]; for(var j2=0;j2<6;j2++) X.push(randn());
   G=[]; for(var i2=0;i2<5;i2++) G.push(randn());
   draw();
 }
-function W(i,j){ return sw*Z[i][j]; }
+function W(i,j){ return wdist==='gauss'?sw*Z[i][j]:Math.sqrt(3)*sw*U[i][j]; }
 function beats(){ return mode==='bwd'?4:3; }
 var PH={fwd:['deal x onto the columns','multiply each cell','add each row'],
         bwd:['transpose W','deal ∂L/∂h onto the columns','multiply each cell','add each row']};
@@ -145,12 +158,20 @@ function cell(g, x, y, dist, val, color, op, ghost, dist2, val2, color2, mix){
   var px=function(z){ return x+5+(z+XR)/(2*XR)*(CW-10); };
   function path(pdf){
     var d='';
-    for(var k=0;k<=56;k++){ var z=-XR+2*XR*k/56, yy=base-Math.min(H,pdf(z)*sc); d+=(k?'L':'M')+px(z).toFixed(1)+','+yy.toFixed(1); }
+    var zs=[]; for(var k=0;k<=56;k++) zs.push(-XR+2*XR*k/56);
+    if(pdf.edge) [-1,1].forEach(function(sg){ var e=sg*pdf.edge; if(Math.abs(e)<XR) zs.push(e-1e-6,e+1e-6); });
+    zs.sort(function(a,b){ return a-b; });
+    zs.forEach(function(z,k){ var yy=base-Math.min(H,pdf(z)*sc); d+=(k?'L':'M')+px(z).toFixed(1)+','+yy.toFixed(1); });
     return d;
   }
   if(ghost) gg.appendChild(el('path',{d:path(function(z){ return gaussPdf(z,1); }),fill:'none',stroke:'var(--text-muted)','stroke-width':1,'stroke-dasharray':'2 2'}));
   // a second density (dist2) crossfades in as mix goes 0 -> 1; the number switches halfway
-  var pdfOf=function(D){ return D.k==='p'?function(z){ return prodPdf(z,D.s); }:function(z){ return gaussPdf(z,D.s); }; };
+  var pdfOf=function(D){
+    if(D.k==='p') return function(z){ return prodPdf(z,D.s); };
+    if(D.k==='q') return function(z){ return uniProdPdf(z,D.s); };
+    if(D.k==='u'){ var f=function(z){ return uniPdf(z,D.s); }; f.edge=D.s; return f; }
+    return function(z){ return gaussPdf(z,D.s); };
+  };
   mix=dist2?mix:0;
   [[dist,val,color,1-mix],[dist2,val2,color2,mix]].forEach(function(q){
     if(!q[0]||q[3]<0.01) return;
@@ -193,7 +214,8 @@ function draw(){
   };
   for(var i=0;i<R;i++) for(var j=0;j<C;j++){
     var p=cellPos(i,j), w=Mv(i,j), prod=w*V[j], fade=1-cl((eA-0.75)/0.25);
-    cell(g,p[0],p[1],{k:'g',s:sw},w,wCol,fade,false,{k:'p',s:sw},prod,'var(--pink-ink)',eM);
+    var wD=wdist==='gauss'?{k:'g',s:sw}:{k:'u',s:Math.sqrt(3)*sw}, pD=wdist==='gauss'?{k:'p',s:sw}:{k:'q',s:Math.sqrt(3)*sw};
+    cell(g,p[0],p[1],wD,w,wCol,fade,false,pD,prod,'var(--pink-ink)',eM);
   }
   // --- the vector: stands to the right, then is dealt one entry per column ---
   for(var j2=0;j2<C;j2++){
@@ -233,7 +255,7 @@ function readout(k){
               :'<b>Forward.</b> Each of the '+m+' outputs of h = Wx is a row of W times x: '+n+' products added up.';
   else if(bwd&&k===0) s='W flips across its diagonal: its '+n+' columns become the rows of Wᵀ, because ∂L/∂x<sub>j</sub> collects every output that x<sub>j</sub> fed, and those are the entries of column j of W.';
   else if(step===0) s='The vector turns and deals one entry to each of the '+C+' columns, exactly as in an ordinary matrix product.';
-  else if(step===1) s='Every cell becomes a product of two independent zero-mean random numbers. Its variance is the product of theirs, σ_w²·1 = '+f2(sw*sw)+', but it is <b>not</b> normal: a sharp spike at 0 with heavy tails.';
+  else if(step===1) s='Every cell becomes a product of two independent zero-mean random numbers. Its variance is the product of theirs, σ_w²·1 = '+f2(sw*sw)+', but it is <b>not</b> normal: a sharp spike at 0'+(wdist==='gauss'?' with heavy tails.':', on a Gaussian-like skirt (|w| ≤ a caps how far it reaches).')+'';
   else if(t<beats()) s='Each row adds its '+C+' products. Independent variances add, so the sum has variance '+C+'·'+f2(sw*sw)+' = '+f2(C*sw*sw)+', and the sum looks normal again.';
   else s='<b>Result:</b> each entry has variance '+C+'·σ_w² = <b>'+f2(C*sw*sw)+'</b> times what went in. Set σ_w = 1/√'+C+' and the green curves match the dashed input curves exactly.';
   document.getElementById('readout').innerHTML=s;
@@ -270,6 +292,12 @@ function applyPreset(p){
   sw=p==='one'?1:p==='fwd'?1/Math.sqrt(n):p==='bwd'?1/Math.sqrt(m):Math.sqrt(2/(n+m));
   document.getElementById('sw').value=Math.log10(sw); showSw(); markPreset(p); draw();
 }
+document.getElementById('wdistSeg').addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b) return;
+  wdist=b.dataset.w;
+  Array.from(this.children).forEach(function(x){ x.classList.toggle('on',x===b); });
+  draw();
+});
 document.getElementById('presetSeg').addEventListener('click',function(e){ var b=e.target.closest('button'); if(b) applyPreset(b.dataset.p); });
 function onShape(){
   n=+document.getElementById('n').value; m=+document.getElementById('m').value;
