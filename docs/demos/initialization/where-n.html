@@ -211,7 +211,7 @@ function draw(){
   // gradient flows, with its result on the left: dL/dx = W^T dL/dh
   var oy=Math.max(TOP,CY-R*CH/2), ox, vx, rx;
   if(!bwd){ ox=70; vx=ox+n*CW+46; rx=vx+CW+74; }
-  else { rx=190; ox=rx+CW+74; vx=ox+lerp(Math.max(n,m),C,eT)*CW+46; }   // v clears W before the transpose, then closes up beside W^T
+  else { rx=190; ox=rx+CW+74; vx=ox+lerp(Math.max(n,m),C,ease(cl((tT-0.9)/0.1)))*CW+46; }   // waits for W's last column to land   // v clears W before the transpose, then closes up beside W^T
   var vy0=CY-C*CH/2;                                   // v stands as a column to M's right
   // --- matrix cells ---
   var cellPos=function(i,j){                             // where cell (i,j) of M sits, with transpose and add motions
@@ -250,6 +250,9 @@ function draw(){
   // --- labels ---
   var lab=function(x,y,s,c,op,anchor){ if(op>0.02) txt(g,x,y,'ts gl',s,{'text-anchor':anchor||'middle',opacity:op.toFixed(2),fill:c,style:'font-weight:600'}); };
   if(bwd&&eT<1){ var oyW=Math.max(TOP,CY-m*CH/2); lab(ox+n*CW/2,oyW+m*CH+22,'W  ('+m+'×'+n+')',wCol,1-eT); }
+  // before the transpose, a superscript T hangs on W's top-right corner, and fades
+  // as the transpose it stands for is carried out
+  if(bwd&&eT<1){ var oyT=Math.max(TOP,CY-m*CH/2); txt(g,ox+n*CW+4,oyT+14,'ts gl','T',{style:'font-size:30px;font-weight:600;font-style:italic;fill:'+wCol,opacity:(1-eT).toFixed(2)}); }
   lab(ox+C*CW/2,oy+R*CH+22,MName+'  ('+R+'×'+C+')',wCol,Math.max(eT*(1-eA),eR));
   lab(vx+CW/2,vy0+C*CH+22,vName+'  ('+C+')',vCol,Math.max(1-eD,eR));
   lab(ox+C*CW/2,oy-CH-24,vName+', one entry per column',vCol,eD*(1-eA));
