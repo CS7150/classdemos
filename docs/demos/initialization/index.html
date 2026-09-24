@@ -51,21 +51,32 @@ footer a{color:var(--text-secondary)}
   <p class="eyebrow">Northeastern University &middot; CS 7150 &middot; Fall 2026</p>
   <h1>Initialization, explained</h1>
   <p>Four interactive pieces on <a href="https://proceedings.mlr.press/v9/glorot10a/glorot10a.pdf">Glorot &amp; Bengio 2010</a>:
-     why a deep network's signal can vanish or blow up depending on nothing but the scale of its
-     weights, why that same scale controls how much of the backward gradient survives saturation,
+     first, what the failure actually looks like while a real network trains; then why a deep
+     network's signal can vanish or blow up depending on nothing but the scale of its weights,
+     why that same scale controls how much of the backward gradient survives saturation, and
      why forward and backward stability pull the initialization variance in different directions
-     when a layer isn't square, and &mdash; instead of just the theory &mdash; what the failure
-     actually looks like while a real network trains.</p>
+     when a layer isn't square.</p>
 </header>
 
 <ol class="qs">
+
+<li class="done">
+  <div class="qtag">The failure, in practice</div>
+  <h2><a href="training-failure.html">Bad init, watched training</a></h2>
+  <p class="what">Not just the theory &mdash; a real 6-layer tanh network training live on two
+     moons with plain gradient descent. Too-small init and the loss barely moves; too-big init
+     and units saturate immediately and the boundary stays near its random start; Xavier trains
+     cleanly. Decision boundary, loss curve, and per-layer activation histograms (or the
+     whole network drawn neuron by neuron, weight by weight), all updating together.</p>
+  <a class="go" href="training-failure.html">Open the explainer &rarr;</a>
+</li>
 
 <li class="done">
   <div class="qtag">The mechanism</div>
   <h2><a href="depth-init.html">Depth, activation, and initialization</a></h2>
   <p class="what">Watch a signal spread through a network of adjustable depth &mdash; the core
      empirical result the paper opens with, color-coded against the same saturated/responsive
-     split as the demo below, so you can watch the saturated fraction compound layer over layer.</p>
+     split as the saturation demo, so you can watch the saturated fraction compound layer over layer.</p>
   <a class="go" href="depth-init.html">Open the explainer &rarr;</a>
 </li>
 
@@ -86,16 +97,6 @@ footer a{color:var(--text-secondary)}
      backward-only Xavier satisfy both &mdash; and see why Glorot's averaged formula is the
      compromise that bounds the damage either way.</p>
   <a class="go" href="variance-balance.html">Open the explainer &rarr;</a>
-</li>
-
-<li class="done">
-  <div class="qtag">The failure, in practice</div>
-  <h2><a href="training-failure.html">Bad init, watched training</a></h2>
-  <p class="what">Not just the theory &mdash; a real 6-layer tanh network training live on two
-     moons with plain gradient descent. Too-small init and the loss barely moves; too-big init
-     and units saturate immediately and the boundary stays near its random start; Xavier trains
-     cleanly. Decision boundary, loss curve, and layer-wise activation std, all updating together.</p>
-  <a class="go" href="training-failure.html">Open the explainer &rarr;</a>
 </li>
 
 </ol>
