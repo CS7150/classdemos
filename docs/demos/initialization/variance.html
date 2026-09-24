@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Variance, and n·Var(W)</title>
-<meta name="description" content="What variance is (an average square), the four algebra rules that make it useful, and why they give Var(h) = n·Var(W)·Var(x), so standard initialization's n·Var(W) = 1/3 shrinks the signal threefold per layer.">
+<title>Variance, and its rules</title>
+<meta name="description" content="What variance is (an average square), and the four algebra rules that make it easy to push through a layer, ending in Var(h) = n·Var(W)·Var(x).">
 <link rel="stylesheet" href="../demo.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
@@ -31,8 +31,8 @@ button,select{height:30px;font-size:13px;padding:0 9px}
 </head>
 <body>
 <div class="nav"><a href="./">&larr; Initialization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
-<h1>Variance, and n&middot;Var(W)<span>: why standard init shrinks the signal</span></h1>
-<p class="quiz">Glorot &amp; Bengio note that the standard initialization gives <i>n</i>&middot;Var(<i>W</i>) = 1/3. This page builds up what that means: what variance is, the four rules that make it easy to push through a layer, and how they turn one layer into &ldquo;multiply the variance by <i>n</i>&middot;Var(<i>W</i>).&rdquo;</p>
+<h1>Variance<span>: an average square, and four rules</span></h1>
+<p class="quiz">Glorot &amp; Bengio note that the standard initialization gives <i>n</i>&middot;Var(<i>W</i>) = 1/3. To see what that means we need what variance is, and the four rules that make it easy to push through a layer; together they turn one layer into &ldquo;multiply the variance by <i>n</i>&middot;Var(<i>W</i>).&rdquo;</p>
 
 <h2>1. Variance is an average square</h2>
 <svg id="sq" viewBox="0 0 900 270" role="img">
@@ -50,23 +50,7 @@ button,select{height:30px;font-size:13px;padding:0 9px}
 <h2>2. Four rules</h2>
 <div class="rules" id="rules"></div>
 
-<h2>3. One layer is a sum of n products</h2>
-<svg id="lay" viewBox="0 0 900 270" role="img">
-  <desc>Left: histograms of the inputs x and of one pre-activation h, the sum of n weight-times-input products. Right: the variance after each of eight layers on a log scale, predicted and measured through real tanh layers.</desc>
-  <g id="glay"></g>
-</svg>
-<div class="row">
-  <div class="seg" id="schemeSeg">
-    <button data-s="std" class="on">standard: Var(W) = 1/(3n)</button>
-    <button data-s="xav">Glorot, square layer: Var(W) = 1/n</button>
-  </div>
-  <span class="klab">n (fan-in)</span>
-  <input type="range" id="n" min="1" max="8" step="1" value="6" oninput="drawLay()" style="flex:0 1 150px;min-width:80px">
-  <span class="knum" id="nVal">64</span>
-  <button onclick="drawLay()">Resample</button>
-</div>
-<div class="rd" id="rdLay"></div>
-<div class="cap">Inputs <i>x</i><sub>i</sub> ~ N(0, 1); weights uniform on [&minus;<i>a</i>, <i>a</i>] with <i>a</i> = 1/&radic;<i>n</i> (standard) or &radic;(3/<i>n</i>) (Glorot with <i>n</i><sub>in</sub> = <i>n</i><sub>out</sub> = <i>n</i>); see <a href="uniform-init.html">standard vs. normalized init</a> for why a uniform on [&minus;<i>a</i>, <i>a</i>] has variance <i>a</i>&sup2;/3. The dashed line on the right is the rule-5 prediction (<i>n</i>&middot;Var(<i>W</i>))<sup>L</sup>, which assumes tanh(<i>h</i>) &asymp; <i>h</i>; the bars push 400 inputs through real width-<i>n</i> tanh layers, drawing fresh weights at every layer. Backprop obeys the same rule, with <i>n</i><sub>out</sub> in place of <i>n</i><sub>in</sub>, which is where the <a href="variance-balance.html">forward vs. backward</a> compromise comes from.</div>
+<div class="cap">Rule 5 is where the <i>n</i> in <i>n</i>&middot;Var(<i>W</i>) comes from, and the next page, <a href="where-n.html">where the n comes from</a>, animates it: a matrix product of random numbers, forward (<i>n</i> terms per output) and backward (<i>m</i> terms per input gradient), then several layers stacked. Why a uniform on [&minus;<i>a</i>, <i>a</i>] has variance <i>a</i>&sup2;/3 has <a href="uniform-third.html">its own page</a>.</div>
 
 <script>
 var NS='http://www.w3.org/2000/svg';
@@ -129,7 +113,7 @@ var RULES=[
   ['\\mathrm{Var}(WX)=\\mathrm{Var}(W)\\,\\mathrm{Var}(X)','For independent W, X with mean 0: E[W²X²] = E[W²]E[X²].'],
   null,
   ['\\mathrm{Var}\\Big(\\sum_{i=1}^{n}W_iX_i\\Big)=n\\,\\mathrm{Var}(W)\\,\\mathrm{Var}(X)','A pre-activation h is a sum of n independent products: rule 4 inside each term, rule 3 across the n terms. So one layer multiplies the variance by n·Var(W).'],
-  ['\\text{standard: }\\mathrm{Var}(W)=\\tfrac{1}{3n}\\;\\Rightarrow\\; n\\,\\mathrm{Var}(W)=\\tfrac13','W uniform on [−1/√n, 1/√n] has variance (1/√n)²/3 = 1/(3n). So each layer cuts the variance to a third (while tanh(h) ≈ h): after L layers, 3⁻ᴸ. Below, see it happen.']
+  ['\\text{standard: }\\mathrm{Var}(W)=\\tfrac{1}{3n}\\;\\Rightarrow\\; n\\,\\mathrm{Var}(W)=\\tfrac13','W uniform on [−1/√n, 1/√n] has variance (1/√n)²/3 = 1/(3n). So each layer cuts the variance to a third (while tanh(h) ≈ h): after L layers, 3⁻ᴸ.']
 ];
 (function(){
   var box=document.getElementById('rules');
@@ -141,72 +125,7 @@ var RULES=[
   });
 })();
 
-// ---------- 3. one layer, then eight ----------
-var scheme='std';
-document.getElementById('schemeSeg').addEventListener('click',function(e){
-  var b=e.target.closest('button'); if(!b) return;
-  scheme=b.dataset.s;
-  Array.from(this.children).forEach(function(x){ x.classList.toggle('on',x===b); });
-  drawLay();
-});
-function halfWidth(n){ return scheme==='std'?1/Math.sqrt(n):Math.sqrt(3/n); }
-function drawLay(){
-  var n=Math.pow(2,parseInt(document.getElementById('n').value,10));
-  document.getElementById('nVal').textContent=n;
-  var a=halfWidth(n), varW=a*a/3, gain=n*varW;
-  var uw=function(){ return (2*Math.random()-1)*a; };
-  // one layer: h = sum of n products, many times
-  var M=4000, xs=[], hs=[];
-  for(var s=0;s<M;s++){ var h=0; for(var i=0;i<n;i++){ var x=randn(); if(i===0) xs.push(x); h+=uw()*x; } hs.push(h); }
-  var vr=function(A){ var m=0; A.forEach(function(v){m+=v;}); m/=A.length; var q=0; A.forEach(function(v){q+=(v-m)*(v-m);}); return q/A.length; };
-  var vx=vr(xs), vh=vr(hs);
-  // eight real tanh layers of width n
-  var P=400, depth=8, act=[], varsL=[];
-  for(var p=0;p<P;p++){ var v=[]; for(var i2=0;i2<n;i2++) v.push(randn()); act.push(v); }
-  varsL.push(vr([].concat.apply([],act)));
-  for(var l=1;l<=depth;l++){
-    var Wl=[]; for(var o=0;o<n;o++){ var row=[]; for(var i3=0;i3<n;i3++) row.push(uw()); Wl.push(row); }
-    act=act.map(function(v){ return Wl.map(function(row){ var h=0; for(var i4=0;i4<n;i4++) h+=row[i4]*v[i4]; return Math.tanh(h); }); });
-    varsL.push(vr([].concat.apply([],act)));
-  }
-  var g=document.getElementById('glay'); g.innerHTML='';
-  // left: histograms
-  var HX0=40, HW=380, HY0=30, HH=190, R=4, bins=48;
-  var hx=function(v){ return HX0+(v+R)/(2*R)*HW; };
-  function hist(A){ var c=new Array(bins).fill(0); A.forEach(function(v){ var b=Math.floor((v+R)/(2*R)*bins); if(b>=0&&b<bins) c[b]++; }); return c.map(function(k){ return k/A.length/(2*R/bins); }); }
-  var cx=hist(xs), ch=hist(hs), top=Math.max(Math.max.apply(null,cx),Math.max.apply(null,ch))*1.08;
-  var hy=function(d){ return HY0+HH-d/top*HH; };
-  g.appendChild(el('line',{x1:HX0,y1:HY0+HH,x2:HX0+HW,y2:HY0+HH,stroke:'var(--border-strong)','stroke-width':1}));
-  [[cx,'var(--text-muted)',0.35],[ch,'var(--blue)',0.5]].forEach(function(q){
-    q[0].forEach(function(d,b){ if(d>0) g.appendChild(el('rect',{x:HX0+b*HW/bins+0.3,y:hy(d),width:HW/bins-0.6,height:HY0+HH-hy(d),fill:q[1],opacity:q[2]})); });
-  });
-  for(var t=-4;t<=4;t+=2) txt(g,hx(t),HY0+HH+15,'tn',String(t),{'text-anchor':'middle',style:'font-size:11px'});
-  txt(g,HX0,HY0-12,'ts gl','one layer: inputs x (gray) → h = Σᵢ wᵢxᵢ (blue)');
-  txt(g,HX0+HW,HY0+8,'num gl','Var(x) = '+f2(vx),{'text-anchor':'end',style:'font-size:12.5px',fill:'var(--text-secondary)'});
-  txt(g,HX0+HW,HY0+24,'num gl','Var(h) = '+f2(vh),{'text-anchor':'end',style:'font-size:12.5px;font-weight:600',fill:'var(--blue-ink)'});
-  // right: variance per layer, log scale
-  var BX0=520, BW=360, BY0=30, BH=190, LMIN=-5, LMAX=0.5;
-  var by=function(v){ var lg=Math.log10(Math.max(v,1e-9)); lg=Math.max(LMIN,Math.min(LMAX,lg)); return BY0+BH-(lg-LMIN)/(LMAX-LMIN)*BH; };
-  txt(g,BX0,BY0-12,'ts gl','Var after L layers (log scale)');
-  [[1,'1'],[1e-1,'0.1'],[1e-2,'0.01'],[1e-3,'10⁻³'],[1e-4,'10⁻⁴'],[1e-5,'10⁻⁵']].forEach(function(q){
-    g.appendChild(el('line',{x1:BX0,y1:by(q[0]),x2:BX0+BW,y2:by(q[0]),stroke:'var(--border)','stroke-width':0.7,'stroke-dasharray':q[0]===1?'':'3 3'}));
-    txt(g,BX0-6,by(q[0])+4,'tn gl',q[1],{'text-anchor':'end',style:'font-size:11px'});
-  });
-  var colW=BW/(depth+1), pts=[];
-  varsL.forEach(function(v,l){
-    var x=BX0+l*colW;
-    g.appendChild(el('rect',{x:x+colW*0.2,y:by(v),width:colW*0.6,height:BY0+BH-by(v),fill:'var(--green)',opacity:0.6}));
-    txt(g,x+colW/2,BY0+BH+15,'tn',String(l),{'text-anchor':'middle',style:'font-size:11px'});
-    pts.push((x+colW/2)+','+by(varsL[0]*Math.pow(gain,l)));
-  });
-  g.appendChild(el('polyline',{points:pts.join(' '),fill:'none',stroke:'var(--text-primary)','stroke-width':1.4,'stroke-dasharray':'5 4'}));
-  txt(g,BX0+BW,BY0+BH+30,'tn','layer L',{'text-anchor':'end',style:'font-size:11.5px'});
-  txt(g,BX0+BW,BY0+8,'tn gl','bars: real tanh layers · dashed: (n·Var W)ᴸ',{'text-anchor':'end',style:'font-size:11.5px'});
-  document.getElementById('rdLay').innerHTML='n = '+n+', Var(W) = a²/3 = '+f2(varW)+', so <b>n·Var(W) = '+f2(gain)+'</b>: predicted Var(h) = '+f2(gain)+' × Var(x) = <b class="num">'+f2(gain*vx)+'</b>, measured <b class="num">'+f2(vh)+'</b>. '+
-    'After 8 layers: predicted '+f2(varsL[0]*Math.pow(gain,8))+', measured through tanh '+f2(varsL[8])+'.';
-}
-
-resampleSq(); drawLay();
+resampleSq();
 </script>
 </body>
 </html>

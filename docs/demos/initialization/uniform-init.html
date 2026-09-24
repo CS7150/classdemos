@@ -37,7 +37,13 @@ button{height:30px;font-size:13px;padding:0 9px}
 <h2>Why a uniform on [&minus;a, a] has variance a&sup2;/3</h2>
 <div class="deriv">
   <div id="derivTex"></div>
-  <div class="w"><b>Algebraically</b>: the mean is 0, so the variance is the average of <i>w</i>&sup2; over the interval, an integral divided by the width 2<i>a</i>.<br><b>Geometrically</b>: that average is the mean height of the parabola <i>y</i> = <i>w</i>&sup2; over [&minus;<i>a</i>, <i>a</i>] (right-hand panels below). The parabola fills exactly 1/3 of its <i>a</i>&sup2;-tall bounding box (Archimedes), so its mean height is <i>a</i>&sup2;/3: the dashed line, where the rectangle of the same area would stand.</div>
+  <div class="w">The variance is the average of <i>w</i>&sup2; over the interval. <a href="uniform-third.html">Its own page</a> shows why that average is a third of the biggest square: stack the squares and they make a pyramid, and three such pyramids fill a cube. The right-hand panels below show the same fact as Archimedes did: the area under the parabola <i>y</i> = <i>w</i>&sup2; is 1/3 of its bounding box, so its mean height is <i>a</i>&sup2;/3.</div>
+</div>
+
+<h2>Where the standard init's 1/3 comes from</h2>
+<div class="deriv">
+  <div id="thirdTex"></div>
+  <div class="w">The standard init uses 1/&radic;<i>n</i> as the uniform's <b>half-width</b>, not its standard deviation. A uniform's standard deviation is only <i>a</i>/&radic;3 &asymp; 0.58<i>a</i> of its half-width, so the weights come out &radic;3 too narrow and <i>n</i>&middot;Var(<i>W</i>) = 1/3. Had 1/&radic;<i>n</i> been the standard deviation (say, of a Gaussian, as LeCun et al. recommended in 1998), <i>n</i>&middot;Var(<i>W</i>) would be 1 and the 1/3 would be gone. It is also where the &radic;6 in the normalized init comes from: to reach a variance of 2/(<i>n</i><sub>in</sub> + <i>n</i><sub>out</sub>), the half-width must be &radic;3 times that standard deviation, and &radic;3&middot;&radic;2 = &radic;6.</div>
 </div>
 
 <div class="row">
@@ -61,6 +67,8 @@ function el(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attrs
 function txt(g,x,y,cls,str,attrs){ var t=el('text',Object.assign({x:x,y:y,class:cls},attrs||{})); t.textContent=str; g.appendChild(t); return t; }
 function f3(v){ return v>=0.01?v.toFixed(v>=1?2:3):v.toExponential(2); }
 
+katex.render('\\text{standard: } a=\\tfrac{1}{\\sqrt n}\\;\\Rightarrow\\;\\mathrm{Var}(W)=\\tfrac{a^2}{3}=\\tfrac{1}{3n},\\qquad \\text{Gaussian, std }\\tfrac{1}{\\sqrt n}\\;\\Rightarrow\\;\\mathrm{Var}(W)=\\tfrac{1}{n}',
+  document.getElementById('thirdTex'),{throwOnError:false,displayMode:true});
 katex.render('\\mathrm{Var}(W)=\\mathbb{E}[W^2]=\\frac{1}{2a}\\int_{-a}^{a}w^2\\,dw=\\frac{1}{2a}\\cdot\\frac{2a^3}{3}=\\frac{a^2}{3}',
   document.getElementById('derivTex'),{throwOnError:false,displayMode:true});
 

@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Why a uniform has variance a²/3</title>
+<meta name="description" content="The variance of a uniform on [-a, a] is its average square. Stack the squares and they form a pyramid in an a-by-a-by-a box, and three such pyramids fill the box, so the average square is a²/3.">
+<link rel="stylesheet" href="../demo.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<style>
+body{gap:6px;padding:11px 16px 24px;max-width:1100px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+h2{font-size:16px;font-weight:600;margin:14px 0 0;letter-spacing:-.005em}
+.quiz{margin:0}
+svg{max-height:none}
+.row{gap:7px}
+button{height:30px;font-size:13px;padding:0 9px}
+button.main{min-width:84px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:auto}
+.rd{font-size:14px;line-height:1.5;min-height:1.5em}
+.cap{font-size:12.5px;line-height:1.5;padding-top:4px}
+.nav{display:flex;align-items:baseline;gap:10px}
+.alg{display:flex;flex-direction:column;gap:6px;font-size:16px;overflow-x:auto}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Initialization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Why a uniform has variance a&sup2;/3<span>: stack the squares</span></h1>
+<p class="quiz">The <a href="variance.html">variance</a> of a zero-mean <i>W</i> is its average square, E[<i>W</i>&sup2;]. For <i>W</i> uniform on [&minus;<i>a</i>, <i>a</i>], the sign doesn't change the square, so we need the average of <i>w</i>&sup2; for <i>w</i> spread evenly over [0, <i>a</i>]. The answer is a third of the biggest square, <i>a</i>&sup2;/3, and here is the picture of why.</p>
+
+<h2>1. Stack the squares into a pyramid</h2>
+<svg id="s1" viewBox="0 0 900 340" role="img">
+  <desc>Left: k values spread evenly over zero to a, each the side of a square anchored at zero, drawn nested. Right: the same squares in 3D, lifted into a stack with the largest at the bottom, forming a staircase pyramid inside an a by a by a box.</desc>
+  <g id="g1"></g>
+</svg>
+<div class="row">
+  <button class="main" id="play1" onclick="toggle1()">Stack</button>
+  <input type="range" id="t1" min="0" max="100" step="1" value="0" oninput="t1=+this.value/100; stop1(); draw1()" style="flex:2 1 160px;min-width:100px">
+  <span class="klab">k squares</span>
+  <input type="range" id="k" min="2" max="40" step="1" value="8" oninput="draw1()" style="flex:1 1 120px;min-width:80px">
+  <span class="knum" id="kVal">8</span>
+</div>
+<div class="rd" id="rd1"></div>
+
+<h2>2. Three such pyramids fill the box</h2>
+<svg id="s2" viewBox="0 0 900 360" role="img">
+  <desc>Three congruent square pyramids, violet, blue and orange, each with a face of the cube as its base and all sharing the cube's back top corner as their apex, sliding together to fill the cube.</desc>
+  <g id="g2"></g>
+</svg>
+<div class="row">
+  <button class="main" id="play2" onclick="toggle2()">Assemble</button>
+  <input type="range" id="t2" min="0" max="100" step="1" value="0" oninput="t2=+this.value/100; stop2(); draw2()" style="flex:2 1 160px;min-width:100px">
+</div>
+<div class="rd" id="rd2"></div>
+
+<h2>3. The same thing in algebra</h2>
+<div class="alg" id="alg"></div>
+<div class="cap">The stacked pyramid in part 1 is exactly the violet one in part 2: at height <i>z</i> its cross-section is the square of side <i>a</i> &minus; <i>z</i>, which is the set of points whose distance to the back wall in both directions is at most <i>a</i> &minus; <i>z</i>. The blue and orange pyramids are the same shape turned onto the cube's other two faces, and every point of the cube lands in one of the three, according to whether <i>a</i> &minus; <i>z</i>, <i>x</i>, or <i>y</i> is the largest of the three. So each is a third of the cube, and the average square is <i>a</i>&sup2;/3. With <i>k</i> evenly spaced values the stack is a staircase, a little bigger than the pyramid at every step, and its average is 1/3 &minus; 1/(12<i>k</i>&sup2;) of <i>a</i>&sup2;; the sum and the integral agree in the limit. For initialization this is the whole story of the 1/3: the standard init takes <i>a</i> = 1/&radic;<i>n</i>, so Var(<i>W</i>) = 1/(3<i>n</i>); see <a href="uniform-init.html">standard vs. normalized init</a>. (Archimedes' version of the same fact: the area under a parabola <i>y</i> = <i>w</i>&sup2; is a third of its bounding box.)</div>
+
+<script>
+var NS='http://www.w3.org/2000/svg';
+function el(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attrs)e.setAttribute(k,attrs[k]);return e;}
+function txt(g,x,y,cls,str,attrs){ var t=el('text',Object.assign({x:x,y:y,class:cls},attrs||{})); t.textContent=str; g.appendChild(t); return t; }
+function cl(v){ return Math.max(0,Math.min(1,v)); }
+function ease(f){ return f<0.5?2*f*f:1-Math.pow(-2*f+2,2)/2; }
+function lerp(a,b,f){ return a+(b-a)*f; }
+function poly(g,pts,attrs){ g.appendChild(el('polygon',Object.assign({points:pts.map(function(p){ return p[0].toFixed(1)+','+p[1].toFixed(1); }).join(' ')},attrs))); }
+
+// isometric projection with z up; the unit is a
+function isoMaker(X0,Y0,S){ return function(x,y,z){ return [X0+(x-y)*0.866*S, Y0+(x+y)*0.5*S-z*S]; }; }
+function cubeFrame(g,P,dash){
+  var V=[[0,0,0],[1,0,0],[1,1,0],[0,1,0],[0,0,1],[1,0,1],[1,1,1],[0,1,1]];
+  [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]].forEach(function(e){
+    var p=P.apply(null,V[e[0]]), q=P.apply(null,V[e[1]]);
+    g.appendChild(el('line',{x1:p[0],y1:p[1],x2:q[0],y2:q[1],stroke:'var(--border-strong)','stroke-width':1,'stroke-dasharray':dash||'4 3'}));
+  });
+}
+
+// ---------- part 1 ----------
+var t1=0, playing1=false, raf1=null, last1=0;
+function draw1(){
+  var k=+document.getElementById('k').value; document.getElementById('kVal').textContent=k;
+  document.getElementById('t1').value=Math.round(t1*100);
+  var g=document.getElementById('g1'); g.innerHTML='';
+  var e=ease(t1), sides=[];
+  for(var i=0;i<k;i++) sides.push((k-i-0.5)/k);            // largest first: the bottom of the stack
+  // left: nested squares on the number line
+  var L0=40, U=250, LY=300;
+  txt(g,L0,26,'ts gl','k = '+k+' values spread evenly over [0, a]');
+  sides.forEach(function(s,i){
+    var hot=e>0&&e<1&&Math.abs((i+0.5)/k-e)<0.5/k;
+    g.appendChild(el('rect',{x:L0,y:LY-s*U,width:s*U,height:s*U,fill:'var(--violet)',opacity:hot?0.35:0.07,stroke:'var(--violet-ink)','stroke-width':hot?1.8:0.7}));
+  });
+  g.appendChild(el('line',{x1:L0,y1:LY,x2:L0+U+10,y2:LY,stroke:'var(--border-strong)','stroke-width':1.2}));
+  sides.forEach(function(s){ g.appendChild(el('circle',{cx:L0+s*U,cy:LY,r:k>20?1.8:3,fill:'var(--violet-ink)'})); });
+  txt(g,L0,LY+16,'tn','0',{'text-anchor':'middle',style:'font-size:12px'});
+  txt(g,L0+U,LY+16,'tn','a',{'text-anchor':'middle',style:'font-size:12px;font-style:italic'});
+  txt(g,L0+U/2,LY+30,'tn','each value w is the side of a square of area w²',{'text-anchor':'middle',style:'font-size:12px'});
+  // right: the same squares lifted into a stack
+  var P=isoMaker(640,168,138);
+  cubeFrame(g,P);
+  var th=1/k;
+  sides.forEach(function(s,i){
+    var z0=lerp(0,i*th,e), z1=z0+lerp(0.004,th,e);
+    var top=[P(0,0,z1),P(s,0,z1),P(s,s,z1),P(0,s,z1)];
+    var fx=[P(s,0,z0),P(s,s,z0),P(s,s,z1),P(s,0,z1)];
+    var fy=[P(0,s,z0),P(s,s,z0),P(s,s,z1),P(0,s,z1)];
+    var sw=k>20?0.4:0.8;
+    poly(g,fx,{fill:'var(--violet)',opacity:0.55,stroke:'var(--violet-ink)','stroke-width':sw});
+    poly(g,fy,{fill:'var(--violet)',opacity:0.4,stroke:'var(--violet-ink)','stroke-width':sw});
+    poly(g,top,{fill:'var(--violet)',opacity:0.28,stroke:'var(--violet-ink)','stroke-width':sw});
+  });
+  if(e>0.99){   // the smooth pyramid the staircase approaches
+    [[[0,0,1],[1,0,0]],[[0,0,1],[1,1,0]],[[0,0,1],[0,1,0]]].forEach(function(q){
+      var p=P.apply(null,q[0]), r=P.apply(null,q[1]);
+      g.appendChild(el('line',{x1:p[0],y1:p[1],x2:r[0],y2:r[1],stroke:'var(--text-primary)','stroke-width':1.2,'stroke-dasharray':'5 3'}));
+    });
+  }
+  var c=P(1,1,0); txt(g,c[0]+8,c[1]+6,'tn gl','a × a × a box',{style:'font-size:12px'});
+  var hz=P(0,0,1); txt(g,hz[0]-8,hz[1]-6,'tn gl','height a',{'text-anchor':'end',style:'font-size:12px'});
+  var avg=(4*k*k-1)/(12*k*k);
+  var h;
+  if(e<0.05) h='The average of these <b>'+k+'</b> squares is the variance. Press <b>Stack</b>: each square lies flat, and they pile up, the biggest at the bottom.';
+  else if(e<0.99) h='Each square becomes a slab <b>a/'+k+'</b> thick, so the '+k+' slabs reach exactly height <i>a</i>.';
+  else h='The stack\'s volume is (sum of the areas) × a/'+k+', so <b>average area = volume ÷ height a</b>. The stack fills <b>'+avg.toFixed(4)+'</b> of the a×a×a box, so the average square is '+avg.toFixed(4)+'·a². Slide k up: the staircase smooths into the dashed pyramid, and the fraction closes in on <b>1/3</b>.';
+  document.getElementById('rd1').innerHTML=h;
+}
+function frame1(now){ var dt=Math.min(0.05,(now-last1)/1000); last1=now; t1=Math.min(1,t1+dt*0.45); draw1(); if(t1>=1) stop1(); else raf1=requestAnimationFrame(frame1); }
+function stop1(){ playing1=false; if(raf1) cancelAnimationFrame(raf1); raf1=null; document.getElementById('play1').textContent=t1>=1?'Restack':'Stack'; }
+function toggle1(){ if(playing1){ stop1(); return; } if(t1>=1) t1=0; playing1=true; document.getElementById('play1').textContent='Pause'; last1=performance.now(); raf1=requestAnimationFrame(frame1); }
+
+// ---------- part 2 ----------
+// the cube split by which of (a - z, x, y) is largest: three pyramids with a
+// common apex at the back top corner (0, 0, a), and bases on the bottom, the x = a
+// face, and the y = a face
+var APEX=[0,0,1];
+var PYR=[
+  {base:[[0,0,0],[1,0,0],[1,1,0],[0,1,0]], dir:[0,0,-1], fill:'var(--violet)', ink:'var(--violet-ink)', name:'the stack from part 1'},
+  {base:[[1,0,0],[1,1,0],[1,1,1],[1,0,1]], dir:[1,0,0], fill:'var(--blue)', ink:'var(--blue-ink)'},
+  {base:[[0,1,0],[1,1,0],[1,1,1],[0,1,1]], dir:[0,1,0], fill:'var(--orange)', ink:'var(--orange-ink)'}
+];
+var t2=0, playing2=false, raf2=null, last2=0;
+function draw2(){
+  document.getElementById('t2').value=Math.round(t2*100);
+  var g=document.getElementById('g2'); g.innerHTML='';
+  // seen from the other side (from -x, -y), so the shared apex is the corner nearest
+  // you and all three pyramids show on the assembled cube
+  // a camera a little off the diagonal, so the separated pieces read as solids
+  var phi=(225+22)*Math.PI/180, th=28*Math.PI/180, S=138, X0=580, Y0=176;
+  var VIEW=[Math.cos(th)*Math.cos(phi),Math.cos(th)*Math.sin(phi),Math.sin(th)];
+  var RT=[-Math.sin(phi),Math.cos(phi),0], UP=[-Math.sin(th)*Math.cos(phi),-Math.sin(th)*Math.sin(phi),Math.cos(th)];
+  var P=function(x,y,z){ var q=[x-0.5,y-0.5,z-0.5]; return [X0+S*(q[0]*RT[0]+q[1]*RT[1]), Y0-S*(q[0]*UP[0]+q[1]*UP[1]+q[2]*UP[2])]; };
+  var sep=0.55*(1-ease(t2));
+  cubeFrame(g,P);
+  // pyramids are convex and never interpenetrate, so draw whole pyramids far to
+  // near along the view direction, each showing only the
+  // faces that point toward the viewer
+  var sub=function(a,b){ return [a[0]-b[0],a[1]-b[1],a[2]-b[2]]; };
+  var cross=function(a,b){ return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]; };
+  var dot=function(a,b){ return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]; };
+  var pieces=PYR.map(function(p){
+    var off=p.dir.map(function(d){ return d*sep; });
+    var mv=function(v){ return [v[0]+off[0],v[1]+off[1],v[2]+off[2]]; };
+    var b=p.base.map(mv), ap=mv(APEX);
+    var all=b.concat([ap]), c=[0,1,2].map(function(k){ return all.reduce(function(s,v){ return s+v[k]; },0)/5; });
+    var faces=[b]; for(var i=0;i<4;i++) faces.push([b[i],b[(i+1)%4],ap]);
+    return {p:p, c:c, faces:faces};
+  });
+  pieces.sort(function(a,b){ return dot(a.c,VIEW)-dot(b.c,VIEW); });
+  pieces.forEach(function(pc){
+    pc.faces.forEach(function(f){
+      var nrm=cross(sub(f[1],f[0]),sub(f[2],f[0]));
+      if(dot(nrm,sub(f[0],pc.c))<0) nrm=nrm.map(function(v){ return -v; });   // point outward
+      var len=Math.sqrt(dot(nrm,nrm))||1, facing=dot(nrm,VIEW)/len;
+      if(facing<=1e-6) return;
+      var light=0.35+0.45*Math.max(0,dot(nrm,[-0.3,0.2,0.9])/len);
+      // opaque, lightened toward the page color, so nearer pieces hide farther ones
+      poly(g,f.map(function(v){ return P(v[0],v[1],v[2]); }),{fill:'color-mix(in oklab, '+pc.p.fill+' '+Math.round(100*light)+'%, var(--surface))',stroke:pc.p.ink,'stroke-width':1.1,'stroke-linejoin':'round'});
+    });
+  });
+  if(sep<0.03){ var ap=P(0,0,1); g.appendChild(el('circle',{cx:ap[0],cy:ap[1],r:3.5,fill:'var(--text-primary)'}));
+    txt(g,ap[0]+8,ap[1]-8,'tn gl','shared apex',{style:'font-size:12px'}); }
+  var lg=[['violet: base on the bottom (the stack from part 1)','var(--violet-ink)'],['blue: base on a back wall','var(--blue-ink)'],['orange: base on the other back wall','var(--orange-ink)'],['(turned around from part 1, so the shared corner faces you)','var(--text-muted)']];
+  lg.forEach(function(q,i){ txt(g,20,30+i*20,'tn gl',q[0],{style:'font-size:13px',fill:q[1]}); });
+  document.getElementById('rd2').innerHTML=t2<0.05
+    ? 'Three copies of the same square pyramid: square base <i>a</i>×<i>a</i>, height <i>a</i>, apex straight above one corner of the base. Press <b>Assemble</b>.'
+    : t2<0.99 ? 'They slide together along their axes...'
+    : 'They fill the box exactly, with no gaps and no overlaps. So each pyramid is <b>1/3 of the box</b>, a³/3, and the average square is a³/3 ÷ a = <b>a²/3</b>.';
+}
+function frame2(now){ var dt=Math.min(0.05,(now-last2)/1000); last2=now; t2=Math.min(1,t2+dt*0.5); draw2(); if(t2>=1) stop2(); else raf2=requestAnimationFrame(frame2); }
+function stop2(){ playing2=false; if(raf2) cancelAnimationFrame(raf2); raf2=null; document.getElementById('play2').textContent=t2>=1?'Take apart':'Assemble'; }
+function toggle2(){
+  if(playing2){ stop2(); return; }
+  if(t2>=1){ t2=0; draw2(); stop2(); return; }
+  playing2=true; document.getElementById('play2').textContent='Pause'; last2=performance.now(); raf2=requestAnimationFrame(frame2);
+}
+
+// ---------- part 3 ----------
+(function(){
+  var box=document.getElementById('alg');
+  ['\\mathrm{Var}(W)=\\mathbb{E}[W^2]=\\frac{1}{a}\\int_0^a w^2\\,dw=\\frac{1}{a}\\cdot\\frac{a^3}{3}=\\frac{a^2}{3}',
+   '\\text{with }k\\text{ steps: }\\frac1k\\sum_{i=1}^{k}\\Big(\\frac{i-\\frac12}{k}\\,a\\Big)^2=\\Big(\\frac13-\\frac{1}{12k^2}\\Big)a^2\\;\\longrightarrow\\;\\frac{a^2}{3}',
+   '\\text{standard init: }a=\\tfrac{1}{\\sqrt n}\\;\\Rightarrow\\;\\mathrm{Var}(W)=\\tfrac{1}{3n}'].forEach(function(t){
+    var d=document.createElement('div'); katex.render(t,d,{throwOnError:false,displayMode:true}); box.appendChild(d);
+  });
+})();
+
+draw1(); draw2();
+</script>
+</body>
+</html>

@@ -50,11 +50,10 @@ footer a{color:var(--text-secondary)}
   <div class="nav"><a href="../../">&larr; CS7150 class demos</a></div>
   <p class="eyebrow">Northeastern University &middot; CS 7150 &middot; Fall 2026</p>
   <h1>Initialization, explained</h1>
-  <p>Six interactive pieces on <a href="https://proceedings.mlr.press/v9/glorot10a/glorot10a.pdf">Glorot &amp; Bengio 2010</a>:
+  <p>Eight interactive pieces on <a href="https://proceedings.mlr.press/v9/glorot10a/glorot10a.pdf">Glorot &amp; Bengio 2010</a>:
      first, what the failure looks like while a real network trains; then the chain rule behind
-     it, one neuron per layer, and how the choice of activation changes it; then the variance
-     algebra behind the paper's <i>n</i>&middot;Var(<i>W</i>) = 1/3, the two uniform initializations
-     it compares, and why forward and backward stability pull the variance in different
+     it, one neuron per layer, and how the choice of activation changes it; then what variance is, where the <i>n</i> in <i>n</i>&middot;Var(<i>W</i>) comes from (forward and
+     backward), where the 1/3 comes from, the two uniform initializations the paper compares, and why forward and backward stability pull the variance in different
      directions when a layer isn't square.</p>
 </header>
 
@@ -92,12 +91,31 @@ footer a{color:var(--text-secondary)}
 </li>
 
 <li class="done">
-  <div class="qtag">Where n&middot;Var(W) = 1/3 comes from</div>
-  <h2><a href="variance.html">Variance, and n&middot;Var(W)</a></h2>
-  <p class="what">What variance is (an average square), the four rules that make it easy to push
-     through a layer, and why they give Var(<i>h</i>) = <i>n</i>&middot;Var(<i>W</i>)&middot;Var(<i>x</i>),
-     so the standard init shrinks the signal threefold per layer. Checked against real tanh layers.</p>
+  <div class="qtag">What variance is</div>
+  <h2><a href="variance.html">Variance: an average square, and four rules</a></h2>
+  <p class="what">Variance drawn as the average of squares hung on the samples, and the four rules
+     that make it easy to push through a layer: scaling, sums, products, and their consequence
+     Var(<i>h</i>) = <i>n</i>&middot;Var(<i>W</i>)&middot;Var(<i>x</i>).</p>
   <a class="go" href="variance.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">Where the n comes from</div>
+  <h2><a href="where-n.html">A matrix product of random numbers</a></h2>
+  <p class="what">A matrix-vector product animated with every entry drawn as its probability
+     density. Forward, each output adds up <i>n</i> products, so its variance is
+     <i>n</i>&middot;&sigma;<sub>w</sub>&sup2;; backward, the gradient goes through <i>W</i><sup>T</sup> and
+     each input's gradient adds up <i>m</i>. Glorot's dilemma, then several layers stacked.</p>
+  <a class="go" href="where-n.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">Where the 1/3 comes from</div>
+  <h2><a href="uniform-third.html">Why a uniform has variance a&sup2;/3</a></h2>
+  <p class="what">Variance is an average square. Stack a uniform's squares and they form a pyramid
+     in an <i>a</i>&times;<i>a</i>&times;<i>a</i> box; three such pyramids fill the box, so the
+     average square is a third of the biggest.</p>
+  <a class="go" href="uniform-third.html">Open the explainer &rarr;</a>
 </li>
 
 <li class="done">

@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Where the n comes from</title>
+<meta name="description" content="A matrix-vector product animated with every entry drawn as a random variable: each output sums n products, so its variance is n times Var(W) on the way forward, and each input's gradient sums m, so it is m times on the way back.">
+<link rel="stylesheet" href="../demo.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<style>
+body{gap:6px;padding:11px 16px 24px;max-width:1150px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+h2{font-size:16px;font-weight:600;margin:14px 0 0;letter-spacing:-.005em}
+.quiz{margin:0}
+svg{max-height:none}
+#anim{max-height:62vh}
+.row{gap:7px}
+button{height:30px;font-size:13px;padding:0 9px}
+button.main{min-width:84px}
+.seg button{height:28px;font-size:12px;padding:0 8px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:auto}
+.rd{font-size:14px;line-height:1.45;min-height:1.45em}
+.cap{font-size:12.5px;line-height:1.5;padding-top:4px}
+.nav{display:flex;align-items:baseline;gap:10px}
+.phases{display:flex;gap:0;font-size:13px;color:var(--text-muted)}
+.phases span{flex:1;text-align:center;padding:4px 0;border-top:2px solid var(--border);cursor:pointer;user-select:none}
+.phases span:hover{color:var(--text-primary);background:var(--surface-1)}
+.phases span.on{color:var(--text-primary);border-top-color:var(--blue)}
+#tex{font-size:15.5px;display:flex;flex-direction:column;gap:4px;overflow-x:auto}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Initialization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Where the n comes from<span>: a matrix product of random numbers</span></h1>
+<p class="quiz">Every entry below is a random variable, drawn as its density with one sample marked on it. A layer multiplies an <i>m</i>&times;<i>n</i> weight matrix by an <i>n</i>-vector, so each output adds up <i>n</i> random products, and variances add. On the way back the gradient goes through <i>W</i><sup>T</sup>, so each input's gradient adds up <i>m</i> of them instead.</p>
+
+<svg id="anim" viewBox="0 0 1000 530" role="img">
+  <desc>An animated matrix-vector product in which every entry is drawn as a small probability density with its sampled value marked; the vector turns and deals its entries onto the matrix columns, every cell becomes a product, and each row slides together into one output entry whose density is wider.</desc>
+  <g id="g"></g>
+</svg>
+
+<div class="row">
+  <button class="main" id="play" onclick="toggle()">Play</button>
+  <button id="nxt" onclick="nextStep()">Next step &rarr;</button>
+  <input type="range" id="ts" min="0" max="300" step="1" value="0" oninput="setT(+this.value/100,1)" style="flex:1 1 160px;min-width:100px">
+  <div class="seg" id="modeSeg">
+    <button data-m="fwd" class="on">forward: h = Wx</button>
+    <button data-m="bwd">backward: &part;L/&part;x = W<sup>T</sup>&part;L/&part;h</button>
+  </div>
+  <button onclick="resample()">Resample</button>
+</div>
+<div class="phases" id="ph"></div>
+<div class="row">
+  <span class="klab">n inputs</span>
+  <input type="range" id="n" min="2" max="6" step="1" value="6" oninput="onShape()" style="flex:1 1 80px;min-width:60px">
+  <span class="knum" id="nVal">6</span>
+  <span class="klab">m outputs</span>
+  <input type="range" id="m" min="1" max="5" step="1" value="3" oninput="onShape()" style="flex:1 1 80px;min-width:60px">
+  <span class="knum" id="mVal">3</span>
+  <span class="klab">weight std &sigma;<sub>w</sub></span>
+  <input type="range" id="sw" min="-1" max="0.2" step="any" value="0" oninput="onSigma()" style="flex:2 1 120px;min-width:80px">
+  <span class="knum" id="swVal">1.00</span>
+  <div class="seg" id="presetSeg">
+    <button data-p="one" class="on">1</button>
+    <button data-p="fwd">1/&radic;n</button>
+    <button data-p="bwd">1/&radic;m</button>
+    <button data-p="glorot">Glorot</button>
+  </div>
+</div>
+<div class="rd" id="readout"></div>
+<div id="tex"></div>
+<div class="cap">Weights are Gaussian here, <i>w</i> ~ N(0, &sigma;<sub>w</sub>&sup2;), and so are the inputs <i>x</i> and the upstream gradients &part;L/&part;h, each N(0, 1). Every cell uses the same horizontal scale, &minus;4 to 4, so a wider curve means a bigger variance; tall spikes are clipped at the top. <b>Products are not normal</b>: w&middot;x has variance &sigma;<sub>w</sub>&sup2;&middot;1 but a sharp peak at 0 and heavy tails (its density is a Bessel function, drawn exactly). <b>Sums become normal</b>: adding several independent products gives a curve close to a Gaussian (the central limit theorem), with variance the sum of theirs. Forward, <i>h</i><sub>i</sub> = &Sigma;<sub>j</sub> <i>w</i><sub>ij</sub><i>x</i><sub>j</sub> adds <i>n</i> products. Backward, the chain rule gives &part;L/&part;x<sub>j</sub> = &Sigma;<sub>i</sub> <i>w</i><sub>ij</sub>&part;L/&part;h<sub>i</sub>: column <i>j</i> of <i>W</i>, which is row <i>j</i> of <i>W</i><sup>T</sup>, so it adds <i>m</i> products. The dashed curve on each result is N(0, 1), the spread that went in.</div>
+
+<h2>Stacking layers: the n&middot;Var(W) factor compounds</h2>
+<svg id="lay" viewBox="0 0 900 270" role="img">
+  <desc>Left: histograms of the inputs x and of one pre-activation h, the sum of n weight-times-input products. Right: the variance after each of eight layers on a log scale, predicted and measured through real tanh layers.</desc>
+  <g id="glay"></g>
+</svg>
+<div class="row">
+  <div class="seg" id="schemeSeg">
+    <button data-s="std" class="on">standard: scale 1/&radic;n</button>
+    <button data-s="xav">Glorot (n<sub>in</sub> = n<sub>out</sub> = n): Var(W) = 1/n</button>
+  </div>
+  <div class="seg" id="distSeg">
+    <button data-d="unif" class="on">uniform on [&minus;scale, scale]</button>
+    <button data-d="gauss">Gaussian, std = scale</button>
+  </div>
+  <span class="klab">n (fan-in)</span>
+  <input type="range" id="nl" min="1" max="8" step="1" value="6" oninput="drawLay()" style="flex:1 1 150px;min-width:80px">
+  <span class="knum" id="nlVal">64</span>
+  <button onclick="drawLay()">Resample</button>
+</div>
+<div class="rd" id="rdLay"></div>
+<div class="cap">Inputs <i>x</i><sub>i</sub> ~ N(0, 1). The <b>standard</b> rule sets a scale of 1/&radic;<i>n</i>, and what that does depends on how the scale is used. Used as the half-width of a <b>uniform</b> on [&minus;1/&radic;<i>n</i>, 1/&radic;<i>n</i>], as in the paper, it gives Var(<i>W</i>) = <i>a</i>&sup2;/3 = 1/(3<i>n</i>) (see <a href="uniform-init.html">standard vs. normalized init</a> for the a&sup2;/3), so <i>n</i>&middot;Var(<i>W</i>) = 1/3. Used as the standard deviation of a <b>Gaussian</b> (LeCun's 1998 advice), it gives Var(<i>W</i>) = 1/<i>n</i>, and the 1/3 is gone. <b>Glorot</b> for a layer with <i>n</i><sub>in</sub> = <i>n</i><sub>out</sub> = <i>n</i> targets Var(<i>W</i>) = 2/(<i>n</i>+<i>n</i>) = 1/<i>n</i> whichever distribution draws it: half-width &radic;(3/<i>n</i>) for uniform, std 1/&radic;<i>n</i> for Gaussian. Only the variance matters, not the shape of the distribution. The dashed line on the right is the prediction (<i>n</i>&middot;Var(<i>W</i>))<sup>L</sup>, which assumes tanh(<i>h</i>) &asymp; <i>h</i>; the bars push 400 inputs through real width-<i>n</i> tanh layers, drawing fresh weights at every layer. Even at <i>n</i>&middot;Var(<i>W</i>) = 1, the bars fall below the dashed line, steeply at first and then slowly: tanh flattens values beyond about &plusmn;0.5, so Var(tanh <i>h</i>) &lt; Var(<i>h</i>), and a unit-variance input keeps only about 40% of its variance through the first tanh. The gap closes once the signal is small enough that tanh(<i>h</i>) &asymp; <i>h</i>, which is why the decline slows instead of compounding by a fixed factor. The <a href="variance.html">variance page</a> has the rules behind all of this, and <a href="variance-balance.html">forward vs. backward</a> has Glorot's compromise between 1/<i>n</i> and 1/<i>m</i>.</div>
+
+<script>
+var NS='http://www.w3.org/2000/svg';
+function el(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attrs)e.setAttribute(k,attrs[k]);return e;}
+function txt(g,x,y,cls,str,attrs){ var t=el('text',Object.assign({x:x,y:y,class:cls},attrs||{})); t.textContent=str; g.appendChild(t); return t; }
+function randn(){ var u=0,v=0; while(!u)u=Math.random(); while(!v)v=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+function cl(v){ return Math.max(0,Math.min(1,v)); }
+function ease(f){ return f<0.5?2*f*f:1-Math.pow(-2*f+2,2)/2; }
+function lerp(a,b,f){ return a+(b-a)*f; }
+function f2(v){ return (Math.abs(v)<0.01&&v!==0)?v.toExponential(1):v.toFixed(v>=100?0:v>=10?1:2); }
+function sgn(v){ return (v<0?'−':'')+Math.abs(v).toFixed(2); }
+
+// ---------- densities ----------
+function gaussPdf(z,s){ return Math.exp(-z*z/(2*s*s))/(s*Math.sqrt(2*Math.PI)); }
+// modified Bessel K0 (Abramowitz & Stegun 9.8.5-6); the product of independent
+// N(0,a^2) and N(0,b^2) has density K0(|z|/ab)/(pi ab)
+function K0(x){
+  if(x<=2){
+    var t=x/2, t2=t*t, u=x/3.75; u*=u;
+    var I0=1+u*(3.5156229+u*(3.0899424+u*(1.2067492+u*(0.2659732+u*(0.0360768+u*0.0045813)))));
+    return -Math.log(t)*I0+(-0.57721566+t2*(0.42278420+t2*(0.23069756+t2*(0.03488590+t2*(0.00262698+t2*(0.00010750+t2*0.0000074))))));
+  }
+  var y=2/x;
+  return Math.exp(-x)/Math.sqrt(x)*(1.25331414+y*(-0.07832358+y*(0.02189568+y*(-0.01062446+y*(0.00587872+y*(-0.00251540+y*0.00053208))))));
+}
+function prodPdf(z,s){ var a=Math.max(Math.abs(z),s*1e-3); return K0(a/s)/(Math.PI*s); }
+
+// ---------- state ----------
+var n=6, m=3, sw=1, mode='fwd', t=0, playing=false, raf=null, last=0, STOP=3;
+var Z=[], X=[], G=[];     // W = sw * Z;  x and the upstream gradient g are N(0,1)
+function resample(){
+  Z=[]; for(var i=0;i<5;i++){ Z.push([]); for(var j=0;j<6;j++) Z[i].push(randn()); }
+  X=[]; for(var j2=0;j2<6;j2++) X.push(randn());
+  G=[]; for(var i2=0;i2<5;i2++) G.push(randn());
+  draw();
+}
+function W(i,j){ return sw*Z[i][j]; }
+function beats(){ return mode==='bwd'?4:3; }
+var PH={fwd:['deal x onto the columns','multiply each cell','add each row'],
+        bwd:['transpose W','deal ∂L/∂h onto the columns','multiply each cell','add each row']};
+
+// ---------- one cell: a density, its sample, its number ----------
+var CW=74, CH=66, XR=4, CY=0;   // cell size; CY, the figure's vertical centre, is set per frame
+function cell(g, x, y, dist, val, color, op, ghost, dist2, val2, color2, mix){
+  if(op<0.01) return;
+  var gg=el('g',{opacity:op.toFixed(3)}); g.appendChild(gg);
+  gg.appendChild(el('rect',{x:x+1,y:y+1,width:CW-2,height:CH-2,rx:5,fill:'var(--surface)',stroke:'var(--border)','stroke-width':1}));
+  var base=y+CH-9, top=y+20, H=base-top, sc=0.62*H/0.3989;
+  var px=function(z){ return x+5+(z+XR)/(2*XR)*(CW-10); };
+  function path(pdf){
+    var d='';
+    for(var k=0;k<=56;k++){ var z=-XR+2*XR*k/56, yy=base-Math.min(H,pdf(z)*sc); d+=(k?'L':'M')+px(z).toFixed(1)+','+yy.toFixed(1); }
+    return d;
+  }
+  if(ghost) gg.appendChild(el('path',{d:path(function(z){ return gaussPdf(z,1); }),fill:'none',stroke:'var(--text-muted)','stroke-width':1,'stroke-dasharray':'2 2'}));
+  // a second density (dist2) crossfades in as mix goes 0 -> 1; the number switches halfway
+  var pdfOf=function(D){ return D.k==='p'?function(z){ return prodPdf(z,D.s); }:function(z){ return gaussPdf(z,D.s); }; };
+  mix=dist2?mix:0;
+  [[dist,val,color,1-mix],[dist2,val2,color2,mix]].forEach(function(q){
+    if(!q[0]||q[3]<0.01) return;
+    var d=path(pdfOf(q[0]));
+    gg.appendChild(el('path',{d:d+'L'+px(XR)+','+base+'L'+px(-XR)+','+base+'Z',fill:q[2],opacity:(0.22*q[3]).toFixed(3)}));
+    gg.appendChild(el('path',{d:d,fill:'none',stroke:q[2],'stroke-width':1.4,opacity:q[3].toFixed(3)}));
+    gg.appendChild(el('circle',{cx:px(Math.max(-XR,Math.min(XR,q[1]))),cy:base,r:2.8,fill:q[2],opacity:q[3].toFixed(3)}));
+  });
+  gg.appendChild(el('line',{x1:x+5,y1:base,x2:x+CW-5,y2:base,stroke:'var(--border-strong)','stroke-width':0.8}));
+  txt(gg,x+CW/2,y+15,'num',sgn(mix<0.5?val:val2),{'text-anchor':'middle',style:'font-size:12.5px',fill:'var(--text-primary)'});
+}
+
+// ---------- the frame ----------
+function draw(){
+  var g=document.getElementById('g'); g.innerHTML='';
+  var TOP=CH+48; CY=TOP+n*CH/2;
+  document.getElementById('anim').setAttribute('viewBox','0 0 1000 '+(TOP+n*CH+36));
+  var bwd=mode==='bwd', off=bwd?1:0;
+  var tT=bwd?cl(t):1, eT=bwd?ease(tT):1, eD=ease(cl(t-off)), eM=ease(cl(t-off-1)), eA=ease(cl(t-off-2));
+  // the product being computed: M (R x C) times v (C)
+  var R=bwd?n:m, C=bwd?m:n;
+  var Mv=function(i,j){ return bwd?W(j,i):W(i,j); };
+  var V=bwd?G.slice(0,m):X.slice(0,n);
+  var vCol=bwd?'var(--orange-ink)':'var(--blue-ink)', wCol='var(--violet-ink)', rCol='var(--green-ink)';
+  var vName=bwd?'∂L/∂h':'x', rName=bwd?'∂L/∂x = Wᵀ ∂L/∂h':'h = Wx', MName=bwd?'Wᵀ':'W';
+  var ox=70, oy=Math.max(TOP,CY-R*CH/2), vx=ox+(bwd?Math.max(n,m):n)*CW+46, rx=vx+CW+74;   // room for W before it is transposed
+  var vy0=CY-C*CH/2;                                   // v stands as a column to M's right
+  // --- matrix cells ---
+  var cellPos=function(i,j){                             // where cell (i,j) of M sits, with transpose and add motions
+    var x=ox+j*CW, y=oy+i*CH;
+    if(bwd&&eT<1){
+      // before the transpose, this was W's cell (j, i): column i of W. The columns
+      // move one at a time, each lifting clear and settling as row i of W^T
+      var oyW=Math.max(TOP,CY-m*CH/2), x0=ox+i*CW, y0=oyW+j*CH;
+      var u=ease(cl((tT-i*0.6/n)/0.4));
+      x=lerp(x0,x,u)+Math.sin(Math.PI*u)*40; y=lerp(y0,y,u)-Math.sin(Math.PI*u)*20;
+    }
+    if(eA>0){ x=lerp(x,rx,eA); }
+    return [x,y];
+  };
+  for(var i=0;i<R;i++) for(var j=0;j<C;j++){
+    var p=cellPos(i,j), w=Mv(i,j), prod=w*V[j], fade=1-cl((eA-0.75)/0.25);
+    cell(g,p[0],p[1],{k:'g',s:sw},w,wCol,fade,false,{k:'p',s:sw},prod,'var(--pink-ink)',eM);
+  }
+  // --- the vector: stands to the right, then is dealt one entry per column ---
+  for(var j2=0;j2<C;j2++){
+    var sx=vx, sy=vy0+j2*CH, tx=ox+j2*CW, ty=oy-CH-16;
+    var x=lerp(sx,tx,eD), y=lerp(sy,ty,eD)-Math.sin(Math.PI*eD)*30;
+    cell(g,x,y,{k:'g',s:1},V[j2],vCol,(1-eM*0.6)*(1-eA));
+  }
+  // --- the result ---
+  var sumS=Math.sqrt(C)*sw;
+  for(var i3=0;i3<R;i3++){
+    var sum=0; for(var j3=0;j3<C;j3++) sum+=Mv(i3,j3)*V[j3];
+    cell(g,rx,oy+i3*CH,{k:'g',s:sumS},sum,rCol,cl((eA-0.55)/0.45),true);
+  }
+  // --- labels ---
+  var lab=function(x,y,s,c,op,anchor){ if(op>0.02) txt(g,x,y,'ts gl',s,{'text-anchor':anchor||'middle',opacity:op.toFixed(2),fill:c,style:'font-weight:600'}); };
+  if(bwd&&eT<1){ var oyW=Math.max(TOP,CY-m*CH/2); lab(ox+n*CW/2,oyW+m*CH+22,'W  ('+m+'×'+n+')',wCol,1-eT); }
+  lab(ox+C*CW/2,oy+R*CH+22,MName+'  ('+R+'×'+C+')',wCol,eT*(1-eA));
+  lab(vx+CW/2,vy0+C*CH+22,vName+'  ('+C+')',vCol,1-eD);
+  lab(ox+C*CW/2,oy-CH-24,vName+', one entry per column',vCol,eD*(1-eA));
+  lab(rx+CW/2,oy+R*CH+22,rName,rCol,cl((eA-0.55)/0.45));
+  if(eA<0.5){ txt(g,vx-24,CY+6,'ts','·',{'text-anchor':'middle',style:'font-size:26px',fill:'var(--text-muted)',opacity:(1-eD).toFixed(2)}); }
+  // per-row annotation while adding
+  if(eA>0.6) for(var i4=0;i4<R;i4++) txt(g,rx+CW+8,oy+i4*CH+CH/2+5,'tn gl','σ = √'+C+'·'+sw.toFixed(2)+' = '+sumS.toFixed(2),{style:'font-size:12px',fill:rCol,opacity:cl((eA-0.6)/0.4).toFixed(2)});
+  if(eM>0.3&&eA<0.3) txt(g,ox+C*CW+10,oy+R*CH/2+5,'tn gl','each cell: σ_w·1 = '+sw.toFixed(2)+', not normal',{style:'font-size:12px',fill:'var(--pink-ink)',opacity:cl((eM-0.3)/0.4*(1-eA*3)).toFixed(2)});
+  // --- controls state ---
+  document.getElementById('ts').max=beats()*100;
+  document.getElementById('ts').value=Math.round(t*100);
+  var k=Math.ceil(t-1e-9)-1, sp=document.getElementById('ph').children;
+  for(var q=0;q<sp.length;q++) sp[q].classList.toggle('on',t>0&&q===k);
+  document.getElementById('nxt').textContent=t>=beats()?'Start over':'Next step →';
+  readout(k); formulas();
+}
+function readout(k){
+  var bwd=mode==='bwd', C=bwd?m:n, ph=PH[mode], s;
+  var step=bwd?k-1:k;
+  if(t<=0) s=bwd?'<b>Backward.</b> The upstream gradient ∂L/∂h has one entry per output. To send it back to the '+n+' inputs, the chain rule multiplies by the <i>transpose</i> of the same W.'
+              :'<b>Forward.</b> Each of the '+m+' outputs of h = Wx is a row of W times x: '+n+' products added up.';
+  else if(bwd&&k===0) s='W flips across its diagonal: its '+n+' columns become the rows of Wᵀ, because ∂L/∂x<sub>j</sub> collects every output that x<sub>j</sub> fed, and those are the entries of column j of W.';
+  else if(step===0) s='The vector turns and deals one entry to each of the '+C+' columns, exactly as in an ordinary matrix product.';
+  else if(step===1) s='Every cell becomes a product of two independent zero-mean random numbers. Its variance is the product of theirs, σ_w²·1 = '+f2(sw*sw)+', but it is <b>not</b> normal: a sharp spike at 0 with heavy tails.';
+  else if(t<beats()) s='Each row adds its '+C+' products. Independent variances add, so the sum has variance '+C+'·'+f2(sw*sw)+' = '+f2(C*sw*sw)+', and the sum looks normal again.';
+  else s='<b>Result:</b> each entry has variance '+C+'·σ_w² = <b>'+f2(C*sw*sw)+'</b> times what went in. Set σ_w = 1/√'+C+' and the green curves match the dashed input curves exactly.';
+  document.getElementById('readout').innerHTML=s;
+}
+function formulas(){
+  var v=sw*sw, box=document.getElementById('tex'); box.innerHTML='';
+  var add=function(tex){ var d=document.createElement('div'); katex.render(tex,d,{throwOnError:false}); box.appendChild(d); };
+  add('\\text{forward: }\\mathrm{Var}(h_i)=\\sum_{j=1}^{n}\\mathrm{Var}(w_{ij})\\,\\mathrm{Var}(x_j)=n\\,\\sigma_w^2='+n+'\\cdot'+f2(v)+'='+f2(n*v)+(mode==='fwd'?'\\quad\\blacktriangleleft':''));
+  add('\\text{backward: }\\mathrm{Var}\\big(\\tfrac{\\partial L}{\\partial x_j}\\big)=\\sum_{i=1}^{m}\\mathrm{Var}(w_{ij})\\,\\mathrm{Var}\\big(\\tfrac{\\partial L}{\\partial h_i}\\big)=m\\,\\sigma_w^2='+m+'\\cdot'+f2(v)+'='+f2(m*v)+(mode==='bwd'?'\\quad\\blacktriangleleft':''));
+  add('\\text{forward wants }\\sigma_w^2=\\tfrac1n='+f2(1/n)+',\\ \\text{backward wants }\\tfrac1m='+f2(1/m)+(n===m?'\\ \\text{(the same: a square layer)}':',\\ \\text{Glorot takes }\\tfrac{2}{n+m}='+f2(2/(n+m))));
+}
+
+// ---------- controls ----------
+function buildPhases(){
+  document.getElementById('ph').innerHTML=PH[mode].map(function(s,i){ return '<span onclick="setT('+(i+1)+',1)">'+s+'</span>'; }).join('');
+}
+function setT(v,stop){ t=Math.max(0,Math.min(beats(),v)); if(stop) pause(); draw(); }
+function frame(now){
+  var dt=Math.min(0.05,(now-last)/1000); last=now;
+  if(playing){ t+=dt*0.6; if(t>=STOP){ t=STOP; pause(); } }
+  draw();
+  raf=playing?requestAnimationFrame(frame):null;
+}
+function pause(){ playing=false; document.getElementById('play').textContent=t>=beats()?'Replay':'Play'; if(raf){ cancelAnimationFrame(raf); raf=null; } }
+function toggle(){ if(playing){ pause(); return; } if(t>=beats()) t=0; STOP=beats(); go(); }
+function nextStep(){ if(playing) pause(); if(t>=beats()){ t=0; draw(); return; } STOP=Math.min(beats(),Math.floor(t+1e-9)+1); go(); }
+function go(){ playing=true; document.getElementById('play').textContent='Pause'; last=performance.now(); raf=requestAnimationFrame(frame); }
+function showSw(){ document.getElementById('swVal').textContent=sw.toFixed(2); }
+function onSigma(){ sw=Math.pow(10,+document.getElementById('sw').value); showSw(); markPreset(null); draw(); }
+function markPreset(p){ Array.from(document.getElementById('presetSeg').children).forEach(function(b){ b.classList.toggle('on',b.dataset.p===p); }); }
+var preset='one';
+function applyPreset(p){
+  preset=p;
+  sw=p==='one'?1:p==='fwd'?1/Math.sqrt(n):p==='bwd'?1/Math.sqrt(m):Math.sqrt(2/(n+m));
+  document.getElementById('sw').value=Math.log10(sw); showSw(); markPreset(p); draw();
+}
+document.getElementById('presetSeg').addEventListener('click',function(e){ var b=e.target.closest('button'); if(b) applyPreset(b.dataset.p); });
+function onShape(){
+  n=+document.getElementById('n').value; m=+document.getElementById('m').value;
+  document.getElementById('nVal').textContent=n; document.getElementById('mVal').textContent=m;
+  var on=document.querySelector('#presetSeg .on'); if(on) applyPreset(on.dataset.p); else draw();
+}
+document.getElementById('modeSeg').addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b) return;
+  mode=b.dataset.m;
+  Array.from(this.children).forEach(function(x){ x.classList.toggle('on',x===b); });
+  pause(); t=0; buildPhases(); draw();
+});
+document.addEventListener('keydown',function(e){
+  if(e.target.tagName==='INPUT') return;
+  if(e.key===' '){ e.preventDefault(); toggle(); }
+  else if(e.key==='Enter'){ e.preventDefault(); nextStep(); }
+});
+
+// ---------- stacking layers (moved from the variance page) ----------
+var scheme='std', dist='unif';
+document.getElementById('schemeSeg').addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b) return;
+  scheme=b.dataset.s;
+  Array.from(this.children).forEach(function(x){ x.classList.toggle('on',x===b); });
+  drawLay();
+});
+document.getElementById('distSeg').addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b) return;
+  dist=b.dataset.d;
+  Array.from(this.children).forEach(function(x){ x.classList.toggle('on',x===b); });
+  drawLay();
+});
+// the weight distribution: returns a sampler, its variance, and how that variance came about
+function weights(n){
+  if(dist==='unif'){
+    var a=scheme==='std'?1/Math.sqrt(n):Math.sqrt(3/n);
+    return {draw:function(){ return (2*Math.random()-1)*a; }, varW:a*a/3, how:'uniform, half-width a = '+f2(a)+', Var(W) = a²/3'};
+  }
+  var sd=1/Math.sqrt(n);   // standard's scale as a std, and Glorot's std, coincide for a Gaussian
+  return {draw:function(){ return sd*randn(); }, varW:sd*sd, how:'Gaussian, std = '+f2(sd)+', Var(W) = std²'};
+}
+function drawLay(){
+  var n=Math.pow(2,parseInt(document.getElementById('nl').value,10));
+  document.getElementById('nlVal').textContent=n;
+  var Wd=weights(n), varW=Wd.varW, gain=n*varW, uw=Wd.draw;
+  // one layer: h = sum of n products, many times
+  var M=4000, xs=[], hs=[];
+  for(var s=0;s<M;s++){ var h=0; for(var i=0;i<n;i++){ var x=randn(); if(i===0) xs.push(x); h+=uw()*x; } hs.push(h); }
+  var vr=function(A){ var m=0; A.forEach(function(v){m+=v;}); m/=A.length; var q=0; A.forEach(function(v){q+=(v-m)*(v-m);}); return q/A.length; };
+  var vx=vr(xs), vh=vr(hs);
+  // eight real tanh layers of width n
+  var P=400, depth=8, act=[], varsL=[];
+  for(var p=0;p<P;p++){ var v=[]; for(var i2=0;i2<n;i2++) v.push(randn()); act.push(v); }
+  varsL.push(vr([].concat.apply([],act)));
+  for(var l=1;l<=depth;l++){
+    var Wl=[]; for(var o=0;o<n;o++){ var row=[]; for(var i3=0;i3<n;i3++) row.push(uw()); Wl.push(row); }
+    act=act.map(function(v){ return Wl.map(function(row){ var h=0; for(var i4=0;i4<n;i4++) h+=row[i4]*v[i4]; return Math.tanh(h); }); });
+    varsL.push(vr([].concat.apply([],act)));
+  }
+  var g=document.getElementById('glay'); g.innerHTML='';
+  // left: histograms
+  var HX0=40, HW=380, HY0=30, HH=190, R=4, bins=48;
+  var hx=function(v){ return HX0+(v+R)/(2*R)*HW; };
+  function hist(A){ var c=new Array(bins).fill(0); A.forEach(function(v){ var b=Math.floor((v+R)/(2*R)*bins); if(b>=0&&b<bins) c[b]++; }); return c.map(function(k){ return k/A.length/(2*R/bins); }); }
+  var cx=hist(xs), ch=hist(hs), top=Math.max(Math.max.apply(null,cx),Math.max.apply(null,ch))*1.08;
+  var hy=function(d){ return HY0+HH-d/top*HH; };
+  g.appendChild(el('line',{x1:HX0,y1:HY0+HH,x2:HX0+HW,y2:HY0+HH,stroke:'var(--border-strong)','stroke-width':1}));
+  [[cx,'var(--text-muted)',0.35],[ch,'var(--blue)',0.5]].forEach(function(q){
+    q[0].forEach(function(d,b){ if(d>0) g.appendChild(el('rect',{x:HX0+b*HW/bins+0.3,y:hy(d),width:HW/bins-0.6,height:HY0+HH-hy(d),fill:q[1],opacity:q[2]})); });
+  });
+  for(var t2=-4;t2<=4;t2+=2) txt(g,hx(t2),HY0+HH+15,'tn',String(t2),{'text-anchor':'middle',style:'font-size:11px'});
+  txt(g,HX0,HY0-12,'ts gl','one layer: inputs x (gray) → h = Σᵢ wᵢxᵢ (blue)');
+  txt(g,HX0+HW,HY0+8,'num gl','Var(x) = '+f2(vx),{'text-anchor':'end',style:'font-size:12.5px',fill:'var(--text-secondary)'});
+  txt(g,HX0+HW,HY0+24,'num gl','Var(h) = '+f2(vh),{'text-anchor':'end',style:'font-size:12.5px;font-weight:600',fill:'var(--blue-ink)'});
+  // right: variance per layer, log scale
+  var BX0=520, BW=360, BY0=30, BH=190, LMIN=-5, LMAX=0.5;
+  var by=function(v){ var lg=Math.log10(Math.max(v,1e-9)); lg=Math.max(LMIN,Math.min(LMAX,lg)); return BY0+BH-(lg-LMIN)/(LMAX-LMIN)*BH; };
+  txt(g,BX0,BY0-12,'ts gl','Var after L layers (log scale)');
+  [[1,'1'],[1e-1,'0.1'],[1e-2,'0.01'],[1e-3,'10⁻³'],[1e-4,'10⁻⁴'],[1e-5,'10⁻⁵']].forEach(function(q){
+    g.appendChild(el('line',{x1:BX0,y1:by(q[0]),x2:BX0+BW,y2:by(q[0]),stroke:'var(--border)','stroke-width':0.7,'stroke-dasharray':q[0]===1?'':'3 3'}));
+    txt(g,BX0-6,by(q[0])+4,'tn gl',q[1],{'text-anchor':'end',style:'font-size:11px'});
+  });
+  var colW=BW/(depth+1), pts=[];
+  varsL.forEach(function(v,l){
+    var x=BX0+l*colW;
+    g.appendChild(el('rect',{x:x+colW*0.2,y:by(v),width:colW*0.6,height:BY0+BH-by(v),fill:'var(--green)',opacity:0.6}));
+    txt(g,x+colW/2,BY0+BH+15,'tn',String(l),{'text-anchor':'middle',style:'font-size:11px'});
+    pts.push((x+colW/2)+','+by(varsL[0]*Math.pow(gain,l)));
+  });
+  g.appendChild(el('polyline',{points:pts.join(' '),fill:'none',stroke:'var(--text-primary)','stroke-width':1.4,'stroke-dasharray':'5 4'}));
+  txt(g,BX0+BW,BY0+BH+30,'tn','layer L',{'text-anchor':'end',style:'font-size:11.5px'});
+  txt(g,BX0+BW,BY0+8,'tn gl','bars: real tanh layers · dashed: (n·Var W)ᴸ',{'text-anchor':'end',style:'font-size:11.5px'});
+  document.getElementById('rdLay').innerHTML='n = '+n+': '+Wd.how+' = '+f2(varW)+', so <b>n·Var(W) = '+f2(gain)+'</b>: predicted Var(h) = '+f2(gain)+' × Var(x) = <b class="num">'+f2(gain*vx)+'</b>, measured <b class="num">'+f2(vh)+'</b>. '+
+    'After 8 layers: predicted '+f2(varsL[0]*Math.pow(gain,8))+', measured through tanh '+f2(varsL[8])+'.';
+}
+
+buildPhases(); showSw(); resample(); drawLay();
+</script>
+</body>
+</html>
