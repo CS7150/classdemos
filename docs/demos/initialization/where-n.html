@@ -75,7 +75,7 @@ button.main{min-width:84px}
 </div>
 <div class="rd" id="readout"></div>
 <div id="tex"></div>
-<div class="cap">Weights are either Gaussian, <i>w</i> ~ N(0, &sigma;<sub>w</sub>&sup2;), or uniform as Glorot &amp; Bengio drew them, on [&minus;<i>a</i>, <i>a</i>] with <i>a</i> = &radic;3&middot;&sigma;<sub>w</sub> so the variance is the same (see <a href="uniform-third.html">why a&sup2;/3</a>); the inputs <i>x</i> and the upstream gradients &part;L/&part;h are N(0, 1). Every cell uses the same horizontal scale, &minus;4 to 4, so a wider curve means a bigger variance; tall spikes are clipped at the top. <b>Products are not normal</b>: w&middot;x has variance &sigma;<sub>w</sub>&sup2;&middot;1 either way, but a sharp peak at 0. With Gaussian w its density is K<sub>0</sub>(|z|/&sigma;<sub>w</sub>)/(&pi;&sigma;<sub>w</sub>), a Bessel function with exponential tails; with uniform w it is E<sub>1</sub>(z&sup2;/2a&sup2;)/(2a&radic;(2&pi;)), an exponential integral whose tails fall off like a Gaussian's, since |w| &le; a. Both are drawn exactly. <b>Sums become normal</b>: adding several independent products gives a curve close to a Gaussian (the central limit theorem), with variance the sum of theirs. Forward, <i>h</i><sub>i</sub> = &Sigma;<sub>j</sub> <i>w</i><sub>ij</sub><i>x</i><sub>j</sub> adds <i>n</i> products. Backward, the chain rule gives &part;L/&part;x<sub>j</sub> = &Sigma;<sub>i</sub> <i>w</i><sub>ij</sub>&part;L/&part;h<sub>i</sub>: column <i>j</i> of <i>W</i>, which is row <i>j</i> of <i>W</i><sup>T</sup>, so it adds <i>m</i> products. The dashed curve on each result is N(0, 1), the spread that went in.</div>
+<div class="cap">Weights are either Gaussian, <i>w</i> ~ N(0, &sigma;<sub>w</sub>&sup2;), or uniform as Glorot &amp; Bengio drew them, on [&minus;<i>a</i>, <i>a</i>] with <i>a</i> = &radic;3&middot;&sigma;<sub>w</sub> so the variance is the same (see <a href="uniform-third.html">why a&sup2;/3</a>); the inputs <i>x</i> and the upstream gradients &part;L/&part;h are N(0, 1). Every cell uses the same horizontal scale, &minus;4 to 4, so a wider curve means a bigger variance; each curve is drawn as a fine histogram would show it, scaled to its own peak. <b>Products are not normal</b>: w&middot;x has variance &sigma;<sub>w</sub>&sup2;&middot;1 either way, but a sharp peak at 0. With Gaussian w its density is K<sub>0</sub>(|z|/&sigma;<sub>w</sub>)/(&pi;&sigma;<sub>w</sub>), a Bessel function with exponential tails; with uniform w it is E<sub>1</sub>(z&sup2;/2a&sup2;)/(2a&radic;(2&pi;)), an exponential integral whose tails fall off like a Gaussian's, since |w| &le; a. Both are drawn exactly. <b>Sums become normal</b>: adding several independent products gives a curve close to a Gaussian (the central limit theorem), with variance the sum of theirs. Forward, <i>h</i><sub>i</sub> = &Sigma;<sub>j</sub> <i>w</i><sub>ij</sub><i>x</i><sub>j</sub> adds <i>n</i> products. Backward, the chain rule gives &part;L/&part;x<sub>j</sub> = &Sigma;<sub>i</sub> <i>w</i><sub>ij</sub>&part;L/&part;h<sub>i</sub>: column <i>j</i> of <i>W</i>, which is row <i>j</i> of <i>W</i><sup>T</sup>, so it adds <i>m</i> products. The dashed curve on each result is N(0, 1), the spread that went in.</div>
 
 <h2>Stacking layers: the n&middot;Var(W) factor compounds</h2>
 <svg id="lay" viewBox="0 0 900 270" role="img">
@@ -154,14 +154,23 @@ function cell(g, x, y, dist, val, color, op, ghost, dist2, val2, color2, mix){
   if(op<0.01) return;
   var gg=el('g',{opacity:op.toFixed(3)}); g.appendChild(gg);
   gg.appendChild(el('rect',{x:x+1,y:y+1,width:CW-2,height:CH-2,rx:5,fill:'var(--surface)',stroke:'var(--border)','stroke-width':1}));
-  var base=y+CH-9, top=y+20, H=base-top, sc=0.62*H/0.3989;
+  var base=y+CH-9, top=y+20, H=base-top;
   var px=function(z){ return x+5+(z+XR)/(2*XR)*(CW-10); };
   function path(pdf){
     var d='';
     var zs=[]; for(var k=0;k<=56;k++) zs.push(-XR+2*XR*k/56);
     if(pdf.edge) [-1,1].forEach(function(sg){ var e=sg*pdf.edge; if(Math.abs(e)<XR) zs.push(e-1e-6,e+1e-6); });
     zs.sort(function(a,b){ return a-b; });
-    zs.forEach(function(z,k){ var yy=base-Math.min(H,pdf(z)*sc); d+=(k?'L':'M')+px(z).toFixed(1)+','+yy.toFixed(1); });
+    // each value is the density averaged over its drawing bin, as a histogram would
+    // show it; sampling at a point would turn the products' integrable log spike at
+    // 0 into an infinite one. Each curve is then scaled to its own peak, so the
+    // shape shows whole, and width (on the shared axis) shows the spread
+    var hb=2*XR/56, vs=zs.map(function(z){
+      if(pdf.edge) return pdf(z);
+      var a=0; for(var q=0;q<12;q++) a+=pdf(z-hb/2+(q+0.5)*hb/12); return a/12;
+    });
+    var top=Math.max.apply(null,vs)||1;
+    zs.forEach(function(z,k){ var yy=base-0.9*H*vs[k]/top; d+=(k?'L':'M')+px(z).toFixed(1)+','+yy.toFixed(1); });
     return d;
   }
   if(ghost) gg.appendChild(el('path',{d:path(function(z){ return gaussPdf(z,1); }),fill:'none',stroke:'var(--text-muted)','stroke-width':1,'stroke-dasharray':'2 2'}));
@@ -190,14 +199,19 @@ function draw(){
   var TOP=CH+48; CY=TOP+n*CH/2;
   document.getElementById('anim').setAttribute('viewBox','0 0 1000 '+(TOP+n*CH+36));
   var bwd=mode==='bwd', off=bwd?1:0;
-  var tT=bwd?cl(t):1, eT=bwd?ease(tT):1, eD=ease(cl(t-off)), eM=ease(cl(t-off-1)), eA=ease(cl(t-off-2));
+  var eR=0;   // set below, once eA is known
+  var tT=bwd?cl(t):1, eT=bwd?ease(tT):1, eD=ease(cl(t-off)), eM=ease(cl(t-off-1)), eA=ease(cl(t-off-2)); eR=cl((eA-0.7)/0.3);
   // the product being computed: M (R x C) times v (C)
   var R=bwd?n:m, C=bwd?m:n;
   var Mv=function(i,j){ return bwd?W(j,i):W(i,j); };
   var V=bwd?G.slice(0,m):X.slice(0,n);
   var vCol=bwd?'var(--orange-ink)':'var(--blue-ink)', wCol='var(--violet-ink)', rCol='var(--green-ink)';
-  var vName=bwd?'∂L/∂h':'x', rName=bwd?'∂L/∂x = Wᵀ ∂L/∂h':'h = Wx', MName=bwd?'Wᵀ':'W';
-  var ox=70, oy=Math.max(TOP,CY-R*CH/2), vx=ox+(bwd?Math.max(n,m):n)*CW+46, rx=vx+CW+74;   // room for W before it is transposed
+  var vName=bwd?'∂L/∂h':'x', MName=bwd?'Wᵀ':'W';
+  // forward reads left to right, W x = h; backward runs the other way, the way the
+  // gradient flows, with its result on the left: dL/dx = W^T dL/dh
+  var oy=Math.max(TOP,CY-R*CH/2), ox, vx, rx;
+  if(!bwd){ ox=70; vx=ox+n*CW+46; rx=vx+CW+74; }
+  else { rx=190; ox=rx+CW+74; vx=ox+lerp(Math.max(n,m),C,eT)*CW+46; }   // v clears W before the transpose, then closes up beside W^T
   var vy0=CY-C*CH/2;                                   // v stands as a column to M's right
   // --- matrix cells ---
   var cellPos=function(i,j){                             // where cell (i,j) of M sits, with transpose and add motions
@@ -216,12 +230,16 @@ function draw(){
     var p=cellPos(i,j), w=Mv(i,j), prod=w*V[j], fade=1-cl((eA-0.75)/0.25);
     var wD=wdist==='gauss'?{k:'g',s:sw}:{k:'u',s:Math.sqrt(3)*sw}, pD=wdist==='gauss'?{k:'p',s:sw}:{k:'q',s:Math.sqrt(3)*sw};
     cell(g,p[0],p[1],wD,w,wCol,fade,false,pD,prod,'var(--pink-ink)',eM);
+    // once the sum is done, the matrix comes back where it started, so the last
+    // frame reads as the whole equation
+    if(eR>0) cell(g,ox+j*CW,oy+i*CH,wD,w,wCol,eR);
   }
   // --- the vector: stands to the right, then is dealt one entry per column ---
   for(var j2=0;j2<C;j2++){
     var sx=vx, sy=vy0+j2*CH, tx=ox+j2*CW, ty=oy-CH-16;
     var x=lerp(sx,tx,eD), y=lerp(sy,ty,eD)-Math.sin(Math.PI*eD)*30;
     cell(g,x,y,{k:'g',s:1},V[j2],vCol,(1-eM*0.6)*(1-eA));
+    if(eR>0) cell(g,sx,sy,{k:'g',s:1},V[j2],vCol,eR);
   }
   // --- the result ---
   var sumS=Math.sqrt(C)*sw;
@@ -232,13 +250,15 @@ function draw(){
   // --- labels ---
   var lab=function(x,y,s,c,op,anchor){ if(op>0.02) txt(g,x,y,'ts gl',s,{'text-anchor':anchor||'middle',opacity:op.toFixed(2),fill:c,style:'font-weight:600'}); };
   if(bwd&&eT<1){ var oyW=Math.max(TOP,CY-m*CH/2); lab(ox+n*CW/2,oyW+m*CH+22,'W  ('+m+'×'+n+')',wCol,1-eT); }
-  lab(ox+C*CW/2,oy+R*CH+22,MName+'  ('+R+'×'+C+')',wCol,eT*(1-eA));
-  lab(vx+CW/2,vy0+C*CH+22,vName+'  ('+C+')',vCol,1-eD);
+  lab(ox+C*CW/2,oy+R*CH+22,MName+'  ('+R+'×'+C+')',wCol,Math.max(eT*(1-eA),eR));
+  lab(vx+CW/2,vy0+C*CH+22,vName+'  ('+C+')',vCol,Math.max(1-eD,eR));
   lab(ox+C*CW/2,oy-CH-24,vName+', one entry per column',vCol,eD*(1-eA));
-  lab(rx+CW/2,oy+R*CH+22,rName,rCol,cl((eA-0.55)/0.45));
-  if(eA<0.5){ txt(g,vx-24,CY+6,'ts','·',{'text-anchor':'middle',style:'font-size:26px',fill:'var(--text-muted)',opacity:(1-eD).toFixed(2)}); }
+  lab(rx+CW/2,oy+R*CH+22,(bwd?'∂L/∂x':'h')+'  ('+R+')',rCol,cl((eA-0.55)/0.45));
+  var dotOp=Math.max(eA<0.5?1-eD:0,eR);
+  if(dotOp>0.02) txt(g,vx-24,CY+6,'ts','·',{'text-anchor':'middle',style:'font-size:26px',fill:'var(--text-muted)',opacity:dotOp.toFixed(2)});
+  if(eR>0.02) txt(g,bwd?(rx+CW+ox)/2:(vx+CW+rx)/2,CY+8,'ts','=',{'text-anchor':'middle',style:'font-size:24px',fill:'var(--text-muted)',opacity:eR.toFixed(2)});
   // per-row annotation while adding
-  if(eA>0.6) for(var i4=0;i4<R;i4++) txt(g,rx+CW+8,oy+i4*CH+CH/2+5,'tn gl','σ = √'+C+'·'+sw.toFixed(2)+' = '+sumS.toFixed(2),{style:'font-size:12px',fill:rCol,opacity:cl((eA-0.6)/0.4).toFixed(2)});
+  if(eA>0.6) for(var i4=0;i4<R;i4++) txt(g,bwd?rx-8:rx+CW+8,oy+i4*CH+CH/2+5,'tn gl','σ = √'+C+'·'+sw.toFixed(2)+' = '+sumS.toFixed(2),{'text-anchor':bwd?'end':'start',style:'font-size:12px',fill:rCol,opacity:cl((eA-0.6)/0.4).toFixed(2)});
   if(eM>0.3&&eA<0.3) txt(g,ox+C*CW+10,oy+R*CH/2+5,'tn gl','each cell: σ_w·1 = '+sw.toFixed(2)+', not normal',{style:'font-size:12px',fill:'var(--pink-ink)',opacity:cl((eM-0.3)/0.4*(1-eA*3)).toFixed(2)});
   // --- controls state ---
   document.getElementById('ts').max=beats()*100;
