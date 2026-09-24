@@ -4,128 +4,183 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Forward vs. backward: Glorot's compromise</title>
-<meta name="description" content="Why no single weight variance keeps both the forward signal and the backward gradient stable when a layer isn't square, and how Glorot's 2/(n_in+n_out) splits the difference.">
+<meta name="description" content="One layer drawn node by node: each output sums n_in terms on the way forward, each input's gradient sums n_out terms on the way back, so no single weight variance keeps both stable unless the layer is square, and Glorot's 2/(n_in+n_out) splits the difference.">
 <link rel="stylesheet" href="../demo.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 <style>
-body{gap:5px;padding:11px 16px 12px}
+body{gap:5px;padding:11px 16px 14px}
 h1{font-size:19px;margin-top:2px}
 .quiz{margin:0}
-#wrap{height:clamp(180px,30vh,260px);display:flex;gap:10px;align-items:stretch}
-#stage{flex:2;min-width:0}
-.formula{flex:1;display:flex;flex-direction:column;justify-content:center;gap:8px;
-  border-left:1px solid var(--border);padding-left:10px;min-width:0}
-.formula .f{font-size:clamp(13px,2.6vw,18px);color:var(--text-primary);line-height:1.35}
-@media (max-width:640px){.formula{display:none}}
+#wrap{display:flex;gap:14px;align-items:center}
+#net{flex:1.1;min-width:0;max-height:none}
+.formula{flex:1;display:flex;flex-direction:column;gap:10px;min-width:0;font-size:15px}
+.formula .blk{border-left:3px solid var(--border);padding:2px 0 2px 10px}
+.formula .fw{border-color:var(--blue)}
+.formula .bw{border-color:var(--orange)}
+.formula .lab{font-size:12.5px;color:var(--text-secondary);margin-bottom:2px}
+.formula .ok{color:var(--green-ink)}
+.formula .bad{color:var(--red)}
+@media (max-width:760px){#wrap{flex-direction:column;align-items:stretch}}
+#bars{max-height:none}
 .row{gap:7px}
-button,select{height:30px;font-size:13px;padding:0 9px}
+button{height:30px;font-size:13px;padding:0 9px}
 .seg button{height:28px;font-size:12px;padding:0 8px}
 .klab{font-size:12.5px}
 .knum{font-size:12.5px;min-width:auto}
-.rd{font-size:13.5px;line-height:1.4;min-height:1.4em}
-.cap{font-size:12px;line-height:1.4;padding-top:4px}
+.cap{font-size:12.5px;line-height:1.5;padding-top:4px}
 .nav{display:flex;align-items:baseline;gap:10px}
 </style>
 </head>
 <body>
 <div class="nav"><a href="./">&larr; Initialization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
 <h1>Forward vs. backward<span>: Glorot's compromise</span></h1>
-<p class="quiz">One layer, <code>n_in</code> inputs and <code>n_out</code> outputs. Keeping the forward signal's variance stable wants <code>Var(W)=1/n_in</code>; keeping the backward gradient's variance stable wants <code>Var(W)=1/n_out</code>. When the layer isn't square, nothing satisfies both &mdash; Glorot's formula picks the variance that minimizes how badly either one drifts.</p>
+<p class="quiz">One layer, <i>h</i> = <i>Wx</i>, drawn node by node. On the way <b style="color:var(--blue-ink)">forward</b>, each output sums <i>n</i><sub>in</sub> weighted inputs; on the way <b style="color:var(--orange-ink)">backward</b>, each input's gradient sums <i>n</i><sub>out</sub> weighted output gradients. So forward stability wants Var(<i>W</i>) = 1/<i>n</i><sub>in</sub> and backward stability wants 1/<i>n</i><sub>out</sub>. Unless the layer is square, no single variance gives both.</p>
 
 <div id="wrap">
-<svg id="stage" viewBox="0 0 640 300" role="img" preserveAspectRatio="xMidYMid meet">
-  <desc>Bars showing the forward and backward variance amplification factor for three initialization schemes, as n_in and n_out are varied.</desc>
-  <g id="g"></g>
+<svg id="net" viewBox="0 0 560 330" role="img">
+  <desc>A fully connected layer with n_in input nodes on the left and n_out output nodes on the right; one output's incoming fan is highlighted in blue and one input's outgoing fan in orange.</desc>
+  <g id="gnet"></g>
 </svg>
 <div class="formula">
-  <div class="f">
-    <div class="texline" data-tex="\mathrm{Var}(h)=n_{in}\mathrm{Var}(W)\mathrm{Var}(a)"></div>
-    <div class="texline" data-tex="\mathrm{Var}(\delta_{in})=n_{out}\mathrm{Var}(W)\mathrm{Var}(\delta_{out})"></div>
-    <div class="texline" data-tex="\text{Glorot: }\mathrm{Var}(W)=\tfrac{2}{n_{in}+n_{out}}"></div>
-  </div>
+  <div class="blk fw"><div class="lab">forward: each output sums n<sub>in</sub> products</div><div id="ffw"></div><div id="vfw" class="lab"></div></div>
+  <div class="blk bw"><div class="lab">backward: each input's gradient sums n<sub>out</sub> products</div><div id="fbw"></div><div id="vbw" class="lab"></div></div>
+  <div class="blk"><div class="lab">the weight variance of the chosen scheme</div><div id="fsc"></div></div>
 </div>
 </div>
 
 <div class="row">
-  <span class="klab">n_in</span>
-  <input type="range" id="nin" min="4" max="400" step="1" value="48" oninput="onParams()" style="width:110px">
+  <span class="klab">n<sub>in</sub></span>
+  <input type="range" id="nin" min="4" max="400" step="1" value="48" oninput="onParams()" style="flex:0 1 130px;min-width:70px">
   <span class="knum" id="ninVal">48</span>
-  <span class="klab">n_out</span>
-  <input type="range" id="nout" min="4" max="400" step="1" value="48" oninput="onParams()" style="width:110px">
-  <span class="knum" id="noutVal">48</span>
-  <button onclick="setRatio(1)">square (n_in=n_out)</button>
-  <button onclick="setRatio(8)">bottleneck (n_out=8&times;n_in)</button>
+  <span class="klab">n<sub>out</sub></span>
+  <input type="range" id="nout" min="4" max="400" step="1" value="192" oninput="onParams()" style="flex:0 1 130px;min-width:70px">
+  <span class="knum" id="noutVal">192</span>
+  <button onclick="setRatio(1)">square</button>
+  <button onclick="setRatio(4)">expand 4&times;</button>
+  <button onclick="setRatio(0.25)">shrink 4&times;</button>
+  <div class="seg" id="schemeSeg">
+    <button data-s="std">standard</button>
+    <button data-s="fwd">forward Xavier</button>
+    <button data-s="bwd">backward Xavier</button>
+    <button data-s="glorot" class="on">Glorot</button>
+  </div>
 </div>
 
-<div class="rd" id="readout"></div>
-<div class="cap">Each group of bars is one scheme's <code>Var(W)</code>; the two bars show the resulting forward factor <code>n_in&middot;Var(W)</code> and backward factor <code>n_out&middot;Var(W)</code> (1.0 = perfectly preserved, the dashed line). Forward-only Xavier nails the forward bar but the backward bar drifts by the layer's aspect ratio, and vice versa for backward-only; Glorot's harmonic-ish average keeps both within a factor of 2 of 1 for any ratio.</div>
+<svg id="bars" viewBox="0 0 900 190" role="img">
+  <desc>For each of four initialization schemes, a bar for the forward factor n_in Var(W) and one for the backward factor n_out Var(W), on a log scale where 1 means perfectly preserved.</desc>
+  <g id="gbars"></g>
+</svg>
+
+<div class="cap">Bars: each scheme's forward factor <i>n</i><sub>in</sub>&middot;Var(<i>W</i>) (solid) and backward factor <i>n</i><sub>out</sub>&middot;Var(<i>W</i>) (faint), log scale; 1 (the dark line) means the variance passes through the layer unchanged. Click a scheme to show its numbers above. <b>Standard</b> (Var = 1/(3<i>n</i><sub>in</sub>)) shrinks the forward signal to 1/3 at every layer. <b>Forward Xavier</b> fixes the forward factor at 1 but leaves the backward factor at <i>n</i><sub>out</sub>/<i>n</i><sub>in</sub>, and <b>backward Xavier</b> does the reverse. <b>Glorot</b> uses the harmonic mean of the two ideal variances, 2/(<i>n</i><sub>in</sub> + <i>n</i><sub>out</sub>), so the two factors always average to exactly 1: neither is ever more than 2&times; too large, and the other errs by (<i>n</i><sub>in</sub> + <i>n</i><sub>out</sub>)/(2<i>n</i><sub>smaller</sub>), always less than the <i>n</i><sub>larger</sub>/<i>n</i><sub>smaller</sub> that a one-sided Xavier suffers. For a layer that expands 4&times;, Glorot gives 0.4 and 1.6, where forward Xavier gives 1 and 4. The rules behind both formulas are on the <a href="variance.html">variance page</a>. Both factors assume the activation is roughly the identity near 0, as tanh is.</div>
 
 <script>
 var NS='http://www.w3.org/2000/svg';
 function el(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attrs)e.setAttribute(k,attrs[k]);return e;}
+function txt(g,x,y,cls,str,attrs){ var t=el('text',Object.assign({x:x,y:y,class:cls},attrs||{})); t.textContent=str; g.appendChild(t); return t; }
+function f(v){ return v>=100?v.toFixed(0):v>=10?v.toFixed(1):v>=0.01?v.toFixed(v>=1?2:3):v.toExponential(1); }
 
-var nin=48, nout=48;
+var nin=48, nout=192, scheme='glorot';
+var SCHEMES={
+  std:   {name:'standard', varW:function(){ return 1/(3*nin); }, tex:'\\mathrm{Var}(W)=\\frac{1}{3\\,n_{in}}'},
+  fwd:   {name:'forward Xavier', varW:function(){ return 1/nin; }, tex:'\\mathrm{Var}(W)=\\frac{1}{n_{in}}'},
+  bwd:   {name:'backward Xavier', varW:function(){ return 1/nout; }, tex:'\\mathrm{Var}(W)=\\frac{1}{n_{out}}'},
+  glorot:{name:'Glorot', varW:function(){ return 2/(nin+nout); }, tex:'\\mathrm{Var}(W)=\\frac{2}{n_{in}+n_{out}}'}
+};
 function setRatio(r){
-  document.getElementById('nin').value=48;
-  document.getElementById('nout').value=Math.min(400,Math.round(48*r));
+  var base=r>=1?48:192;
+  document.getElementById('nin').value=base;
+  document.getElementById('nout').value=Math.min(400,Math.round(base*r));
   onParams();
 }
 function onParams(){
-  nin=parseInt(document.getElementById('nin').value,10);
-  nout=parseInt(document.getElementById('nout').value,10);
-  document.getElementById('ninVal').textContent=nin;
-  document.getElementById('noutVal').textContent=nout;
+  nin=+document.getElementById('nin').value; nout=+document.getElementById('nout').value;
+  document.getElementById('ninVal').textContent=nin; document.getElementById('noutVal').textContent=nout;
+  draw();
+}
+document.getElementById('schemeSeg').addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b) return; pickScheme(b.dataset.s);
+});
+function pickScheme(s){
+  scheme=s;
+  Array.from(document.getElementById('schemeSeg').children).forEach(function(x){ x.classList.toggle('on',x.dataset.s===s); });
   draw();
 }
 
-var VW=640, VH=300;
-function draw(){
-  var g=document.getElementById('g');
-  g.innerHTML='';
-  var schemes=[
-    {name:'forward Xavier', varW: 1/nin, color:'var(--blue-ink)'},
-    {name:'backward Xavier', varW: 1/nout, color:'var(--orange-ink)'},
-    {name:'Glorot', varW: 2/(nin+nout), color:'var(--green-ink)'}
-  ];
-  var padL=48, padR=14, padT=20, padB=54;
-  var plotT=padT, plotB=VH-padB;
-  var logMin=-2, logMax=2; // 0.01x .. 100x on log scale
-  function ly(v){ var l=Math.log10(Math.max(v,1e-6)); l=Math.max(logMin,Math.min(logMax,l));
-    return plotB - (l-logMin)/(logMax-logMin)*(plotB-plotT); }
-  g.appendChild(el('line',{x1:padL,y1:plotT,x2:padL,y2:plotB,stroke:'var(--border-strong)','stroke-width':1}));
-  g.appendChild(el('line',{x1:padL,y1:plotB,x2:VW-padR,y2:plotB,stroke:'var(--border-strong)','stroke-width':1}));
-  [0.1,1,10].forEach(function(v){
-    var y=ly(v);
-    g.appendChild(el('line',{x1:padL,y1:y,x2:VW-padR,y2:y,stroke:v===1?'var(--border-strong)':'var(--border)','stroke-width':v===1?1.2:0.6,'stroke-dasharray':v===1?'':'3 3',opacity:0.7}));
-    var t=el('text',{x:padL-6,y:y+3,class:'tn gl','text-anchor':'end'}); t.textContent=v+'×'; g.appendChild(t);
-  });
-
-  var groupW=(VW-padL-padR)/schemes.length;
-  var maxFwd=0,maxBwd=0;
-  schemes.forEach(function(s){
-    var x0=padL+schemes.indexOf(s)*groupW;
-    var fwd=nin*s.varW, bwd=nout*s.varW;
-    if(s.name==='forward Xavier') maxFwd=fwd; if(s.name==='backward Xavier') maxBwd=bwd;
-    var bw=groupW*0.28, gap=groupW*0.06;
-    var xf=x0+groupW*0.5-bw-gap/2, xb=x0+groupW*0.5+gap/2;
-    g.appendChild(el('rect',{x:xf,y:Math.min(ly(fwd),plotB),width:bw,height:Math.abs(plotB-ly(fwd)),fill:s.color,opacity:0.85}));
-    g.appendChild(el('rect',{x:xb,y:Math.min(ly(bwd),plotB),width:bw,height:Math.abs(plotB-ly(bwd)),fill:s.color,opacity:0.4}));
-    var tf=el('text',{x:xf+bw/2,y:ly(fwd)-4,class:'tn gl','text-anchor':'middle'}); tf.textContent=fwd.toFixed(2); g.appendChild(tf);
-    var tb=el('text',{x:xb+bw/2,y:ly(bwd)-4,class:'tn gl','text-anchor':'middle'}); tb.textContent=bwd.toFixed(2); g.appendChild(tb);
-    var lab=el('text',{x:x0+groupW/2,y:plotB+16,class:'ts gl','text-anchor':'middle'}); lab.textContent=s.name; g.appendChild(lab);
-  });
-  var leg=el('text',{x:padL,y:plotT-6,class:'ts gl'}); leg.textContent='solid = forward factor, faint = backward factor (dashed line = 1.0, perfectly preserved)'; g.appendChild(leg);
-
-  var g0=schemes[2];
-  var gFwd=nin*g0.varW, gBwd=nout*g0.varW;
-  var worst=Math.max(Math.abs(Math.log2(gFwd)),Math.abs(Math.log2(gBwd)));
-  document.getElementById('readout').innerHTML = 'n_in='+nin+', n_out='+nout+' &mdash; Glorot: forward '+gFwd.toFixed(2)+'×, backward '+gBwd.toFixed(2)+'× (off by at most 2^'+worst.toFixed(2)+'&asymp;'+Math.pow(2,worst).toFixed(2)+'× either way)';
+// a column of visible nodes, at most MAXN for the wider side and fewer, by
+// sqrt(n/n_max), for the narrower one, so the layer's shape shows; when n is
+// larger than what is drawn, the middle is elided with a ⋮
+var MAXN=16;
+function column(n, x, top, bot){
+  var k=Math.min(n,Math.max(3,Math.round(MAXN*Math.sqrt(n/Math.max(nin,nout))))), ys=[], elided=n>k;
+  var slots=elided?k+1:k, sp=Math.min(22,(bot-top)/Math.max(1,slots-1)), mid=(top+bot)/2;
+  for(var i=0;i<slots;i++) ys.push(mid+(i-(slots-1)/2)*sp);
+  var gap=elided?Math.floor(slots/2):-1;
+  return {x:x, nodes:ys.filter(function(_,i){ return i!==gap; }), gapY:elided?ys[gap]:null};
 }
 
-document.querySelectorAll('.texline').forEach(function(el){
-  katex.render(el.getAttribute('data-tex'), el, {throwOnError:false});
-});
+function draw(){
+  var S=SCHEMES[scheme], varW=S.varW(), fw=nin*varW, bw=nout*varW;
+  // ---- network diagram ----
+  var g=document.getElementById('gnet'); g.innerHTML='';
+  var top=48, bot=290, L=column(nin,150,top,bot), R=column(nout,410,top,bot);
+  var jo=Math.floor(R.nodes.length/2)-1, ii=Math.floor(L.nodes.length/2)+1;   // the highlighted output j and input i
+  L.nodes.forEach(function(yl,a){ R.nodes.forEach(function(yr,b){
+    g.appendChild(el('line',{x1:L.x,y1:yl,x2:R.x,y2:yr,stroke:'var(--text-muted)','stroke-width':0.5,opacity:0.22}));
+  }); });
+  L.nodes.forEach(function(yl){ g.appendChild(el('line',{x1:L.x,y1:yl,x2:R.x,y2:R.nodes[jo],stroke:'var(--blue)','stroke-width':1.3,opacity:0.8})); });
+  R.nodes.forEach(function(yr){ g.appendChild(el('line',{x1:L.x,y1:L.nodes[ii],x2:R.x,y2:yr,stroke:'var(--orange)','stroke-width':1.3,opacity:0.8})); });
+  [L,R].forEach(function(C,side){
+    C.nodes.forEach(function(y,k){
+      var hi=side===1?k===jo:k===ii;
+      g.appendChild(el('circle',{cx:C.x,cy:y,r:hi?7:5,fill:hi?(side?'var(--blue)':'var(--orange)'):'var(--surface)',stroke:'var(--border-strong)','stroke-width':1}));
+    });
+    if(C.gapY!==null) txt(g,C.x,C.gapY+5,'ts','⋮',{'text-anchor':'middle',style:'font-size:18px'});
+  });
+  txt(g,L.x,top-22,'ts gl','x: n_in = '+nin,{'text-anchor':'middle',style:'font-weight:600'});
+  txt(g,R.x,top-22,'ts gl','h = Wx: n_out = '+nout,{'text-anchor':'middle',style:'font-weight:600'});
+  txt(g,R.x+14,R.nodes[jo]+5,'num gl','hⱼ ← '+nin+' terms',{style:'font-size:13px',fill:'var(--blue-ink)'});
+  txt(g,L.x-14,L.nodes[ii]+5,'num gl',nout+' terms → ∂L/∂xᵢ',{'text-anchor':'end',style:'font-size:13px',fill:'var(--orange-ink)'});
+  txt(g,280,322,'tn gl',nin+' × '+nout+' = '+(nin*nout).toLocaleString()+' weights, each with Var(W) = '+f(varW),{'text-anchor':'middle',style:'font-size:12.5px'});
+
+  // ---- formulas with numbers ----
+  var num=function(v){ return f(v).replace('e-','\\times10^{-')+(f(v).indexOf('e-')>=0?'}':''); };
+  katex.render('\\mathrm{Var}(h)=n_{in}\\,\\mathrm{Var}(W)\\,\\mathrm{Var}(x)='+nin+'\\cdot'+num(varW)+'\\cdot\\mathrm{Var}(x)='+num(fw)+'\\,\\mathrm{Var}(x)',document.getElementById('ffw'),{throwOnError:false});
+  katex.render('\\mathrm{Var}\\big(\\tfrac{\\partial L}{\\partial x}\\big)=n_{out}\\,\\mathrm{Var}(W)\\,\\mathrm{Var}\\big(\\tfrac{\\partial L}{\\partial h}\\big)='+nout+'\\cdot'+num(varW)+'\\cdot\\mathrm{Var}\\big(\\tfrac{\\partial L}{\\partial h}\\big)='+num(fw*nout/nin)+'\\,\\mathrm{Var}\\big(\\tfrac{\\partial L}{\\partial h}\\big)',document.getElementById('fbw'),{throwOnError:false});
+  katex.render(S.tex+'='+num(varW)+'\\quad('+S.name.replace(' ','\\ ').replace(/^/,'\\text{')+'})',document.getElementById('fsc'),{throwOnError:false});
+  var judge=function(v,dir){
+    var off=Math.abs(Math.log2(v));
+    if(off<0.05) return '<span class="ok">'+dir+' variance preserved exactly</span>';
+    var fac=v>1?v:1/v, word=v>1?'grows':'shrinks';
+    return '<span class="'+(off>1.01?'bad':'ok')+'">'+dir+' variance '+word+' '+f(fac)+'&times; per layer; over 10 such layers, '+(v>1?'&times;':'&divide;')+f(Math.pow(fac,10))+'</span>';
+  };
+  document.getElementById('vfw').innerHTML=judge(fw,'forward');
+  document.getElementById('vbw').innerHTML=judge(bw,'backward');
+
+  // ---- bars: all four schemes ----
+  var gb=document.getElementById('gbars'); gb.innerHTML='';
+  var padL=60, padR=10, plotT=24, plotB=150, VW=900, LMIN=-2, LMAX=2;
+  var ly=function(v){ var l=Math.log10(Math.max(v,1e-6)); l=Math.max(LMIN,Math.min(LMAX,l)); return plotB-(l-LMIN)/(LMAX-LMIN)*(plotB-plotT); };
+  [0.1,1,10].forEach(function(v){
+    gb.appendChild(el('line',{x1:padL,y1:ly(v),x2:VW-padR,y2:ly(v),stroke:v===1?'var(--text-secondary)':'var(--border)','stroke-width':v===1?1.3:0.6,'stroke-dasharray':v===1?'':'3 3'}));
+    txt(gb,padL-6,ly(v)+4,'tn gl',v+'×',{'text-anchor':'end',style:'font-size:12px'});
+  });
+  var keys=['std','fwd','bwd','glorot'], gw=(VW-padL-padR)/keys.length;
+  keys.forEach(function(k,i){
+    var s=SCHEMES[k], vw=s.varW(), x0=padL+i*gw, on=k===scheme, bwid=gw*0.22;
+    if(on) gb.appendChild(el('rect',{x:x0+4,y:plotT-16,width:gw-8,height:plotB-plotT+40,rx:6,fill:'var(--blue)',opacity:0.07}));
+    [[nin*vw,'var(--blue)',0.85,-1],[nout*vw,'var(--orange)',0.55,1]].forEach(function(q){
+      var x=x0+gw/2+(q[3]<0?-bwid-3:3), y=ly(q[0]), base=ly(1);
+      gb.appendChild(el('rect',{x:x,y:Math.min(y,base),width:bwid,height:Math.max(1,Math.abs(base-y)),fill:q[1],opacity:q[2]}));
+      txt(gb,x+bwid/2,(q[0]>=1?y-4:y+13),'num gl',f(q[0]),{'text-anchor':'middle',style:'font-size:12px'});
+    });
+    txt(gb,x0+gw/2,plotB+30,'ts gl',s.name,{'text-anchor':'middle',style:'font-size:14px'+(on?';font-weight:600':'')});
+    var hit=el('rect',{x:x0,y:0,width:gw,height:190,fill:'transparent',style:'cursor:pointer'});
+    hit.addEventListener('click',function(){ pickScheme(k); });
+    gb.appendChild(hit);
+  });
+  txt(gb,padL,14,'ts gl','blue: forward factor n_in·Var(W)  ·  orange: backward factor n_out·Var(W)  ·  1× = preserved',{style:'font-size:13px'});
+}
 onParams();
 </script>
 </body>
