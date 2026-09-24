@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Variance, and n·Var(W)</title>
+<meta name="description" content="What variance is (an average square), the four algebra rules that make it useful, and why they give Var(h) = n·Var(W)·Var(x), so standard initialization's n·Var(W) = 1/3 shrinks the signal threefold per layer.">
+<link rel="stylesheet" href="../demo.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<style>
+body{gap:6px;padding:11px 16px 24px;max-width:1100px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+h2{font-size:16px;font-weight:600;margin:14px 0 0;letter-spacing:-.005em}
+.quiz{margin:0}
+svg{max-height:none}
+.row{gap:7px}
+button,select{height:30px;font-size:13px;padding:0 9px}
+.seg button{height:28px;font-size:12px;padding:0 8px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:auto}
+.rd{font-size:13.5px;line-height:1.45;min-height:1.4em}
+.cap{font-size:12.5px;line-height:1.5;padding-top:4px}
+.nav{display:flex;align-items:baseline;gap:10px}
+.rules{display:grid;grid-template-columns:auto 1fr;gap:6px 18px;align-items:center;font-size:14px;margin:4px 0}
+.rules .m{font-size:15.5px;color:var(--text-primary)}
+.rules .w{color:var(--text-secondary);line-height:1.4}
+.rules .n{grid-column:1/3;border-top:1px solid var(--border);margin:2px 0}
+@media (max-width:700px){.rules{grid-template-columns:1fr}.rules .w{margin-bottom:6px}}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Initialization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Variance, and n&middot;Var(W)<span>: why standard init shrinks the signal</span></h1>
+<p class="quiz">Glorot &amp; Bengio note that the standard initialization gives <i>n</i>&middot;Var(<i>W</i>) = 1/3. This page builds up what that means: what variance is, the four rules that make it easy to push through a layer, and how they turn one layer into &ldquo;multiply the variance by <i>n</i>&middot;Var(<i>W</i>).&rdquo;</p>
+
+<h2>1. Variance is an average square</h2>
+<svg id="sq" viewBox="0 0 900 270" role="img">
+  <desc>Ten samples on a number line, each with a square whose side is its distance from the mean; on the right, the average of those squares, whose area is the variance and whose side is the standard deviation.</desc>
+  <g id="gsq"></g>
+</svg>
+<div class="row">
+  <button onclick="resampleSq()">Resample</button>
+  <span class="klab">scale every sample by c</span>
+  <input type="range" id="c" min="0.25" max="1.5" step="0.01" value="1" oninput="drawSq()" style="flex:0 1 180px;min-width:80px">
+  <span class="knum" id="cVal">1.00</span>
+</div>
+<div class="rd" id="rdSq"></div>
+
+<h2>2. Four rules</h2>
+<div class="rules" id="rules"></div>
+
+<h2>3. One layer is a sum of n products</h2>
+<svg id="lay" viewBox="0 0 900 270" role="img">
+  <desc>Left: histograms of the inputs x and of one pre-activation h, the sum of n weight-times-input products. Right: the variance after each of eight layers on a log scale, predicted and measured through real tanh layers.</desc>
+  <g id="glay"></g>
+</svg>
+<div class="row">
+  <div class="seg" id="schemeSeg">
+    <button data-s="std" class="on">standard: Var(W) = 1/(3n)</button>
+    <button data-s="xav">Glorot, square layer: Var(W) = 1/n</button>
+  </div>
+  <span class="klab">n (fan-in)</span>
+  <input type="range" id="n" min="1" max="8" step="1" value="6" oninput="drawLay()" style="flex:0 1 150px;min-width:80px">
+  <span class="knum" id="nVal">64</span>
+  <button onclick="drawLay()">Resample</button>
+</div>
+<div class="rd" id="rdLay"></div>
+<div class="cap">Inputs <i>x</i><sub>i</sub> ~ N(0, 1); weights uniform on [&minus;<i>a</i>, <i>a</i>] with <i>a</i> = 1/&radic;<i>n</i> (standard) or &radic;(3/<i>n</i>) (Glorot with <i>n</i><sub>in</sub> = <i>n</i><sub>out</sub> = <i>n</i>); see <a href="uniform-init.html">standard vs. normalized init</a> for why a uniform on [&minus;<i>a</i>, <i>a</i>] has variance <i>a</i>&sup2;/3. The dashed line on the right is the rule-5 prediction (<i>n</i>&middot;Var(<i>W</i>))<sup>L</sup>, which assumes tanh(<i>h</i>) &asymp; <i>h</i>; the bars push 400 inputs through real width-<i>n</i> tanh layers, drawing fresh weights at every layer. Backprop obeys the same rule, with <i>n</i><sub>out</sub> in place of <i>n</i><sub>in</sub>, which is where the <a href="variance-balance.html">forward vs. backward</a> compromise comes from.</div>
+
+<script>
+var NS='http://www.w3.org/2000/svg';
+function el(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attrs)e.setAttribute(k,attrs[k]);return e;}
+function txt(g,x,y,cls,str,attrs){ var t=el('text',Object.assign({x:x,y:y,class:cls},attrs||{})); t.textContent=str; g.appendChild(t); return t; }
+function randn(){ var u=0,v=0; while(!u)u=Math.random(); while(!v)v=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+function f2(v){ return (Math.abs(v)<0.01&&v!==0)?v.toExponential(1):v.toFixed(v>=100?0:v>=10?1:2); }
+
+// ---------- 1. variance as an average square ----------
+var S=[];
+function resampleSq(){ S=[]; for(var i=0;i<10;i++) S.push(randn()); drawSq(); }
+function drawSq(){
+  var c=parseFloat(document.getElementById('c').value);
+  document.getElementById('cVal').textContent=c.toFixed(2);
+  var g=document.getElementById('gsq'); g.innerHTML='';
+  var X=S.map(function(v){ return c*v; });
+  var mu=X.reduce(function(a,b){return a+b;},0)/X.length;
+  var sqs=X.map(function(v){ return (v-mu)*(v-mu); });
+  var V=sqs.reduce(function(a,b){return a+b;},0)/X.length, sd=Math.sqrt(V);
+  var U=64, L0=20, LW=620, LY=248, XR=(LW/U)/2;          // pixels per unit, number line
+  var px=function(v){ return L0+LW/2+v*U; };
+  var clip=function(v){ return Math.max(L0,Math.min(L0+LW,v)); };
+  // squares, biggest first so small ones stay visible
+  var cp=el('clipPath',{id:'sqclip'}); cp.appendChild(el('rect',{x:L0,y:24,width:LW,height:LY-24})); g.appendChild(cp);
+  var order=X.map(function(v,i){return i;}).sort(function(i,j){ return sqs[j]-sqs[i]; });
+  order.forEach(function(i){
+    var d=X[i]-mu, side=Math.abs(d)*U, x=Math.min(px(X[i]),px(mu));
+    g.appendChild(el('rect',{x:x,y:LY-side,width:side,height:side,fill:'var(--violet)',opacity:0.13,stroke:'var(--violet-ink)','stroke-width':0.8,'clip-path':'url(#sqclip)'}));
+  });
+  g.appendChild(el('line',{x1:L0,y1:LY,x2:L0+LW,y2:LY,stroke:'var(--border-strong)','stroke-width':1.2}));
+  for(var t=-4;t<=4;t++) if(Math.abs(t)<=XR){
+    g.appendChild(el('line',{x1:px(t),y1:LY,x2:px(t),y2:LY+4,stroke:'var(--border-strong)','stroke-width':1}));
+    txt(g,px(t),LY+16,'tn',String(t),{'text-anchor':'middle',style:'font-size:11px'});
+  }
+  // mean and ±σ markers
+  g.appendChild(el('line',{x1:px(mu),y1:LY-215,x2:px(mu),y2:LY,stroke:'var(--text-primary)','stroke-width':1.2,'stroke-dasharray':'4 3'}));
+  txt(g,px(mu),LY-219,'tn gl','mean μ',{'text-anchor':'middle',style:'font-size:12px'});
+  [-1,1].forEach(function(s){ g.appendChild(el('line',{x1:clip(px(mu+s*sd)),y1:LY-8,x2:clip(px(mu+s*sd)),y2:LY+8,stroke:'var(--pink-ink)','stroke-width':2})); });
+  txt(g,clip(px(mu+sd))+4,LY-10,'tn gl','μ+σ',{style:'font-size:11.5px',fill:'var(--pink-ink)'});
+  X.forEach(function(v){ g.appendChild(el('circle',{cx:clip(px(v)),cy:LY,r:4,fill:'var(--violet-ink)',stroke:'var(--surface)','stroke-width':1})); });
+  txt(g,L0,16,'ts gl','each sample x hangs a square of side |x − μ| on the line');
+  // the average square
+  var RX=700, side=sd*U;
+  txt(g,RX,16,'ts gl','their average');
+  g.appendChild(el('rect',{x:RX,y:LY-side,width:side,height:side,fill:'var(--pink)',opacity:0.25,stroke:'var(--pink-ink)','stroke-width':1.5}));
+  txt(g,RX+side/2,LY-side/2+5,'num gl','Var',{'text-anchor':'middle',style:'font-size:13px',fill:'var(--pink-ink)'});
+  txt(g,RX+side/2,LY+16,'num','σ = '+f2(sd),{'text-anchor':'middle',style:'font-size:12px',fill:'var(--pink-ink)'});
+  txt(g,RX,40,'num gl','area Var = '+f2(V),{style:'font-size:13px',fill:'var(--text-primary)'});
+  txt(g,RX,58,'num gl','side σ = √Var = '+f2(sd),{style:'font-size:13px',fill:'var(--text-secondary)'});
+  var V1=(function(){ var m=S.reduce(function(a,b){return a+b;},0)/S.length; return S.reduce(function(a,b){return a+(b-m)*(b-m);},0)/S.length; })();
+  document.getElementById('rdSq').innerHTML='Var = average of the '+X.length+' squares = <b class="num">'+f2(V)+'</b>, and std σ = √Var = <b class="num">'+f2(sd)+'</b>. '+
+    'Scaling every sample by c = '+c.toFixed(2)+' scales every side by c and every area by c² = '+f2(c*c)+': Var = '+f2(c*c)+' × '+f2(V1)+' = <b class="num">'+f2(c*c*V1)+'</b>. That is rule 2 below.';
+}
+
+// ---------- 2. rules ----------
+var RULES=[
+  ['\\mathrm{Var}(X)=\\mathbb{E}\\big[(X-\\mu)^2\\big]=\\mathbb{E}[X^2]-\\mu^2','The average square of the deviation from the mean, as drawn above. Weights and (roughly) activations have mean 0, so for them Var(X) = E[X²].'],
+  ['\\mathrm{Var}(cX)=c^2\\,\\mathrm{Var}(X)','Every deviation scales by c, so every square scales by c². Try the c slider above.'],
+  ['\\mathrm{Var}(X+Y)=\\mathrm{Var}(X)+\\mathrm{Var}(Y)','For independent X, Y: expand (X+Y)² and the cross term 2E[XY] = 2E[X]E[Y] vanishes. Variances add like squared lengths of perpendicular sides: independent noise adds by Pythagoras.'],
+  ['\\mathrm{Var}(WX)=\\mathrm{Var}(W)\\,\\mathrm{Var}(X)','For independent W, X with mean 0: E[W²X²] = E[W²]E[X²].'],
+  null,
+  ['\\mathrm{Var}\\Big(\\sum_{i=1}^{n}W_iX_i\\Big)=n\\,\\mathrm{Var}(W)\\,\\mathrm{Var}(X)','A pre-activation h is a sum of n independent products: rule 4 inside each term, rule 3 across the n terms. So one layer multiplies the variance by n·Var(W).'],
+  ['\\text{standard: }\\mathrm{Var}(W)=\\tfrac{1}{3n}\\;\\Rightarrow\\; n\\,\\mathrm{Var}(W)=\\tfrac13','W uniform on [−1/√n, 1/√n] has variance (1/√n)²/3 = 1/(3n). So each layer cuts the variance to a third (while tanh(h) ≈ h): after L layers, 3⁻ᴸ. Below, see it happen.']
+];
+(function(){
+  var box=document.getElementById('rules');
+  RULES.forEach(function(r,i){
+    if(!r){ box.appendChild(Object.assign(document.createElement('div'),{className:'n'})); return; }
+    var m=document.createElement('div'); m.className='m'; katex.render(r[0],m,{throwOnError:false});
+    var w=document.createElement('div'); w.className='w'; w.textContent=r[1];
+    box.appendChild(m); box.appendChild(w);
+  });
+})();
+
+// ---------- 3. one layer, then eight ----------
+var scheme='std';
+document.getElementById('schemeSeg').addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b) return;
+  scheme=b.dataset.s;
+  Array.from(this.children).forEach(function(x){ x.classList.toggle('on',x===b); });
+  drawLay();
+});
+function halfWidth(n){ return scheme==='std'?1/Math.sqrt(n):Math.sqrt(3/n); }
+function drawLay(){
+  var n=Math.pow(2,parseInt(document.getElementById('n').value,10));
+  document.getElementById('nVal').textContent=n;
+  var a=halfWidth(n), varW=a*a/3, gain=n*varW;
+  var uw=function(){ return (2*Math.random()-1)*a; };
+  // one layer: h = sum of n products, many times
+  var M=4000, xs=[], hs=[];
+  for(var s=0;s<M;s++){ var h=0; for(var i=0;i<n;i++){ var x=randn(); if(i===0) xs.push(x); h+=uw()*x; } hs.push(h); }
+  var vr=function(A){ var m=0; A.forEach(function(v){m+=v;}); m/=A.length; var q=0; A.forEach(function(v){q+=(v-m)*(v-m);}); return q/A.length; };
+  var vx=vr(xs), vh=vr(hs);
+  // eight real tanh layers of width n
+  var P=400, depth=8, act=[], varsL=[];
+  for(var p=0;p<P;p++){ var v=[]; for(var i2=0;i2<n;i2++) v.push(randn()); act.push(v); }
+  varsL.push(vr([].concat.apply([],act)));
+  for(var l=1;l<=depth;l++){
+    var Wl=[]; for(var o=0;o<n;o++){ var row=[]; for(var i3=0;i3<n;i3++) row.push(uw()); Wl.push(row); }
+    act=act.map(function(v){ return Wl.map(function(row){ var h=0; for(var i4=0;i4<n;i4++) h+=row[i4]*v[i4]; return Math.tanh(h); }); });
+    varsL.push(vr([].concat.apply([],act)));
+  }
+  var g=document.getElementById('glay'); g.innerHTML='';
+  // left: histograms
+  var HX0=40, HW=380, HY0=30, HH=190, R=4, bins=48;
+  var hx=function(v){ return HX0+(v+R)/(2*R)*HW; };
+  function hist(A){ var c=new Array(bins).fill(0); A.forEach(function(v){ var b=Math.floor((v+R)/(2*R)*bins); if(b>=0&&b<bins) c[b]++; }); return c.map(function(k){ return k/A.length/(2*R/bins); }); }
+  var cx=hist(xs), ch=hist(hs), top=Math.max(Math.max.apply(null,cx),Math.max.apply(null,ch))*1.08;
+  var hy=function(d){ return HY0+HH-d/top*HH; };
+  g.appendChild(el('line',{x1:HX0,y1:HY0+HH,x2:HX0+HW,y2:HY0+HH,stroke:'var(--border-strong)','stroke-width':1}));
+  [[cx,'var(--text-muted)',0.35],[ch,'var(--blue)',0.5]].forEach(function(q){
+    q[0].forEach(function(d,b){ if(d>0) g.appendChild(el('rect',{x:HX0+b*HW/bins+0.3,y:hy(d),width:HW/bins-0.6,height:HY0+HH-hy(d),fill:q[1],opacity:q[2]})); });
+  });
+  for(var t=-4;t<=4;t+=2) txt(g,hx(t),HY0+HH+15,'tn',String(t),{'text-anchor':'middle',style:'font-size:11px'});
+  txt(g,HX0,HY0-12,'ts gl','one layer: inputs x (gray) → h = Σᵢ wᵢxᵢ (blue)');
+  txt(g,HX0+HW,HY0+8,'num gl','Var(x) = '+f2(vx),{'text-anchor':'end',style:'font-size:12.5px',fill:'var(--text-secondary)'});
+  txt(g,HX0+HW,HY0+24,'num gl','Var(h) = '+f2(vh),{'text-anchor':'end',style:'font-size:12.5px;font-weight:600',fill:'var(--blue-ink)'});
+  // right: variance per layer, log scale
+  var BX0=520, BW=360, BY0=30, BH=190, LMIN=-5, LMAX=0.5;
+  var by=function(v){ var lg=Math.log10(Math.max(v,1e-9)); lg=Math.max(LMIN,Math.min(LMAX,lg)); return BY0+BH-(lg-LMIN)/(LMAX-LMIN)*BH; };
+  txt(g,BX0,BY0-12,'ts gl','Var after L layers (log scale)');
+  [[1,'1'],[1e-1,'0.1'],[1e-2,'0.01'],[1e-3,'10⁻³'],[1e-4,'10⁻⁴'],[1e-5,'10⁻⁵']].forEach(function(q){
+    g.appendChild(el('line',{x1:BX0,y1:by(q[0]),x2:BX0+BW,y2:by(q[0]),stroke:'var(--border)','stroke-width':0.7,'stroke-dasharray':q[0]===1?'':'3 3'}));
+    txt(g,BX0-6,by(q[0])+4,'tn gl',q[1],{'text-anchor':'end',style:'font-size:11px'});
+  });
+  var colW=BW/(depth+1), pts=[];
+  varsL.forEach(function(v,l){
+    var x=BX0+l*colW;
+    g.appendChild(el('rect',{x:x+colW*0.2,y:by(v),width:colW*0.6,height:BY0+BH-by(v),fill:'var(--green)',opacity:0.6}));
+    txt(g,x+colW/2,BY0+BH+15,'tn',String(l),{'text-anchor':'middle',style:'font-size:11px'});
+    pts.push((x+colW/2)+','+by(varsL[0]*Math.pow(gain,l)));
+  });
+  g.appendChild(el('polyline',{points:pts.join(' '),fill:'none',stroke:'var(--text-primary)','stroke-width':1.4,'stroke-dasharray':'5 4'}));
+  txt(g,BX0+BW,BY0+BH+30,'tn','layer L',{'text-anchor':'end',style:'font-size:11.5px'});
+  txt(g,BX0+BW,BY0+8,'tn gl','bars: real tanh layers · dashed: (n·Var W)ᴸ',{'text-anchor':'end',style:'font-size:11.5px'});
+  document.getElementById('rdLay').innerHTML='n = '+n+', Var(W) = a²/3 = '+f2(varW)+', so <b>n·Var(W) = '+f2(gain)+'</b>: predicted Var(h) = '+f2(gain)+' × Var(x) = <b class="num">'+f2(gain*vx)+'</b>, measured <b class="num">'+f2(vh)+'</b>. '+
+    'After 8 layers: predicted '+f2(varsL[0]*Math.pow(gain,8))+', measured through tanh '+f2(varsL[8])+'.';
+}
+
+resampleSq(); drawLay();
+</script>
+</body>
+</html>

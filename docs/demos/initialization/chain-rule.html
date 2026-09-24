@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chain rule, one neuron deep</title>
+<meta name="description" content="Backprop through a five-layer, one-neuron-per-layer tanh chain: the gradient reaching each weight is a product of factors, and it vanishes when a slope is flat or an input is near zero.">
+<link rel="stylesheet" href="../demo.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<style>
+body{gap:5px;padding:11px 16px 12px}
+h1{font-size:19px;margin-top:2px}
+.quiz{margin:0}
+#wrap{height:clamp(260px,52vh,470px);display:flex;align-items:stretch}
+#stage{flex:1;min-width:0}
+#formula{font-size:15px;overflow-x:auto;overflow-y:hidden;min-height:64px}
+#formula .katex-display{margin:2px 0}
+.row{gap:7px}
+button,select{height:30px;font-size:13px;padding:0 9px}
+.seg button{height:28px;font-size:12px;padding:0 8px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:auto}
+.rd{font-size:13.5px;line-height:1.4;min-height:1.4em}
+.cap{font-size:12px;line-height:1.45;padding-top:4px}
+.nav{display:flex;align-items:baseline;gap:10px}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Initialization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Chain rule, one neuron deep<span>: two ways a gradient vanishes</span></h1>
+<p class="quiz">Five tanh layers, one neuron each: <i>h</i><sub>l</sub> = <i>w</i><sub>l</sub><i>a</i><sub>l&minus;1</sub>, <i>a</i><sub>l</sub> = tanh(<i>h</i><sub>l</sub>), and the loss is just <i>L</i> = <i>a</i><sub>5</sub>. The gradient that reaches a weight is a <b>product</b> of numbers read off this graph, so it collapses if any one factor is near zero: a <b>flat slope</b> (the unit is saturated), or a <b>near-zero input</b> (the product rule at a &times; node multiplies the gradient by the other input).</p>
+
+<div id="wrap">
+<svg id="stage" viewBox="0 0 1040 452" role="img" preserveAspectRatio="xMidYMid meet">
+  <desc>A computation graph of five multiply and tanh nodes with forward values above each wire and gradients below, five small tanh plots showing where each unit sits and its slope, and a log-scale bar chart of each weight's gradient.</desc>
+  <g id="g"></g>
+</svg>
+</div>
+
+<div id="formula"></div>
+
+<div class="row">
+  <button onclick="resample()">Resample weights</button>
+  <div class="seg" id="presetSeg">
+    <button data-s="0.2">small w</button>
+    <button data-s="1" class="on">w &asymp; 1</button>
+    <button data-s="5">big w</button>
+  </div>
+  <span class="klab">weight std &sigma;<sub>w</sub></span>
+  <input type="range" id="sig" min="-1.3" max="1" step="any" value="0" oninput="onSigma()" style="flex:0 1 140px;min-width:70px">
+  <span class="knum" id="sigVal">1.00</span>
+  <span class="klab">input x</span>
+  <input type="range" id="xin" min="-2" max="2" step="0.01" value="1" oninput="onX()" style="flex:0 1 110px;min-width:60px">
+  <span class="knum" id="xVal">1.00</span>
+</div>
+
+<div class="rd" id="readout"></div>
+<div class="cap">Each weight is &sigma;<sub>w</sub> times a fixed standard-normal draw, so the slider rescales the same network and <b>Resample</b> draws a new one. Following the chain backward from &part;L/&part;a<sub>5</sub> = 1, a tanh node multiplies the gradient by its slope tanh&prime;(h), and a &times; node hands each input the gradient times the <i>other</i> input: &part;L/&part;a<sub>l&minus;1</sub> = w<sub>l</sub>&middot;&part;L/&part;h<sub>l</sub>, and &part;L/&part;w<sub>l</sub> = a<sub>l&minus;1</sub>&middot;&part;L/&part;h<sub>l</sub>. <b>Big w</b> pushes h into tanh's flat tails, so the slopes vanish (red tangent lines). <b>Small w</b> keeps every slope near 1, yet the signal shrinks by |w| per layer on the way up and the gradient shrinks by |w| per layer on the way down, and each weight's gradient is scaled by its own tiny input. Red factors in the formula are smaller than 0.1 in magnitude. Click a layer to expand its gradient.</div>
+
+<script src="chain.js"></script>
+</body>
+</html>

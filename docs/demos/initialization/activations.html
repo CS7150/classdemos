@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Activations, watched training</title>
+<meta name="description" content="The live two-moons training demo with a switch between tanh, sigmoid and relu hidden units, and Xavier or He initialization, so you can see how each activation saturates, stalls or dies.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:5px;padding:11px 16px 12px}
+h1{font-size:19px;margin-top:2px}
+.quiz{margin:0}
+#wrap{height:clamp(230px,44vh,380px);display:flex;gap:10px;align-items:stretch}
+#stage{flex:1;min-width:0}
+.row{gap:7px}
+button,select{height:30px;font-size:13px;padding:0 9px}
+.seg button{height:28px;font-size:12px;padding:0 8px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:auto}
+.rd{font-size:13.5px;line-height:1.4;min-height:1.4em}
+.cap{font-size:12px;line-height:1.4;padding-top:4px}
+.nav{display:flex;align-items:baseline;gap:10px}
+.warn{color:var(--red)}
+.ok{color:var(--green-ink)}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Initialization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Activations, watched training<span>: tanh vs. sigmoid vs. relu</span></h1>
+<p class="quiz">The <a href="training-failure.html">training demo</a> with a choice of hidden activation. Switch between <b>tanh</b>, <b>sigmoid</b> and <b>relu</b> and the network, the nonlinearity plot and every histogram follow. Each activation has its own way of zeroing the gradient: tanh goes flat in both tails, sigmoid's slope never exceeds 1/4 and its outputs sit near 0.5 instead of 0, and relu is either linear or dead.</p>
+
+<div id="wrap">
+<svg id="stage" viewBox="0 -12 760 342" role="img" preserveAspectRatio="xMidYMid meet">
+  <desc>Three linked panels: a decision boundary heatmap over the two-moons data, a training loss curve, and either one gradient or activation histogram per hidden layer or a diagram of the network with one node per neuron and one line per weight, updating live as the network trains.</desc>
+  <g id="g"></g>
+</svg>
+</div>
+
+<div class="row">
+  <button class="main" id="run" onclick="toggleRun()">Train</button>
+  <button onclick="if(!topChosen) topView='loss'; stepOnce(1); redraw();">Step</button>
+  <button onclick="resetAll()">Reset</button>
+  <div class="seg" id="actSeg">
+    <button data-a="tanh" class="on">tanh</button>
+    <button data-a="sigmoid">sigmoid</button>
+    <button data-a="relu">relu</button>
+  </div>
+  <div class="seg" id="presetSeg">
+    <button data-p="small">too small</button>
+    <button data-p="xavier" class="on">Xavier</button>
+    <button data-p="he">He</button>
+    <button data-p="big">too big</button>
+  </div>
+  <span class="klab">init &sigma;</span>
+  <input type="range" id="scale" min="-2.5" max="1.2" step="any" value="-0.5" oninput="onScale()" style="flex:0 1 110px;min-width:60px">
+  <span class="knum" id="scaleVal">0.32</span>
+  <span class="klab">depth</span>
+  <input type="range" id="depth" min="2" max="8" step="1" value="6" oninput="onDepth()" style="flex:0 1 70px;min-width:40px">
+  <span class="knum" id="depthVal">6</span>
+  <div class="seg" id="viewSeg">
+    <button data-v="net" class="on">network</button>
+    <button data-v="hist">activations</button>
+    <button data-v="grad">gradients</button>
+  </div>
+</div>
+
+<div class="rd" id="readout"></div>
+<div class="cap">Everything works as in the <a href="training-failure.html">training demo</a> (hover and click the boundary to move and pin the probe, hover a node to find it on the nonlinearity plot, and flip the top-right panel between loss and the curve), but the hidden units use the activation you pick. <b>Saturated</b> means the local slope is below 0.01: pinned in a flat tail for tanh and sigmoid (shaded red on the curve), or switched off (h &lt; 0) for relu, shown as <b>off</b>. A relu that is off on some inputs is normal; the readout counts a unit as <b>dead</b> only when it is off on all 120 training points. The learning rate is 0.6, except 0.2 for relu, which diverges at 0.6 because its slope stays at 1 however large h gets. The <b>Xavier</b> button sets &sigma; = &radic;(2/(10+10)) &asymp; 0.32, Glorot's value, derived assuming the activation is roughly the identity near 0, as tanh is. <b>He</b> (Kaiming He et al., 2015) sets &sigma; = &radic;(2/10) &asymp; 0.45, twice the variance, because relu zeroes about half its inputs and so halves the signal's variance at each layer. Things to try: <b>sigmoid at Xavier</b> never leaves chance in 400 steps: its slope is at most 1/4, so each layer shrinks the signal about 4&times; unless the weights are about 4&times; larger; drag &sigma; up to 1.3&ndash;2.5 (4&ndash;8&times; Xavier) and it trains. <b>relu at depth 8</b>: compare the per-layer &sigma; under the activations view, halving every layer under Xavier but holding steady under He. And each activation at too small and too big. The relu histogram covers [0, 3], with larger values piled into the last bin.</div>
+
+<script src="training.js"></script>
+</body>
+</html>

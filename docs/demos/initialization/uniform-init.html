@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Standard vs. normalized init</title>
+<meta name="description" content="Glorot and Bengio's two uniform initializations side by side: the weights as a histogram and a scatter, and the variance of a uniform on [-a, a] derived both as an integral and as the area under a parabola.">
+<link rel="stylesheet" href="../demo.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<style>
+body{gap:6px;padding:11px 16px 24px;max-width:1150px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+h2{font-size:16px;font-weight:600;margin:12px 0 0;letter-spacing:-.005em}
+.quiz{margin:0}
+svg{max-height:none}
+.scheme{display:flex;gap:14px;align-items:center;border-top:1px solid var(--border);padding-top:6px}
+.scheme svg{flex:3;min-width:0}
+.scheme .f{flex:1.25;font-size:14.5px;color:var(--text-primary);display:flex;flex-direction:column;gap:5px;min-width:0}
+.scheme .f .t{font-size:14px;font-weight:600}
+@media (max-width:760px){.scheme{flex-direction:column;align-items:stretch}}
+.deriv{display:flex;gap:18px;flex-wrap:wrap;align-items:center;font-size:15.5px}
+.deriv .w{font-size:13.5px;color:var(--text-secondary);line-height:1.45;flex:1;min-width:260px}
+.row{gap:7px}
+button{height:30px;font-size:13px;padding:0 9px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:auto}
+.cap{font-size:12.5px;line-height:1.5;padding-top:4px}
+.nav{display:flex;align-items:baseline;gap:10px}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Initialization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Standard vs. normalized init<span>: two uniform boxes</span></h1>
+<p class="quiz">Both of Glorot &amp; Bengio's initializations draw each weight uniformly from an interval [&minus;<i>a</i>, <i>a</i>]; they differ only in the half-width <i>a</i>. The <b>standard</b> one (common before 2010) uses <i>a</i> = 1/&radic;<i>n</i><sub>in</sub>; their <b>normalized</b> one uses <i>a</i> = &radic;6 / &radic;(<i>n</i><sub>in</sub> + <i>n</i><sub>out</sub>). Everything follows from one fact: a uniform on [&minus;<i>a</i>, <i>a</i>] has variance <i>a</i>&sup2;/3.</p>
+
+<h2>Why a uniform on [&minus;a, a] has variance a&sup2;/3</h2>
+<div class="deriv">
+  <div id="derivTex"></div>
+  <div class="w"><b>Algebraically</b>: the mean is 0, so the variance is the average of <i>w</i>&sup2; over the interval, an integral divided by the width 2<i>a</i>.<br><b>Geometrically</b>: that average is the mean height of the parabola <i>y</i> = <i>w</i>&sup2; over [&minus;<i>a</i>, <i>a</i>] (right-hand panels below). The parabola fills exactly 1/3 of its <i>a</i>&sup2;-tall bounding box (Archimedes), so its mean height is <i>a</i>&sup2;/3: the dashed line, where the rectangle of the same area would stand.</div>
+</div>
+
+<div class="row">
+  <span class="klab">n<sub>in</sub></span>
+  <input type="range" id="nin" min="1" max="9" step="1" value="6" oninput="draw()" style="flex:0 1 150px;min-width:70px">
+  <span class="knum" id="ninVal">64</span>
+  <span class="klab">n<sub>out</sub></span>
+  <input type="range" id="nout" min="1" max="9" step="1" value="6" oninput="draw()" style="flex:0 1 150px;min-width:70px">
+  <span class="knum" id="noutVal">64</span>
+  <button onclick="draw()">Resample</button>
+</div>
+
+<div class="scheme"><svg id="s0" viewBox="0 0 760 210" role="img"><desc>Standard initialization: histogram of weights, scatter of weight pairs, and the parabola picture of its variance.</desc><g></g></svg><div class="f" id="f0"></div></div>
+<div class="scheme"><svg id="s1" viewBox="0 0 760 210" role="img"><desc>Normalized initialization: histogram of weights, scatter of weight pairs, and the parabola picture of its variance.</desc><g></g></svg><div class="f" id="f1"></div></div>
+
+<div class="cap">Each row draws one full <i>n</i><sub>out</sub>&times;<i>n</i><sub>in</sub> weight matrix (up to 20,000 entries for the histogram). All three panels share one horizontal scale across both rows, so you can compare box widths directly. <b>Histogram</b>: flat, because every value in [&minus;<i>a</i>, <i>a</i>] is equally likely. <b>Scatter</b>: pairs of neighboring weights fill a square of side 2<i>a</i>; the pink dashed lines mark &plusmn;&sigma;, about 58% of the way to the edge (1/&radic;3). <b>Parabola</b>: the variance is the mean height of <i>w</i>&sup2;. With <i>n</i><sub>in</sub> = <i>n</i><sub>out</sub> = <i>n</i>, the normalized box is &radic;3 times wider than the standard one, giving variance 1/<i>n</i> instead of 1/(3<i>n</i>). That factor of 3 is the per-layer shrinkage the <a href="variance.html">variance page</a> shows.</div>
+
+<script>
+var NS='http://www.w3.org/2000/svg';
+function el(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attrs)e.setAttribute(k,attrs[k]);return e;}
+function txt(g,x,y,cls,str,attrs){ var t=el('text',Object.assign({x:x,y:y,class:cls},attrs||{})); t.textContent=str; g.appendChild(t); return t; }
+function f3(v){ return v>=0.01?v.toFixed(v>=1?2:3):v.toExponential(2); }
+
+katex.render('\\mathrm{Var}(W)=\\mathbb{E}[W^2]=\\frac{1}{2a}\\int_{-a}^{a}w^2\\,dw=\\frac{1}{2a}\\cdot\\frac{2a^3}{3}=\\frac{a^2}{3}',
+  document.getElementById('derivTex'),{throwOnError:false,displayMode:true});
+
+function draw(){
+  var nin=Math.pow(2,+document.getElementById('nin').value), nout=Math.pow(2,+document.getElementById('nout').value);
+  document.getElementById('ninVal').textContent=nin; document.getElementById('noutVal').textContent=nout;
+  var schemes=[
+    {name:'standard', a:1/Math.sqrt(nin), color:'var(--warm)', ink:'var(--warm-ink)',
+     tex:['a=\\tfrac{1}{\\sqrt{n_{in}}}','\\mathrm{Var}(W)=\\tfrac{a^2}{3}=\\tfrac{1}{3n_{in}}','n_{in}\\mathrm{Var}(W)=\\tfrac13']},
+    {name:'normalized', a:Math.sqrt(6/(nin+nout)), color:'var(--green)', ink:'var(--green-ink)',
+     tex:['a=\\tfrac{\\sqrt6}{\\sqrt{n_{in}+n_{out}}}','\\mathrm{Var}(W)=\\tfrac{a^2}{3}=\\tfrac{2}{n_{in}+n_{out}}','n_{in}\\mathrm{Var}(W)=\\tfrac{2n_{in}}{n_{in}+n_{out}}']}
+  ];
+  var A=Math.max(schemes[0].a,schemes[1].a)*1.15;   // shared horizontal scale
+  schemes.forEach(function(sc,r){
+    var a=sc.a, N=Math.min(20000,nin*nout), W=[];
+    for(var i=0;i<N;i++) W.push((2*Math.random()-1)*a);
+    var m=0; W.forEach(function(v){m+=v;}); m/=N; var sv=0; W.forEach(function(v){sv+=(v-m)*(v-m);}); sv/=N;
+    var g=document.querySelector('#s'+r+' g'); g.innerHTML='';
+    txt(g,4,16,'ts gl',sc.name+'  (a = '+f3(a)+')',{style:'font-weight:600',fill:sc.ink});
+    // --- histogram ---
+    var H0=10, HW=220, HT=40, HB=180, bins=30;
+    var hx=function(v){ return H0+(v+A)/(2*A)*HW; };
+    var cnt=new Array(bins).fill(0); W.forEach(function(v){ var b=Math.floor((v+A)/(2*A)*bins); if(b>=0&&b<bins) cnt[b]++; });
+    var dens=cnt.map(function(c){ return c/N/(2*A/bins); }), top=1/(2*a)*1.6;
+    var hy=function(d){ return HB-Math.min(d,top)/top*(HB-HT); };
+    dens.forEach(function(d,b){ if(d>0) g.appendChild(el('rect',{x:H0+b*HW/bins+0.3,y:hy(d),width:HW/bins-0.6,height:HB-hy(d),fill:sc.color,opacity:0.55})); });
+    g.appendChild(el('path',{d:'M'+hx(-A)+','+HB+' L'+hx(-a)+','+HB+' L'+hx(-a)+','+hy(1/(2*a))+' L'+hx(a)+','+hy(1/(2*a))+' L'+hx(a)+','+HB+' L'+hx(A)+','+HB,fill:'none',stroke:sc.ink,'stroke-width':1.5}));
+    txt(g,hx(0),hy(1/(2*a))-5,'tn gl','density 1/(2a)',{'text-anchor':'middle',style:'font-size:11px'});
+    [-a,0,a].forEach(function(v,i){ txt(g,hx(v),HB+14,'tn',['−a','0','a'][i],{'text-anchor':'middle',style:'font-size:11.5px'}); });
+    txt(g,H0,HT-10,'tn gl','histogram of '+N+' weights',{style:'font-size:11.5px'});
+    // --- scatter of pairs ---
+    var P0=270, PS=150, PY=35, sd=a/Math.sqrt(3);
+    var px=function(v){ return P0+(v+A)/(2*A)*PS; }, py=function(v){ return PY+PS-(v+A)/(2*A)*PS; };
+    g.appendChild(el('rect',{x:px(-a),y:py(a),width:px(a)-px(-a),height:py(-a)-py(a),fill:'none',stroke:sc.ink,'stroke-width':1.2}));
+    for(var j=0;j+1<Math.min(W.length,1200);j+=2) g.appendChild(el('circle',{cx:px(W[j]),cy:py(W[j+1]),r:1.3,fill:sc.ink,opacity:0.45}));
+    [-sd,sd].forEach(function(v){
+      g.appendChild(el('line',{x1:px(v),y1:py(A),x2:px(v),y2:py(-A),stroke:'var(--pink-ink)','stroke-width':1,'stroke-dasharray':'3 3'}));
+      g.appendChild(el('line',{x1:px(-A),y1:py(v),x2:px(A),y2:py(v),stroke:'var(--pink-ink)','stroke-width':1,'stroke-dasharray':'3 3'}));
+    });
+    txt(g,px(sd)+3,py(A)+10,'tn gl','σ',{style:'font-size:11.5px',fill:'var(--pink-ink)'});
+    txt(g,P0,PY-8,'tn gl','neighboring pairs (w₁, w₂)',{style:'font-size:11.5px'});
+    // --- parabola: mean height of w^2 ---
+    var Q0=460, QW=280, QT=40, QB=180, Ymax=A*A;
+    var qx=function(v){ return Q0+(v+A)/(2*A)*QW; }, qy=function(v){ return QB-v/Ymax*(QB-QT); };
+    var pts=[], area=['M'+qx(-a)+','+QB];
+    for(var k=0;k<=60;k++){ var w=-A+2*A*k/60; pts.push(qx(w)+','+qy(w*w)); }
+    for(var k2=0;k2<=40;k2++){ var w2=-a+2*a*k2/40; area.push('L'+qx(w2)+','+qy(w2*w2)); }
+    area.push('L'+qx(a)+','+QB+' Z');
+    g.appendChild(el('rect',{x:qx(-a),y:qy(a*a),width:qx(a)-qx(-a),height:QB-qy(a*a),fill:'none',stroke:'var(--border-strong)','stroke-width':1}));
+    g.appendChild(el('path',{d:area.join(' '),fill:sc.color,opacity:0.35}));
+    g.appendChild(el('polyline',{points:pts.join(' '),fill:'none',stroke:'var(--text-muted)','stroke-width':1.3}));
+    g.appendChild(el('line',{x1:Q0,y1:QB,x2:Q0+QW,y2:QB,stroke:'var(--border-strong)','stroke-width':1}));
+    g.appendChild(el('line',{x1:qx(-a),y1:qy(a*a/3),x2:qx(a),y2:qy(a*a/3),stroke:'var(--pink-ink)','stroke-width':1.8,'stroke-dasharray':'5 3'}));
+    txt(g,qx(a)+4,qy(a*a/3)+4,'num gl','a²/3',{style:'font-size:12px',fill:'var(--pink-ink)'});
+    txt(g,qx(a)+4,qy(a*a)+4,'num gl','a²',{style:'font-size:12px',fill:'var(--text-secondary)'});
+    [-a,0,a].forEach(function(v,i){ txt(g,qx(v),QB+14,'tn',['−a','0','a'][i],{'text-anchor':'middle',style:'font-size:11.5px'}); });
+    txt(g,Q0,QT-10,'tn gl','y = w²: shaded area is ⅓ of the box',{style:'font-size:11.5px'});
+    // --- formula column ---
+    var f=document.getElementById('f'+r); f.innerHTML='';
+    var add=function(tex){ var d=document.createElement('div'); katex.render(tex,d,{throwOnError:false}); f.appendChild(d); };
+    var ttl=document.createElement('div'); ttl.className='t'; ttl.style.color=sc.ink; ttl.textContent=sc.name; f.appendChild(ttl);
+    sc.tex.forEach(add);
+    var num=document.createElement('div'); num.style.cssText='font-size:13px;color:var(--text-secondary)';
+    num.innerHTML='= '+f3(a*a/3)+' (sample: '+f3(sv)+')<br>n<sub>in</sub>&middot;Var = <b>'+f3(nin*a*a/3)+'</b>, n<sub>out</sub>&middot;Var = <b>'+f3(nout*a*a/3)+'</b>';
+    f.appendChild(num);
+  });
+}
+draw();
+</script>
+</body>
+</html>

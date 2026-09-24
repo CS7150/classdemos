@@ -50,12 +50,12 @@ footer a{color:var(--text-secondary)}
   <div class="nav"><a href="../../">&larr; CS7150 class demos</a></div>
   <p class="eyebrow">Northeastern University &middot; CS 7150 &middot; Fall 2026</p>
   <h1>Initialization, explained</h1>
-  <p>Four interactive pieces on <a href="https://proceedings.mlr.press/v9/glorot10a/glorot10a.pdf">Glorot &amp; Bengio 2010</a>:
-     first, what the failure actually looks like while a real network trains; then why a deep
-     network's signal can vanish or blow up depending on nothing but the scale of its weights,
-     why that same scale controls how much of the backward gradient survives saturation, and
-     why forward and backward stability pull the initialization variance in different directions
-     when a layer isn't square.</p>
+  <p>Six interactive pieces on <a href="https://proceedings.mlr.press/v9/glorot10a/glorot10a.pdf">Glorot &amp; Bengio 2010</a>:
+     first, what the failure looks like while a real network trains; then the chain rule behind
+     it, one neuron per layer, and how the choice of activation changes it; then the variance
+     algebra behind the paper's <i>n</i>&middot;Var(<i>W</i>) = 1/3, the two uniform initializations
+     it compares, and why forward and backward stability pull the variance in different
+     directions when a layer isn't square.</p>
 </header>
 
 <ol class="qs">
@@ -72,21 +72,41 @@ footer a{color:var(--text-secondary)}
 </li>
 
 <li class="done">
-  <div class="qtag">The mechanism</div>
-  <h2><a href="depth-init.html">Depth, activation, and initialization</a></h2>
-  <p class="what">Watch a signal spread through a network of adjustable depth &mdash; the core
-     empirical result the paper opens with, color-coded against the same saturated/responsive
-     split as the saturation demo, so you can watch the saturated fraction compound layer over layer.</p>
-  <a class="go" href="depth-init.html">Open the explainer &rarr;</a>
+  <div class="qtag">Why gradients vanish</div>
+  <h2><a href="chain-rule.html">Chain rule, one neuron deep</a></h2>
+  <p class="what">Five tanh layers with one neuron each, drawn as a forward/backward computation
+     graph. The gradient that reaches each weight is a product you can read off the graph, and it
+     collapses for one of two reasons: a flat slope where a unit is saturated, or a near-zero input
+     at a &times; node. Turn the weights up or down and watch which one bites.</p>
+  <a class="go" href="chain-rule.html">Open the explainer &rarr;</a>
 </li>
 
 <li class="done">
-  <div class="qtag">Why bad scale hurts backprop</div>
-  <h2><a href="saturation.html">Weight scale and saturation</a></h2>
-  <p class="what">1000 units sampled at a chosen weight scale, scattered along tanh or sigmoid
-     with the local derivative shaded beneath. Dial the scale up and watch units pile into the
-     flat tails, where the forward signal survives but the backward gradient is nearly zero.</p>
-  <a class="go" href="saturation.html">Open the explainer &rarr;</a>
+  <div class="qtag">tanh, sigmoid, relu</div>
+  <h2><a href="activations.html">Activations, watched training</a></h2>
+  <p class="what">The live training demo with a switch between tanh, sigmoid and relu, and a He
+     init button. Sigmoid stalls at Xavier because its slope is at most 1/4 and only trains with
+     several times larger weights; relu is linear or off, loses half its variance per layer under
+     Xavier, and holds steady under He.</p>
+  <a class="go" href="activations.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">Where n&middot;Var(W) = 1/3 comes from</div>
+  <h2><a href="variance.html">Variance, and n&middot;Var(W)</a></h2>
+  <p class="what">What variance is (an average square), the four rules that make it easy to push
+     through a layer, and why they give Var(<i>h</i>) = <i>n</i>&middot;Var(<i>W</i>)&middot;Var(<i>x</i>),
+     so the standard init shrinks the signal threefold per layer. Checked against real tanh layers.</p>
+  <a class="go" href="variance.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">Standard vs. normalized</div>
+  <h2><a href="uniform-init.html">Standard vs. normalized init</a></h2>
+  <p class="what">The paper's two uniform initializations side by side, as histograms and
+     scatterplots, with the variance of a uniform on [&minus;<i>a</i>, <i>a</i>] derived two ways:
+     as an integral, and as the mean height of a parabola, which fills 1/3 of its bounding box.</p>
+  <a class="go" href="uniform-init.html">Open the explainer &rarr;</a>
 </li>
 
 <li class="done">
