@@ -17,8 +17,8 @@ svg{max-height:none}
 /* the animation breaks out of the text column, centred in the window; on a phone
    it keeps a readable size and scrolls sideways instead */
 #figwrap{align-self:center;width:min(1500px,calc(100vw - 32px))}
-#anim{width:100%;max-height:70vh}
-@media (max-width:700px){#figwrap{overflow-x:auto}#anim{min-width:720px;max-height:none}}
+#anim{display:block;margin:0 auto;max-height:70vh}
+@media (max-width:700px){#figwrap{overflow-x:auto}#anim{min-width:560px;max-height:none}}
 #tex>div{white-space:nowrap}
 .row{gap:7px}
 button{height:30px;font-size:13px;padding:0 9px}
@@ -54,7 +54,7 @@ button.main{min-width:84px}
   <input type="range" id="n" min="2" max="6" step="1" value="6" oninput="onShape()" style="flex:1 1 80px;min-width:60px">
   <span class="knum" id="nVal">6</span>
   <span class="klab">m outputs</span>
-  <input type="range" id="m" min="1" max="5" step="1" value="3" oninput="onShape()" style="flex:1 1 80px;min-width:60px">
+  <input type="range" id="m" min="1" max="6" step="1" value="3" oninput="onShape()" style="flex:1 1 80px;min-width:60px">
   <span class="knum" id="mVal">3</span>
   <span class="klab">weight std &sigma;<sub>w</sub></span>
   <input type="range" id="sw" min="-1" max="0.2" step="any" value="0" oninput="onSigma()" style="flex:2 1 120px;min-width:80px">
@@ -65,6 +65,7 @@ button.main{min-width:84px}
   </div>
   <div class="seg" id="presetSeg">
     <button data-p="one" class="on">1</button>
+    <button data-p="std">standard</button>
     <button data-p="fwd">1/&radic;n</button>
     <button data-p="bwd">1/&radic;m</button>
     <button data-p="glorot">Glorot</button>
@@ -72,29 +73,26 @@ button.main{min-width:84px}
 </div>
 <div class="rd" id="readout"></div>
 <div id="tex"></div>
-<div class="cap">Weights are either Gaussian, <i>w</i> ~ N(0, &sigma;<sub>w</sub>&sup2;), or uniform as Glorot &amp; Bengio drew them, on [&minus;<i>a</i>, <i>a</i>] with <i>a</i> = &radic;3&middot;&sigma;<sub>w</sub> so the variance is the same (see <a href="uniform-third.html">why a&sup2;/3</a>); the inputs <i>x</i> and the upstream gradients &part;L/&part;h are N(0, 1). Every cell uses the same horizontal scale, &minus;4 to 4, so a wider curve means a bigger variance; each curve is drawn as a fine histogram would show it, scaled to its own peak. <b>Products are not normal</b>: w&middot;x has variance &sigma;<sub>w</sub>&sup2;&middot;1 either way, but a sharp peak at 0. With Gaussian w its density is K<sub>0</sub>(|z|/&sigma;<sub>w</sub>)/(&pi;&sigma;<sub>w</sub>), a Bessel function with exponential tails; with uniform w it is E<sub>1</sub>(z&sup2;/2a&sup2;)/(2a&radic;(2&pi;)), an exponential integral whose tails fall off like a Gaussian's, since |w| &le; a. Both are drawn exactly. <b>Sums become normal</b>: adding several independent products gives a curve close to a Gaussian (the central limit theorem), with variance the sum of theirs. Forward, <i>h</i><sub>i</sub> = &Sigma;<sub>j</sub> <i>w</i><sub>ij</sub><i>x</i><sub>j</sub> adds <i>n</i> products. Backward, the chain rule gives &part;L/&part;x<sub>j</sub> = &Sigma;<sub>i</sub> &part;L/&part;h<sub>i</sub><i>w</i><sub>ij</sub>: the row vector &part;L/&part;h times column <i>j</i> of <i>W</i> (the same thing as <i>W</i><sup>T</sup>&part;L/&part;h, written as a column), so it adds <i>m</i> products. A result gets a green &check; when its standard deviation is within 3% of 1. With both run, the presets show the dilemma: 1/&radic;n checks h, 1/&radic;m checks &part;L/&part;x, and unless <i>n</i> = <i>m</i> nothing checks both; Glorot's 2/(<i>n</i>+<i>m</i>) leaves one a little bigger and the other a little smaller. The dashed curve on each result is N(0, 1), the spread that went in.</div>
 
-<h2>Stacking layers: the n&middot;Var(W) factor compounds</h2>
-<svg id="lay" viewBox="0 0 900 270" role="img">
-  <desc>Left: histograms of the inputs x and of one pre-activation h, the sum of n weight-times-input products. Right: the variance after each of eight layers on a log scale, predicted and measured through real tanh layers.</desc>
+
+<h2>Stacking square layers: the factor compounds, forward and backward</h2>
+<div id="stackLocked" class="rd" style="border:1px dashed var(--border-strong);border-radius:8px;padding:12px 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+  <span>Layers only stack when each layer's output can feed the next one's input, so the layer has to be <b>square</b>: set <i>n</i> = <i>m</i> above to unlock the stacked view.</span>
+  <button onclick="makeSquare()">Make it square (m = n)</button>
+</div>
+<div id="stackSec" style="display:flex;flex-direction:column;gap:6px">
+<svg id="lay" viewBox="0 0 900 510" role="img">
+  <desc>Four panels. Top: one layer's input and output histograms, and activation variance through eight stacked tanh layers on a log scale. Bottom: gradient variance backpropagated through the same eight layers, and one layer's upstream gradient and input-gradient histograms.</desc>
   <g id="glay"></g>
 </svg>
 <div class="row">
-  <div class="seg" id="schemeSeg">
-    <button data-s="std" class="on">standard: scale 1/&radic;n</button>
-    <button data-s="xav">Glorot (n<sub>in</sub> = n<sub>out</sub> = n): Var(W) = 1/n</button>
-  </div>
-  <div class="seg" id="distSeg">
-    <button data-d="unif" class="on">uniform on [&minus;scale, scale]</button>
-    <button data-d="gauss">Gaussian, std = scale</button>
-  </div>
-  <span class="klab">n (fan-in)</span>
-  <input type="range" id="nl" min="1" max="8" step="1" value="6" oninput="drawLay()" style="flex:1 1 150px;min-width:80px">
-  <span class="knum" id="nlVal">64</span>
-  <button onclick="drawLay()">Resample</button>
+  <span class="klab">the square layer above, n = m, stacked eight deep, with the &sigma;<sub>w</sub> and weight distribution set above</span>
+  <button onclick="resample()">Resample</button>
 </div>
 <div class="rd" id="rdLay"></div>
-<div class="cap">Inputs <i>x</i><sub>i</sub> ~ N(0, 1). The <b>standard</b> rule sets a scale of 1/&radic;<i>n</i>, and what that does depends on how the scale is used. Used as the half-width of a <b>uniform</b> on [&minus;1/&radic;<i>n</i>, 1/&radic;<i>n</i>], as in the paper, it gives Var(<i>W</i>) = <i>a</i>&sup2;/3 = 1/(3<i>n</i>) (see <a href="uniform-init.html">standard vs. normalized init</a> for the a&sup2;/3), so <i>n</i>&middot;Var(<i>W</i>) = 1/3. Used as the standard deviation of a <b>Gaussian</b> (LeCun's 1998 advice), it gives Var(<i>W</i>) = 1/<i>n</i>, and the 1/3 is gone. <b>Glorot</b> for a layer with <i>n</i><sub>in</sub> = <i>n</i><sub>out</sub> = <i>n</i> targets Var(<i>W</i>) = 2/(<i>n</i>+<i>n</i>) = 1/<i>n</i> whichever distribution draws it: half-width &radic;(3/<i>n</i>) for uniform, std 1/&radic;<i>n</i> for Gaussian. Only the variance matters, not the shape of the distribution. The dashed line on the right is the prediction (<i>n</i>&middot;Var(<i>W</i>))<sup>L</sup>, which assumes tanh(<i>h</i>) &asymp; <i>h</i>; the bars push 400 inputs through real width-<i>n</i> tanh layers, drawing fresh weights at every layer. Even at <i>n</i>&middot;Var(<i>W</i>) = 1, the bars fall below the dashed line, steeply at first and then slowly: tanh flattens values beyond about &plusmn;0.5, so Var(tanh <i>h</i>) &lt; Var(<i>h</i>), and a unit-variance input keeps only about 40% of its variance through the first tanh. The gap closes once the signal is small enough that tanh(<i>h</i>) &asymp; <i>h</i>, which is why the decline slows instead of compounding by a fixed factor. The <a href="variance.html">variance page</a> has the rules behind all of this, and <a href="variance-balance.html">forward vs. backward</a> has Glorot's compromise between 1/<i>n</i> and 1/<i>m</i>.</div>
+<div class="cap">Activations are green and gradients red, as in the figure. <b>Top row, forward, left to right:</b> the layer above, fed <i>x</i> ~ N(0, 1), as many draws of one <i>h</i> against <i>x</i> (gray); then the activation variance through eight stacked square tanh layers of width <i>n</i>, each with fresh weights at the &sigma;<sub>w</sub> set above. <b>Bottom row, backward, right to left:</b> the layer above again, now turning an upstream gradient ~ N(0, 1) (gray) into &part;L/&part;x, which sums <i>m</i> terms; then, leftward, the gradient variance as an N(0, 1) gradient arriving at layer 8 is backpropagated through the same stack, multiplied at every layer by tanh&prime; and <i>W</i><sup>T</sup>. The dashed lines are the linear predictions, which ignore tanh. Drag &sigma;<sub>w</sub> above and everything follows: the factor per square layer is <i>n</i>&middot;&sigma;<sub>w</sub>&sup2; in both directions, so it compounds to vanishing below 1/&radic;n and to blowing up above it. The backward bars also pay tanh&prime; &le; 1 at every layer, which is why they fall faster than the dashed line even at a factor of 1: that is saturation starving the gradient, the paper's main worry. The <b>standard</b> preset is the paper's standard init, uniform with half-width 1/&radic;<i>n</i>, so &sigma;<sub>w</sub> = 1/&radic;(3<i>n</i>) and the factor is 1/3 per layer; had 1/&radic;<i>n</i> been the standard deviation instead (as LeCun et al. recommended in 1998), the factor would be 1 (see <a href="uniform-init.html">standard vs. normalized init</a>). Even at a factor of 1 the bars fall below the dashed line, steeply at first and then slowly: tanh flattens values beyond about &plusmn;0.5, so Var(tanh <i>h</i>) &lt; Var(<i>h</i>), and a unit-variance input keeps only about 40% of its variance through the first tanh; and when the factor is above 1, tanh caps the bars near 1 while the prediction keeps climbing, which is saturation. The <a href="variance.html">variance page</a> has the rules behind all of this, and <a href="variance-balance.html">forward vs. backward</a> has Glorot's compromise between 1/<i>n</i> and 1/<i>m</i>.</div>
+</div>
+<div class="cap">Weights are either Gaussian, <i>w</i> ~ N(0, &sigma;<sub>w</sub>&sup2;), or uniform as Glorot &amp; Bengio drew them, on [&minus;<i>a</i>, <i>a</i>] with <i>a</i> = &radic;3&middot;&sigma;<sub>w</sub> so the variance is the same (see <a href="uniform-third.html">why a&sup2;/3</a>); the inputs <i>x</i> and the upstream gradients &part;L/&part;h are N(0, 1). Every cell uses the same horizontal scale, &minus;4 to 4, so a wider curve means a bigger variance; each curve is drawn as a fine histogram would show it, scaled to its own peak. <b>Products are not normal</b>: w&middot;x has variance &sigma;<sub>w</sub>&sup2;&middot;1 either way, but a sharp peak at 0. With Gaussian w its density is K<sub>0</sub>(|z|/&sigma;<sub>w</sub>)/(&pi;&sigma;<sub>w</sub>), a Bessel function with exponential tails; with uniform w it is E<sub>1</sub>(z&sup2;/2a&sup2;)/(2a&radic;(2&pi;)), an exponential integral whose tails fall off like a Gaussian's, since |w| &le; a. Both are drawn exactly. <b>Sums become normal</b>: adding several independent products gives a curve close to a Gaussian (the central limit theorem), with variance the sum of theirs. Forward, <i>h</i><sub>i</sub> = &Sigma;<sub>j</sub> <i>w</i><sub>ij</sub><i>x</i><sub>j</sub> adds <i>n</i> products. Backward, the chain rule gives &part;L/&part;x<sub>j</sub> = &Sigma;<sub>i</sub> &part;L/&part;h<sub>i</sub><i>w</i><sub>ij</sub>: the row vector &part;L/&part;h times column <i>j</i> of <i>W</i> (the same thing as <i>W</i><sup>T</sup>&part;L/&part;h, written as a column), so it adds <i>m</i> products. A result gets a green &check; when its standard deviation is within 3% of 1. With both run, the presets show the dilemma: 1/&radic;n checks h, 1/&radic;m checks &part;L/&part;x, and unless <i>n</i> = <i>m</i> nothing checks both; Glorot's 2/(<i>n</i>+<i>m</i>) leaves one a little bigger and the other a little smaller. The dashed curve on each result is N(0, 1), the spread that went in.</div>
 
 <script>
 var NS='http://www.w3.org/2000/svg';
@@ -137,10 +135,10 @@ var n=6, m=3, sw=1, tf=0, tb=0, active='f';
 var Z=[], U=[], X=[], G=[];   // W = sw*Z (Gaussian) or sqrt(3)*sw*U, U uniform on [-1, 1]; x and g are N(0,1)
 var wdist='gauss';
 function resample(){
-  Z=[]; U=[]; for(var i=0;i<5;i++){ Z.push([]); U.push([]); for(var j=0;j<6;j++){ Z[i].push(randn()); U[i].push(2*Math.random()-1); } }
+  Z=[]; U=[]; for(var i=0;i<6;i++){ Z.push([]); U.push([]); for(var j=0;j<6;j++){ Z[i].push(randn()); U[i].push(2*Math.random()-1); } }
   X=[]; for(var j2=0;j2<6;j2++) X.push(randn());
-  G=[]; for(var i2=0;i2<5;i2++) G.push(randn());
-  draw();
+  G=[]; for(var i2=0;i2<6;i2++) G.push(randn());
+  draw(); resampleLay();
 }
 function W(i,j){ return wdist==='gauss'?sw*Z[i][j]:Math.sqrt(3)*sw*U[i][j]; }
 
@@ -192,7 +190,8 @@ function cell(g, x, y, dist, val, color, op, ghost, dist2, val2, color2, mix){
 // ---------- the frame ----------
 function draw(){
   var g=document.getElementById('g'); g.innerHTML='';
-  var wCol='var(--violet-ink)', xCol='var(--blue-ink)', gCol='var(--orange-ink)', rCol='var(--green-ink)', pCol='var(--pink-ink)';
+  // activations green, gradients red, weights violet, products pink
+  var wCol='var(--violet-ink)', xCol='var(--green-ink)', gCol='var(--orange-ink)', rCol='var(--green-ink)', pCol='var(--pink-ink)';
   var ph=function(t){ return {D:ease(cl(t)), M:ease(cl(t-1)), A:ease(cl(t-2))}; };
   var F=ph(tf), B=ph(tb-1); B.I=ease(cl(tb));            // B.I: dL/dh arriving
   F.R=cl((F.A-0.7)/0.3); B.R=cl((B.A-0.7)/0.3);          // the vectors come back once their sums are done
@@ -202,10 +201,15 @@ function draw(){
   var oy=Math.max(CH+44,(n-m)*CH/2+24), yc=oy+m*CH/2;
   var vx=ox+n*CW+44, rx=vx+CW+70, vy0=yc-n*CH/2;
   var yRes=oy+m*CH+80;
-  var VH=Math.max(yRes+CH+34, vy0+n*CH+34);
+  var VH=Math.max(yRes+CH+34, vy0+n*CH+34, oy+m*CH+96);
   // fit the view to what can appear, symmetric about W's centre so W stays centred
-  var half=Math.max(VW/2-Math.min(LEFT,ox-150)+12, rx+CW+150-VW/2);
-  document.getElementById('anim').setAttribute('viewBox',(VW/2-half).toFixed(0)+' 0 '+(2*half).toFixed(0)+' '+VH);
+  // and draw it at one constant scale: the widest layout (n = m = 6, REFW units)
+  // fills the wrapper, and smaller layers take a proportionally smaller width,
+  // so cells never grow just because there are fewer of them
+  var half=Math.max(VW/2-Math.min(LEFT,ox-150)+12, rx+CW+24-VW/2), REFW=1396;
+  var svg=document.getElementById('anim');
+  svg.setAttribute('viewBox',(VW/2-half).toFixed(0)+' 0 '+(2*half).toFixed(0)+' '+VH);
+  svg.style.width=Math.min(100,100*2*half/REFW).toFixed(2)+'%';
   var wD=wdist==='gauss'?{k:'g',s:sw}:{k:'u',s:Math.sqrt(3)*sw}, pD=wdist==='gauss'?{k:'p',s:sw}:{k:'q',s:Math.sqrt(3)*sw};
 
   // --- W stays put; while one direction multiplies, its cells turn into products ---
@@ -238,7 +242,7 @@ function draw(){
   // --- results, with a verdict on their spread ---
   var sH=Math.sqrt(n)*sw, sX=Math.sqrt(m)*sw, onF=cl((F.A-0.55)/0.45), onB=cl((B.A-0.55)/0.45);
   for(var i4=0;i4<m;i4++){ var s=0; for(var j4=0;j4<n;j4++) s+=W(i4,j4)*X[j4]; cell(g,rx,oy+i4*CH,{k:'g',s:sH},s,rCol,onF,true); }
-  for(var j5=0;j5<n;j5++){ var s2=0; for(var i5=0;i5<m;i5++) s2+=G[i5]*W(i5,j5); cell(g,ox+j5*CW,yRes,{k:'g',s:sX},s2,rCol,onB,true); }
+  for(var j5=0;j5<n;j5++){ var s2=0; for(var i5=0;i5<m;i5++) s2+=G[i5]*W(i5,j5); cell(g,ox+j5*CW,yRes,{k:'g',s:sX},s2,gCol,onB,true); }
   function verdict(x,y,anchor,sig,k,op){
     if(op<0.02) return;
     var ok=Math.abs(sig-1)<=0.03, gg=el('g',{opacity:op.toFixed(2)}); g.appendChild(gg);
@@ -246,7 +250,7 @@ function draw(){
     if(ok) txt(gg,x,y+24,'gl','✓',{'text-anchor':anchor,style:'font-size:36px;font-weight:700;fill:var(--green)'});
     else txt(gg,x,y+10,'gl',sig>1?'bigger':'smaller',{'text-anchor':anchor,style:'font-size:13px;fill:var(--text-muted)'});
   }
-  verdict(rx+CW+12,yc,'start',sH,n,onF);
+  verdict(rx+CW/2,oy+m*CH+56,'middle',sH,n,onF);   // under h's label
   verdict(ox-14,yRes+CH/2,'end',sX,m,onB);
 
   // --- signs, arrows, labels ---
@@ -258,7 +262,7 @@ function draw(){
   lab(LEFT+m*CW/2,yc+CH/2+20,'∂L/∂h  (1×'+m+')',gCol,Math.max(B.I*(1-B.D),B.R));
   lab(ox-CW/2-14,oy-8,'∂L/∂h, one per row',gCol,B.D*(1-B.A),'middle');
   lab(rx+CW/2,oy+m*CH+20,'h  ('+m+')',rCol,onF);
-  lab(ox+n*CW/2,yRes+CH+20,'∂L/∂x  (1×'+n+')',rCol,onB);
+  lab(ox+n*CW/2,yRes+CH+20,'∂L/∂x  (1×'+n+')',gCol,onB);
   sign(vx-22,yc+6,'·',Math.max(F.A<0.5?1-F.D:0,F.R),26);
   sign((vx+CW+rx)/2,yc+8,'=',F.R);
   sign(ox-28,yc+6,'·',Math.max(B.A<0.5?B.I*(1-B.D):0,B.R),26);
@@ -267,7 +271,7 @@ function draw(){
     var ax=ox+n*CW/2, ay0=oy+m*CH+28, ay1=yRes-6, ag=el('g',{opacity:onB.toFixed(2)}); g.appendChild(ag);
     ag.appendChild(el('line',{x1:ax,y1:ay0,x2:ax,y2:ay1,stroke:'var(--text-muted)','stroke-width':1.6}));
     ag.appendChild(el('path',{d:'M'+(ax-5)+','+(ay1-7)+' L'+ax+','+ay1+' L'+(ax+5)+','+(ay1-7),fill:'none',stroke:'var(--text-muted)','stroke-width':1.6}));
-    txt(ag,ax+10,(ay0+ay1)/2+5,'ts gl','∂L/∂x = ∂L/∂h · W',{style:'font-size:14px;fill:var(--text-secondary)'});
+    txt(ag,ax-10,(ay0+ay1)/2+5,'ts gl','∂L/∂x = ∂L/∂h · W',{'text-anchor':'end',style:'font-size:14px;fill:var(--text-secondary)'});   // left of the arrow, clear of x
   }
   if(F.M>0.3&&F.A<0.3&&mixDir==='f') txt(g,ox+n*CW+10,oy-14,'tn gl','each cell: w·x, variance σ_w², not normal',{style:'font-size:12px;fill:var(--pink-ink)'});
   if(B.M>0.3&&B.A<0.3&&mixDir==='b') txt(g,ox,oy+m*CH+46,'tn gl','each cell: ∂L/∂h·w, variance σ_w², not normal',{style:'font-size:12px;fill:var(--pink-ink)'});
@@ -317,104 +321,131 @@ function play(which){
   if(!raf){ last=performance.now(); raf=requestAnimationFrame(frame); }
 }
 function showSw(){ document.getElementById('swVal').textContent=sw.toFixed(2); }
-function onSigma(){ sw=Math.pow(10,+document.getElementById('sw').value); showSw(); markPreset(null); draw(); }
+function onSigma(){ sw=Math.pow(10,+document.getElementById('sw').value); showSw(); markPreset(null); draw(); drawLay(); }
 function markPreset(p){ Array.from(document.getElementById('presetSeg').children).forEach(function(b){ b.classList.toggle('on',b.dataset.p===p); }); }
 function applyPreset(p){
-  sw=p==='one'?1:p==='fwd'?1/Math.sqrt(n):p==='bwd'?1/Math.sqrt(m):Math.sqrt(2/(n+m));
-  document.getElementById('sw').value=Math.log10(sw); showSw(); markPreset(p); draw();
+  if(p==='std') setWdist('unif');   // the standard init is a uniform with half-width 1/sqrt(n)
+  sw=p==='one'?1:p==='std'?1/Math.sqrt(3*n):p==='fwd'?1/Math.sqrt(n):p==='bwd'?1/Math.sqrt(m):Math.sqrt(2/(n+m));
+  document.getElementById('sw').value=Math.log10(sw); showSw(); markPreset(p); draw(); drawLay();
 }
 document.getElementById('presetSeg').addEventListener('click',function(e){ var b=e.target.closest('button'); if(b) applyPreset(b.dataset.p); });
+function setWdist(w){
+  wdist=w;
+  Array.from(document.getElementById('wdistSeg').children).forEach(function(x){ x.classList.toggle('on',x.dataset.w===w); });
+}
 document.getElementById('wdistSeg').addEventListener('click',function(e){
   var b=e.target.closest('button'); if(!b) return;
-  wdist=b.dataset.w;
-  Array.from(this.children).forEach(function(x){ x.classList.toggle('on',x===b); });
-  draw();
+  setWdist(b.dataset.w); draw(); drawLay();
 });
+function updateStack(){
+  var sq=n===m;
+  document.getElementById('stackSec').style.display=sq?'flex':'none';
+  document.getElementById('stackLocked').style.display=sq?'none':'flex';
+  if(sq) drawLay();
+}
+function makeSquare(){ document.getElementById('m').value=n; onShape(); }
 function onShape(){
   n=+document.getElementById('n').value; m=+document.getElementById('m').value;
   document.getElementById('nVal').textContent=n; document.getElementById('mVal').textContent=m;
   var on=document.querySelector('#presetSeg .on'); if(on) applyPreset(on.dataset.p); else draw();
+  updateStack();
 }
 
-// ---------- stacking layers (moved from the variance page) ----------
-var scheme='std', dist='unif';
-document.getElementById('schemeSeg').addEventListener('click',function(e){
-  var b=e.target.closest('button'); if(!b) return;
-  scheme=b.dataset.s;
-  Array.from(this.children).forEach(function(x){ x.classList.toggle('on',x===b); });
+// ---------- stacking layers, driven by the figure's n, sigma_w and distribution ----------
+// the random draws are fixed (normals and uniforms on [-1, 1]) and only rescaled, so
+// dragging sigma_w moves the pictures smoothly; Resample draws new ones
+var LB=null, NMAX=6, DEPTH=8, M1=4000, P=400;
+function resampleLay(){
+  var nz=function(k){ var a=[]; for(var i=0;i<k;i++) a.push(randn()); return a; };
+  var uz=function(k){ var a=[]; for(var i=0;i<k;i++) a.push(2*Math.random()-1); return a; };
+  LB={x1:nz(M1*NMAX), g1:nz(M1*NMAX), z1:nz(M1*NMAX), u1:uz(M1*NMAX), x0:nz(P*NMAX), g0:nz(P*NMAX), zl:[], ul:[]};
+  for(var l=0;l<DEPTH;l++){ LB.zl.push(nz(NMAX*NMAX)); LB.ul.push(uz(NMAX*NMAX)); }
   drawLay();
-});
-document.getElementById('distSeg').addEventListener('click',function(e){
-  var b=e.target.closest('button'); if(!b) return;
-  dist=b.dataset.d;
-  Array.from(this.children).forEach(function(x){ x.classList.toggle('on',x===b); });
-  drawLay();
-});
-// the weight distribution: returns a sampler, its variance, and how that variance came about
-function weights(n){
-  if(dist==='unif'){
-    var a=scheme==='std'?1/Math.sqrt(n):Math.sqrt(3/n);
-    return {draw:function(){ return (2*Math.random()-1)*a; }, varW:a*a/3, how:'uniform, half-width a = '+f2(a)+', Var(W) = a²/3'};
-  }
-  var sd=1/Math.sqrt(n);   // standard's scale as a std, and Glorot's std, coincide for a Gaussian
-  return {draw:function(){ return sd*randn(); }, varW:sd*sd, how:'Gaussian, std = '+f2(sd)+', Var(W) = std²'};
 }
+function wOf(z,u){ return wdist==='gauss'?sw*z:Math.sqrt(3)*sw*u; }
 function drawLay(){
-  var n=Math.pow(2,parseInt(document.getElementById('nl').value,10));
-  document.getElementById('nlVal').textContent=n;
-  var Wd=weights(n), varW=Wd.varW, gain=n*varW, uw=Wd.draw;
-  // one layer: h = sum of n products, many times
-  var M=4000, xs=[], hs=[];
-  for(var s=0;s<M;s++){ var h=0; for(var i=0;i<n;i++){ var x=randn(); if(i===0) xs.push(x); h+=uw()*x; } hs.push(h); }
-  var vr=function(A){ var m=0; A.forEach(function(v){m+=v;}); m/=A.length; var q=0; A.forEach(function(v){q+=(v-m)*(v-m);}); return q/A.length; };
-  var vx=vr(xs), vh=vr(hs);
-  // eight real tanh layers of width n
-  var P=400, depth=8, act=[], varsL=[];
-  for(var p=0;p<P;p++){ var v=[]; for(var i2=0;i2<n;i2++) v.push(randn()); act.push(v); }
-  varsL.push(vr([].concat.apply([],act)));
-  for(var l=1;l<=depth;l++){
-    var Wl=[]; for(var o=0;o<n;o++){ var row=[]; for(var i3=0;i3<n;i3++) row.push(uw()); Wl.push(row); }
-    act=act.map(function(v){ return Wl.map(function(row){ var h=0; for(var i4=0;i4<n;i4++) h+=row[i4]*v[i4]; return Math.tanh(h); }); });
-    varsL.push(vr([].concat.apply([],act)));
+  if(!LB||n!==m) return;   // only a square layer stacks
+  var varW=sw*sw, gainF=n*varW, gainB=m*varW, gainSq=n*varW;
+  var vr=function(A){ var mu=0; A.forEach(function(v){mu+=v;}); mu/=A.length; var q=0; A.forEach(function(v){q+=(v-mu)*(v-mu);}); return q/A.length; };
+  // one layer, as in the figure: h sums n products; dL/dx sums m
+  var xs=[], hs=[], gs=[], dxs=[];
+  for(var s=0;s<M1;s++){
+    var h=0, d=0;
+    for(var i=0;i<n;i++){ var k=s*NMAX+i; if(i===0) xs.push(LB.x1[k]); h+=wOf(LB.z1[k],LB.u1[k])*LB.x1[k]; }
+    for(var i2=0;i2<m;i2++){ var k2=s*NMAX+i2; if(i2===0) gs.push(LB.g1[k2]); d+=wOf(LB.z1[k2],LB.u1[k2])*LB.g1[k2]; }
+    hs.push(h); dxs.push(d);
   }
+  // eight stacked square tanh layers of width n: forward, keeping every layer's activations
+  var acts=[[]], Ws=[];
+  for(var p=0;p<P;p++) acts[0].push(LB.x0.slice(p*NMAX,p*NMAX+n));
+  for(var l=0;l<DEPTH;l++){
+    var Wl=[]; for(var o=0;o<n;o++){ var row=[]; for(var i3=0;i3<n;i3++) row.push(wOf(LB.zl[l][o*NMAX+i3],LB.ul[l][o*NMAX+i3])); Wl.push(row); }
+    Ws.push(Wl);
+    acts.push(acts[l].map(function(v){ return Wl.map(function(row){ var h=0; for(var i4=0;i4<n;i4++) h+=row[i4]*v[i4]; return Math.tanh(h); }); }));
+  }
+  var fwd=acts.map(function(A){ return vr([].concat.apply([],A)); });
+  // backward: an N(0,1) gradient arrives at the top and is pushed down through
+  // each layer's tanh slope and W^T
+  var grads=[]; grads[DEPTH]=[]; for(var p2=0;p2<P;p2++) grads[DEPTH].push(LB.g0.slice(p2*NMAX,p2*NMAX+n));
+  for(var l2=DEPTH-1;l2>=0;l2--){
+    var Wl2=Ws[l2], out=acts[l2+1];
+    grads[l2]=grads[l2+1].map(function(gv,p3){
+      var delta=gv.map(function(v,o){ var a=out[p3][o]; return v*(1-a*a); });
+      var r=new Array(n).fill(0);
+      for(var o2=0;o2<n;o2++) for(var i5=0;i5<n;i5++) r[i5]+=Wl2[o2][i5]*delta[o2];
+      return r;
+    });
+  }
+  var bwd=grads.map(function(A){ return vr([].concat.apply([],A)); });
+
   var g=document.getElementById('glay'); g.innerHTML='';
-  // left: histograms
-  var HX0=40, HW=380, HY0=30, HH=190, R=4, bins=48;
-  var hx=function(v){ return HX0+(v+R)/(2*R)*HW; };
-  function hist(A){ var c=new Array(bins).fill(0); A.forEach(function(v){ var b=Math.floor((v+R)/(2*R)*bins); if(b>=0&&b<bins) c[b]++; }); return c.map(function(k){ return k/A.length/(2*R/bins); }); }
-  var cx=hist(xs), ch=hist(hs), top=Math.max(Math.max.apply(null,cx),Math.max.apply(null,ch))*1.08;
-  var hy=function(d){ return HY0+HH-d/top*HH; };
-  g.appendChild(el('line',{x1:HX0,y1:HY0+HH,x2:HX0+HW,y2:HY0+HH,stroke:'var(--border-strong)','stroke-width':1}));
-  [[cx,'var(--text-muted)',0.35],[ch,'var(--blue)',0.5]].forEach(function(q){
-    q[0].forEach(function(d,b){ if(d>0) g.appendChild(el('rect',{x:HX0+b*HW/bins+0.3,y:hy(d),width:HW/bins-0.6,height:HY0+HH-hy(d),fill:q[1],opacity:q[2]})); });
-  });
-  for(var t2=-4;t2<=4;t2+=2) txt(g,hx(t2),HY0+HH+15,'tn',String(t2),{'text-anchor':'middle',style:'font-size:11px'});
-  txt(g,HX0,HY0-12,'ts gl','one layer: inputs x (gray) → h = Σᵢ wᵢxᵢ (blue)');
-  txt(g,HX0+HW,HY0+8,'num gl','Var(x) = '+f2(vx),{'text-anchor':'end',style:'font-size:12.5px',fill:'var(--text-secondary)'});
-  txt(g,HX0+HW,HY0+24,'num gl','Var(h) = '+f2(vh),{'text-anchor':'end',style:'font-size:12.5px;font-weight:600',fill:'var(--blue-ink)'});
-  // right: variance per layer, log scale
-  var BX0=520, BW=360, BY0=30, BH=190, LMIN=-5, LMAX=0.5;
-  var by=function(v){ var lg=Math.log10(Math.max(v,1e-9)); lg=Math.max(LMIN,Math.min(LMAX,lg)); return BY0+BH-(lg-LMIN)/(LMAX-LMIN)*BH; };
-  txt(g,BX0,BY0-12,'ts gl','Var after L layers (log scale)');
-  [[1,'1'],[1e-1,'0.1'],[1e-2,'0.01'],[1e-3,'10⁻³'],[1e-4,'10⁻⁴'],[1e-5,'10⁻⁵']].forEach(function(q){
-    g.appendChild(el('line',{x1:BX0,y1:by(q[0]),x2:BX0+BW,y2:by(q[0]),stroke:'var(--border)','stroke-width':0.7,'stroke-dasharray':q[0]===1?'':'3 3'}));
-    txt(g,BX0-6,by(q[0])+4,'tn gl',q[1],{'text-anchor':'end',style:'font-size:11px'});
-  });
-  var colW=BW/(depth+1), pts=[];
-  varsL.forEach(function(v,l){
-    var x=BX0+l*colW;
-    g.appendChild(el('rect',{x:x+colW*0.2,y:by(v),width:colW*0.6,height:BY0+BH-by(v),fill:'var(--green)',opacity:0.6}));
-    txt(g,x+colW/2,BY0+BH+15,'tn',String(l),{'text-anchor':'middle',style:'font-size:11px'});
-    pts.push((x+colW/2)+','+by(varsL[0]*Math.pow(gain,l)));
-  });
-  g.appendChild(el('polyline',{points:pts.join(' '),fill:'none',stroke:'var(--text-primary)','stroke-width':1.4,'stroke-dasharray':'5 4'}));
-  txt(g,BX0+BW,BY0+BH+30,'tn','layer L',{'text-anchor':'end',style:'font-size:11.5px'});
-  txt(g,BX0+BW,BY0+8,'tn gl','bars: real tanh layers · dashed: (n·Var W)ᴸ',{'text-anchor':'end',style:'font-size:11.5px'});
-  document.getElementById('rdLay').innerHTML='n = '+n+': '+Wd.how+' = '+f2(varW)+', so <b>n·Var(W) = '+f2(gain)+'</b>: predicted Var(h) = '+f2(gain)+' × Var(x) = <b class="num">'+f2(gain*vx)+'</b>, measured <b class="num">'+f2(vh)+'</b>. '+
-    'After 8 layers: predicted '+f2(varsL[0]*Math.pow(gain,8))+', measured through tanh '+f2(varsL[8])+'.';
+  var ACT='var(--green)', ACTI='var(--green-ink)', GRD='var(--orange)', GRDI='var(--orange-ink)';
+  // --- a pair of histograms: A (gray) in, B (colored) out ---
+  function hists(x0,y0,W,H,A,B,col,colI,title,la,lb){
+    var R=4, bins=48, hx=function(v){ return x0+(v+R)/(2*R)*W; };
+    var hist=function(D){ var c=new Array(bins).fill(0); D.forEach(function(v){ var b=Math.floor((v+R)/(2*R)*bins); if(b>=0&&b<bins) c[b]++; }); return c.map(function(k){ return k/D.length/(2*R/bins); }); };
+    var ca=hist(A), cb=hist(B), top=Math.max(Math.max.apply(null,ca),Math.max.apply(null,cb))*1.08;
+    var hy=function(d){ return y0+H-d/top*H; };
+    g.appendChild(el('line',{x1:x0,y1:y0+H,x2:x0+W,y2:y0+H,stroke:'var(--border-strong)','stroke-width':1}));
+    [[ca,'var(--text-muted)',0.35],[cb,col,0.5]].forEach(function(q){
+      q[0].forEach(function(d,b){ if(d>0) g.appendChild(el('rect',{x:x0+b*W/bins+0.3,y:hy(d),width:W/bins-0.6,height:y0+H-hy(d),fill:q[1],opacity:q[2]})); });
+    });
+    for(var t=-4;t<=4;t+=2) txt(g,hx(t),y0+H+15,'tn',String(t).replace('-','−'),{'text-anchor':'middle',style:'font-size:11px'});
+    txt(g,x0,y0-12,'ts gl',title,{style:'font-size:14.5px'});
+    txt(g,x0+W,y0+8,'num gl',la,{'text-anchor':'end',style:'font-size:12.5px;fill:var(--text-secondary)'});
+    txt(g,x0+W,y0+24,'num gl',lb,{'text-anchor':'end',style:'font-size:12.5px;font-weight:600;fill:'+colI});
+  }
+  // --- variance through the layers, log scale, with the linear prediction dashed ---
+  function bars(x0,y0,W,H,vals,pred,col,title,note){
+    var LMIN=-5, LMAX=2, by=function(v){ var lg=Math.log10(Math.max(v,1e-9)); lg=Math.max(LMIN,Math.min(LMAX,lg)); return y0+H-(lg-LMIN)/(LMAX-LMIN)*H; };
+    txt(g,x0,y0-12,'ts gl',title,{style:'font-size:14.5px'});
+    [[100,'100'],[1,'1'],[1e-2,'0.01'],[1e-4,'10⁻⁴']].forEach(function(q){
+      g.appendChild(el('line',{x1:x0,y1:by(q[0]),x2:x0+W,y2:by(q[0]),stroke:'var(--border)','stroke-width':0.7,'stroke-dasharray':q[0]===1?'':'3 3'}));
+      txt(g,x0-6,by(q[0])+4,'tn gl',q[1],{'text-anchor':'end',style:'font-size:11px'});
+    });
+    var colW=W/(DEPTH+1), pts=[];
+    vals.forEach(function(v,l){
+      var x=x0+l*colW;
+      g.appendChild(el('rect',{x:x+colW*0.2,y:by(v),width:colW*0.6,height:y0+H-by(v),fill:col,opacity:0.6}));
+      txt(g,x+colW/2,y0+H+15,'tn',String(l),{'text-anchor':'middle',style:'font-size:11px'});
+      pts.push((x+colW/2)+','+by(pred[l]));
+    });
+    g.appendChild(el('polyline',{points:pts.join(' '),fill:'none',stroke:'var(--text-primary)','stroke-width':1.4,'stroke-dasharray':'5 4'}));
+    txt(g,x0+W,y0+H+32,'tn',note,{'text-anchor':'end',style:'font-size:11.5px'});
+  }
+  // forward reads left to right: one layer, then the stack
+  hists(40,34,380,170,xs,hs,ACT,ACTI,'forward: x (gray) → h (green), sums n = '+n,'Var(x) = '+f2(vr(xs)),'Var(h) = '+f2(vr(hs)));
+  bars(520,34,360,170,fwd,fwd.map(function(_,l){ return fwd[0]*Math.pow(gainSq,l); }),ACT,'activation variance through layer L','layer L  ·  bars: real tanh layers  ·  dashed: (n·σ_w²)ᴸ');
+  // backward reads right to left: the upstream gradient arrives on the right
+  bars(60,300,360,170,bwd,bwd.map(function(_,l){ return bwd[DEPTH]*Math.pow(gainSq,DEPTH-l); }),GRD,'← gradient variance, arriving at layer 8','layer L  ·  bars: through tanh  ·  dashed: (n·σ_w²)⁽⁸⁻ᴸ⁾');
+  hists(500,300,380,170,gs,dxs,GRD,GRDI,'backward: ∂L/∂h (gray) → ∂L/∂x (red), sums m = '+m,'Var(∂L/∂h) = '+f2(vr(gs)),'Var(∂L/∂x) = '+f2(vr(dxs)));
+
+  document.getElementById('rdLay').innerHTML='n = '+n+', m = '+m+', σ_w = '+sw.toFixed(2)+' ('+(wdist==='gauss'?'Gaussian':'uniform')+' w). '+
+    '<b>Forward</b>, one layer: n·σ_w² = '+f2(gainF)+', measured Var(h) = <b class="num">'+f2(vr(hs))+'</b>; after 8 square layers, predicted '+f2(fwd[0]*Math.pow(gainSq,8))+', measured through tanh <b class="num">'+f2(fwd[8])+'</b>. '+
+    '<b>Backward</b>, one layer: m·σ_w² = '+f2(gainB)+', measured Var(∂L/∂x) = <b class="num">'+f2(vr(dxs))+'</b>; back through 8 square layers, predicted '+f2(bwd[DEPTH]*Math.pow(gainSq,8))+', measured <b class="num">'+f2(bwd[0])+'</b>.';
 }
 
-showSw(); label(); resample(); drawLay();
+showSw(); label(); resample(); updateStack();
 // on a narrow screen the figure scrolls; start it centred on W
 function centreFig(){ var f=document.getElementById('figwrap'); f.scrollLeft=(f.scrollWidth-f.clientWidth)/2; }
 centreFig(); window.addEventListener('resize',centreFig);
