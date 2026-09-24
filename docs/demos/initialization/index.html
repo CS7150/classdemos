@@ -50,14 +50,23 @@ footer a{color:var(--text-secondary)}
   <div class="nav"><a href="../../">&larr; CS7150 class demos</a></div>
   <p class="eyebrow">Northeastern University &middot; CS 7150 &middot; Fall 2026</p>
   <h1>Initialization, explained</h1>
-  <p>Eight interactive pieces on <a href="https://proceedings.mlr.press/v9/glorot10a/glorot10a.pdf">Glorot &amp; Bengio 2010</a>:
-     first, what the failure looks like while a real network trains; then the chain rule behind
-     it, one neuron per layer, and how the choice of activation changes it; then what variance is, where the <i>n</i> in <i>n</i>&middot;Var(<i>W</i>) comes from (forward and
+  <p>Nine interactive pieces on <a href="https://proceedings.mlr.press/v9/glorot10a/glorot10a.pdf">Glorot &amp; Bengio 2010</a>:
+     first, what saturation is on a single tanh; then what the failure looks like while a real
+     network trains, and the chain rule behind it, one neuron per layer, and how the choice of activation changes it; then what variance is, where the <i>n</i> in <i>n</i>&middot;Var(<i>W</i>) comes from (forward and
      backward), where the 1/3 comes from, the two uniform initializations the paper compares, and why forward and backward stability pull the variance in different
      directions when a layer isn't square.</p>
 </header>
 
 <ol class="qs">
+
+<li class="done">
+  <div class="qtag">Saturation</div>
+  <h2><a href="tanh-saturation.html">Saturation on one tanh</a></h2>
+  <p class="what">Twenty units on a single tanh curve, each drawn with its tangent line. Scale
+     their inputs up and the tangents lie flat, so almost no gradient gets back; scale them down
+     and every slope is 1, but the outputs huddle at 0.</p>
+  <a class="go" href="tanh-saturation.html">Open the explainer &rarr;</a>
+</li>
 
 <li class="done">
   <div class="qtag">The failure, in practice</div>

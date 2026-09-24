@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Saturation on one tanh</title>
+<meta name="description" content="Twenty units on a single tanh curve, each drawn with its tangent line. Scale their inputs up and the tangents lie flat (saturation); scale them down and every tangent has slope 1 while the outputs huddle at zero.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 16px;max-width:1100px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+.quiz{margin:0}
+svg{max-height:62vh}
+.row{gap:7px}
+button{height:30px;font-size:13px;padding:0 9px}
+.seg button{height:28px;font-size:12px;padding:0 8px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:auto}
+.rd{font-size:14px;line-height:1.5;min-height:1.5em}
+.cap{font-size:12.5px;line-height:1.5;padding-top:4px}
+.nav{display:flex;align-items:baseline;gap:10px}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Initialization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Saturation on one tanh<span>: every unit's slope, at a glance</span></h1>
+<p class="quiz">Twenty units, each sitting on the tanh curve at its own pre-activation <i>h</i>, each drawn with its tangent line: the slope tanh&prime;(<i>h</i>) is how much gradient that unit passes back. Scale the inputs up and the units slide out onto the flat tails; scale them down and they huddle at 0.</p>
+
+<svg id="fig" viewBox="0 0 900 430" role="img">
+  <desc>A tanh curve with twenty points on it, each with a short tangent segment colored from green, slope near one, to red, slope near zero; below, a bar chart of the twenty slopes in the same left-to-right order.</desc>
+  <g id="g"></g>
+</svg>
+
+<div class="row">
+  <div class="seg" id="presetSeg">
+    <button data-s="0.1">small inputs</button>
+    <button data-s="1" class="on">h ~ N(0, 1)</button>
+    <button data-s="5">big inputs</button>
+  </div>
+  <span class="klab">input scale: h ~ N(0, s&sup2;), s</span>
+  <input type="range" id="s" min="-1.5" max="1.2" step="any" value="0" oninput="onScale()" style="flex:1 1 200px;min-width:100px">
+  <span class="knum" id="sVal">1.00</span>
+  <button onclick="resample()">Resample</button>
+</div>
+<div class="rd" id="readout"></div>
+<div class="cap">Each unit's pre-activation is <i>h</i> = <i>s</i>&middot;<i>z</i> for a fixed standard normal <i>z</i>, so the slider stretches the same twenty units apart or squeezes them together; in a network, <i>s</i> is what the weight scale controls (<a href="where-n.html">where the n comes from</a> shows how <i>n</i>&middot;&sigma;<sub>w</sub>&sup2; sets it). Every tangent is drawn the same length, so its angle is its slope: tanh&prime;(<i>h</i>) = 1 &minus; tanh&sup2;(<i>h</i>), which is 1 at <i>h</i> = 0 and below 0.01 once |<i>h</i>| &gt; 3. <b>Big inputs</b>: the outputs are pinned near &plusmn;1 and still carry a signal, but the slopes are near 0, so almost no gradient gets back through, which is <b>saturation</b>. <b>Small inputs</b>: every slope is nearly 1, so tanh passes gradients through untouched, but the outputs all huddle near 0, a signal that has all but vanished. The h axis is fixed at &minus;5 to 5; units beyond it are pinned to the edge and counted. The <a href="chain-rule.html">chain-rule demo</a> shows what these slopes do once they multiply through several layers.</div>
+
+<script>
+var NS='http://www.w3.org/2000/svg';
+function el(tag,attrs){var e=document.createElementNS(NS,tag);for(var k in attrs)e.setAttribute(k,attrs[k]);return e;}
+function txt(g,x,y,cls,str,attrs){ var t=el('text',Object.assign({x:x,y:y,class:cls},attrs||{})); t.textContent=str; g.appendChild(t); return t; }
+function randn(){ var u=0,v=0; while(!u)u=Math.random(); while(!v)v=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+
+var N=20, Z=[], s=1, HM=5;
+function resample(){ Z=[]; for(var i=0;i<N;i++) Z.push(randn()); Z.sort(function(a,b){ return a-b; }); draw(); }
+function dtanh(h){ var t=Math.tanh(h); return 1-t*t; }
+// slope 1 is green, slope 0 is red
+function slopeColor(d){ return 'color-mix(in oklab, var(--green-ink) '+Math.round(100*d)+'%, var(--red))'; }
+function f2(v){ return v<0.01&&v>0?v.toExponential(1):v.toFixed(2); }
+
+function draw(){
+  var g=document.getElementById('g'); g.innerHTML='';
+  // main plot
+  var X0=60, W=800, Y0=24, H=260;
+  var px=function(h){ return X0+(Math.max(-HM,Math.min(HM,h))+HM)/(2*HM)*W; };
+  var py=function(a){ return Y0+H/2-a*(H/2-12); };
+  // flat regions, slope below 0.01
+  var hs=Math.atanh(Math.sqrt(0.99));
+  g.appendChild(el('rect',{x:X0,y:Y0,width:px(-hs)-X0,height:H,fill:'var(--red)',opacity:0.07}));
+  g.appendChild(el('rect',{x:px(hs),y:Y0,width:X0+W-px(hs),height:H,fill:'var(--red)',opacity:0.07}));
+  txt(g,X0+6,Y0+16,'tn gl','flat: slope < 0.01',{style:'font-size:11.5px;fill:var(--red)'});
+  txt(g,X0+W-6,Y0+H-8,'tn gl','flat: slope < 0.01',{'text-anchor':'end',style:'font-size:11.5px;fill:var(--red)'});
+  g.appendChild(el('line',{x1:X0,y1:py(0),x2:X0+W,y2:py(0),stroke:'var(--border)','stroke-width':1}));
+  g.appendChild(el('line',{x1:px(0),y1:Y0,x2:px(0),y2:Y0+H,stroke:'var(--border)','stroke-width':1}));
+  [-1,1].forEach(function(a){ g.appendChild(el('line',{x1:X0,y1:py(a),x2:X0+W,y2:py(a),stroke:'var(--border)','stroke-width':0.7,'stroke-dasharray':'3 3'})); txt(g,X0-6,py(a)+4,'tn gl',a<0?'−1':'1',{'text-anchor':'end',style:'font-size:12px'}); });
+  for(var t=-4;t<=4;t+=2) txt(g,px(t),py(0)+15,'tn gl',String(t).replace('-','−'),{'text-anchor':'middle',style:'font-size:11.5px'});
+  txt(g,X0+W,py(0)-6,'tn gl','h',{'text-anchor':'end',style:'font-size:13px;font-style:italic'});
+  var pts=[]; for(var k=0;k<=200;k++){ var h=-HM+2*HM*k/200; pts.push(px(h).toFixed(1)+','+py(Math.tanh(h)).toFixed(1)); }
+  g.appendChild(el('polyline',{points:pts.join(' '),fill:'none',stroke:'var(--text-muted)','stroke-width':1.6}));
+  txt(g,X0,Y0-8,'ts gl','tanh(h), with each unit\'s tangent line');
+  // units, each with a tangent of fixed on-screen length, so its angle shows its slope
+  var sx=W/(2*HM), sy=H/2-12, L=34, beyondL=0, beyondR=0;
+  var units=Z.map(function(z){ return s*z; });
+  var cp=el('clipPath',{id:'plotclip'}); cp.appendChild(el('rect',{x:X0,y:Y0,width:W,height:H})); g.appendChild(cp);
+  var ug=el('g',{'clip-path':'url(#plotclip)'}); g.appendChild(ug);
+  units.forEach(function(h){
+    if(h<-HM) beyondL++; if(h>HM) beyondR++;
+    var hc=Math.max(-HM,Math.min(HM,h)), a=Math.tanh(hc), d=dtanh(h), cx=px(hc), cy=py(a);
+    var dx=sx, dy=-sy*d, len=Math.sqrt(dx*dx+dy*dy); dx*=L/len; dy*=L/len;
+    var c=slopeColor(d);
+    ug.appendChild(el('line',{x1:cx-dx,y1:cy-dy,x2:cx+dx,y2:cy+dy,stroke:c,'stroke-width':2.6,'stroke-linecap':'round',opacity:0.85}));
+    ug.appendChild(el('circle',{cx:cx,cy:cy,r:4,fill:c,stroke:'var(--surface)','stroke-width':1.2}));
+  });
+  if(beyondL) txt(g,X0+4,py(-1)+24,'tn gl','← '+beyondL+' beyond h = −5',{style:'font-size:12px'});
+  if(beyondR) txt(g,X0+W-4,py(1)-12,'tn gl',beyondR+' beyond h = 5 →',{'text-anchor':'end',style:'font-size:12px'});
+  // slope strip: one bar per unit, in the same left-to-right order as the dots
+  var BY0=330, BH=70, bw=W/N;
+  txt(g,X0,BY0-10,'ts gl','each unit\'s slope tanh′(h), left to right in the same order',{style:'font-size:14px'});
+  g.appendChild(el('line',{x1:X0,y1:BY0+BH,x2:X0+W,y2:BY0+BH,stroke:'var(--border-strong)','stroke-width':1}));
+  g.appendChild(el('line',{x1:X0,y1:BY0,x2:X0+W,y2:BY0,stroke:'var(--border)','stroke-width':0.7,'stroke-dasharray':'3 3'}));
+  txt(g,X0-6,BY0+4,'tn gl','1',{'text-anchor':'end',style:'font-size:12px'});
+  txt(g,X0-6,BY0+BH+4,'tn gl','0',{'text-anchor':'end',style:'font-size:12px'});
+  units.forEach(function(h,i){
+    var d=dtanh(h), bh=Math.max(1,d*BH);
+    g.appendChild(el('rect',{x:X0+i*bw+bw*0.18,y:BY0+BH-bh,width:bw*0.64,height:bh,fill:slopeColor(d),opacity:0.8}));
+  });
+  // readout
+  var mean=units.reduce(function(a,h){ return a+dtanh(h); },0)/N;
+  var sat=units.filter(function(h){ return dtanh(h)<0.01; }).length;
+  var outs=units.map(Math.tanh), mu=outs.reduce(function(a,b){return a+b;},0)/N;
+  var sd=Math.sqrt(outs.reduce(function(a,v){ return a+(v-mu)*(v-mu); },0)/N);
+  var verdict=mean>0.9&&sd<0.2?'<span style="color:var(--text-secondary)">gradients pass through, but the outputs have almost no spread: the signal is vanishing</span>'
+            :mean<0.4?'<span style="color:var(--red)">saturating: many outputs are pinned near ±1 with nearly flat slopes, so little gradient gets back</span>'
+            :'<span style="color:var(--green-ink)">a healthy mix: outputs spread out, and most slopes well above 0</span>';
+  document.getElementById('readout').innerHTML='s = '+s.toFixed(2)+': mean slope <b class="num">'+f2(mean)+'</b>, <b class="num">'+sat+'</b> of '+N+' saturated (slope &lt; 0.01), outputs tanh(h) spread σ = <b class="num">'+f2(sd)+'</b> &mdash; '+verdict;
+}
+
+function showS(){ document.getElementById('sVal').textContent=s<0.1?s.toPrecision(2):s.toFixed(2); }
+function onScale(){
+  s=Math.pow(10,+document.getElementById('s').value); showS();
+  Array.from(document.getElementById('presetSeg').children).forEach(function(b){ b.classList.remove('on'); });
+  draw();
+}
+document.getElementById('presetSeg').addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b) return;
+  s=+b.dataset.s; document.getElementById('s').value=Math.log10(s); showS();
+  Array.from(this.children).forEach(function(x){ x.classList.toggle('on',x===b); });
+  draw();
+});
+showS(); resample();
+</script>
+</body>
+</html>
