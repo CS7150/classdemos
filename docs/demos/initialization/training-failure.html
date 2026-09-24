@@ -38,16 +38,16 @@ button,select{height:30px;font-size:13px;padding:0 9px}
 
 <div class="row">
   <button class="main" id="run" onclick="toggleRun()">Train</button>
-  <button onclick="stepOnce(1); redraw();">Step</button>
+  <button onclick="if(!topChosen) topView='loss'; stepOnce(1); redraw();">Step</button>
   <button onclick="resetAll()">Reset</button>
   <div class="seg" id="presetSeg">
-    <button data-p="small">too small</button>
+    <button data-p="small" class="on">too small</button>
     <button data-p="xavier">Xavier</button>
     <button data-p="big">too big</button>
   </div>
   <span class="klab">init &sigma;</span>
-  <input type="range" id="scale" min="-2.5" max="1.2" step="any" value="0" oninput="onScale()" style="flex:0 1 110px;min-width:60px">
-  <span class="knum" id="scaleVal">1.00</span>
+  <input type="range" id="scale" min="-2.5" max="1.2" step="any" value="-2" oninput="onScale()" style="flex:0 1 110px;min-width:60px">
+  <span class="knum" id="scaleVal">0.010</span>
   <span class="klab">depth</span>
   <input type="range" id="depth" min="2" max="8" step="1" value="6" oninput="onDepth()" style="flex:0 1 70px;min-width:40px">
   <span class="knum" id="depthVal">6</span>
@@ -59,7 +59,7 @@ button,select{height:30px;font-size:13px;padding:0 9px}
 </div>
 
 <div class="rd" id="readout"></div>
-<div class="cap">Full-batch gradient descent, fixed learning rate, width 10, tanh hidden units, sigmoid output. Every weight starts as a Gaussian sample from N(0, &sigma;&sup2;) and every bias at 0; the Xavier button sets &sigma; = &radic;(2/(10+10)) &asymp; 0.32, Glorot's value for a 10&rarr;10 layer; the slider starts at the na&iuml;ve &sigma; = 1. Train runs 400 steps; press it again to keep going for another 400. <b>Network</b>: one line per weight (orange positive, blue negative, thickness and opacity &prop; |w|), one node per neuron colored by its activation on the probe point (hover the boundary plot to move it), ringed red when saturated. <b>Activations</b>: every hidden unit's activation over all 120 training points, one panel per layer, red where the unit is saturated (|a|&gt;0.995, so tanh&prime;&lt;0.01) and green where it still passes gradient. <b>Gradients</b>: the backprop gradient &part;L/&part;a at every hidden unit for every training point, binned by log&#8321;&#8320; of its magnitude on one shared axis from 10&#8315;&#8310; to about 1 (ticks at 10&#8315;&#8308;, 10&#8315;&sup2;, and a taller one at 1); red bars at the ends collect everything smaller than 10&#8315;&#8310; (vanished) or larger than about 3 (exploding). Gradient flows right to left, so vanishing shows as mass sliding left toward L1. Too-small init: the weights are nearly invisible, activations collapse to a spike at 0, gradients shrink by orders of magnitude per layer, and loss barely moves. Too-big init: thick weights, every unit pinned at &plusmn;1, and the boundary stays close to its random start.</div>
+<div class="cap">Full-batch gradient descent, fixed learning rate, width 10, tanh hidden units, sigmoid output. Every weight starts as a Gaussian sample from N(0, &sigma;&sup2;) and every bias at 0; the Xavier button sets &sigma; = &radic;(2/(10+10)) &asymp; 0.32, Glorot's value for a 10&rarr;10 layer. Train runs 400 steps; press it again to keep going for another 400. <b>Network</b>: one line per weight (orange positive, blue negative, thickness and opacity &prop; |w|), one node per neuron colored by its activation on the probe point (hover the boundary plot to move it, click to pin it there, even through Reset and Train, until the pointer leaves the plot and comes back; hover a node to pick out its point on the tanh plot), ringed red when saturated. <b>Activations</b>: every hidden unit's activation over all 120 training points, one panel per layer, red where the unit is saturated (|a|&gt;0.995, so tanh&prime;&lt;0.01) and green where it still passes gradient. <b>Gradients</b>: the backprop gradient &part;L/&part;a at every hidden unit for every training point, binned by log&#8321;&#8320; of its magnitude on one shared axis from 10&#8315;&#8310; to about 1 (ticks at 10&#8315;&#8308;, 10&#8315;&sup2;, and a taller one at 1); red bars at the ends collect everything smaller than 10&#8315;&#8310; (vanished) or larger than about 3 (exploding). Gradient flows right to left, so vanishing shows as mass sliding left toward L1. Before training starts, the top-right panel plots tanh (tanh&prime; in gradients mode) with every hidden unit placed at its pre-activation h: in network mode one digit per unit, its layer number, for the probe point; in the histogram modes a jittered dot for every unit on every training point. Training swaps in the loss curve and Reset brings the tanh plot back, until you pick one with the loss | tanh toggle above the panel (it works mid-training too); after that the panel stays where you put it. Too-small init: the weights are nearly invisible, activations collapse to a spike at 0, gradients shrink by orders of magnitude per layer, and loss barely moves. Too-big init: thick weights, every unit pinned at &plusmn;1, and the boundary stays close to its random start.</div>
 
 <script>
 // ---------- data: two moons ----------
@@ -78,7 +78,7 @@ var DATA=[];
 
 // ---------- network ----------
 var randnG = function(){ return randnSeeded(Math.random); };
-var WIDTH=10, depth=6, initStd=1;
+var WIDTH=10, depth=6, initStd=0.01;
 var net=null, lossHist=[], stepCount=0;
 
 function buildSizes(d){ var s=[2]; for(var i=0;i<d;i++) s.push(WIDTH); s.push(1); return s; }
@@ -96,13 +96,14 @@ function initNet(){
   lossHist=[]; stepCount=0;
 }
 
-function forward(x, net, keep){
+function forward(x, net, keep, pres){   // pres, if given, collects each layer's pre-activations
   var a=x.slice();
   var acts = keep ? [a.slice()] : null;
   for(var l=0;l<net.W.length;l++){
     var Wl=net.W[l], bl=net.b[l], nout=Wl.length, nin=Wl[0].length;
     var h=new Array(nout);
     for(var o=0;o<nout;o++){ var s=bl[o]; var row=Wl[o]; for(var i=0;i<nin;i++) s+=row[i]*a[i]; h[o]=s; }
+    if(pres) pres.push(h.slice());
     var isLast = l===net.W.length-1;
     var an = isLast ? h.map(function(v){return 1/(1+Math.exp(-v));}) : h.map(Math.tanh);
     a=an;
@@ -189,6 +190,7 @@ function resetAll(){
   setRunning(false);
   initNet();
   runTarget=STEP_LIMIT;
+  if(!topChosen) topView='tanh';
   trainStep(false);
   redraw();
 }
@@ -196,11 +198,14 @@ function resetAll(){
 var running=false, timer=null;
 var STEP_LIMIT=400;   // steps per press of Train
 var runTarget=STEP_LIMIT;
+var topView='tanh';   // top-right panel: 'tanh' curve or 'loss' curve
+var topChosen=false;  // once the viewer picks one, Train and Reset stop switching it
 function setRunning(r){
   running=r;
   document.getElementById('run').textContent = r?'Pause':'Train';
   clearInterval(timer);
   if(r){
+    if(!topChosen) topView='loss';
     // a finished run continues for another STEP_LIMIT steps
     if(stepCount>=runTarget) runTarget=(Math.floor(stepCount/STEP_LIMIT)+1)*STEP_LIMIT;
     timer=setInterval(function(){
@@ -230,16 +235,51 @@ var bx0=10, by0=10, bw=260, bh=260;
 function bpx(x){ return bx0+(x-xMinD)/(xMaxD-xMinD)*bw; }
 function bpy(y){ return by0+bh-(y-yMinD)/(yMaxD-yMinD)*bh; }
 
-// probe input for the network view: hover the boundary plot to move it
-var probe=DATA[0].x.slice();
-document.getElementById('stage').addEventListener('pointermove', function(e){
-  if(view!=='net') return;
+// probe input for the network view: hover the boundary plot to move it, click to
+// pin it there; a pin survives Reset and Train, and lets go only when the pointer
+// leaves the plot and comes back. Hovering the network diagram picks out one
+// hidden unit (hover.l, hover.u) on the tanh plot.
+var probe=DATA[0].x.slice(), pinned=false, leftSincePin=false, hover=null;
+function netColX(l){ return PX0+14+l*(PW-28)/(net.sizes.length-1); }
+function netNodeY(l,i){ var sp=Math.min(15,(PH-24)/(WIDTH-1)); return PY0+(PH-10)/2+(i-(net.sizes[l]-1)/2)*sp; }
+function svgPoint(e){
   var svg=document.getElementById('stage'), pt=svg.createSVGPoint();
   pt.x=e.clientX; pt.y=e.clientY;
-  var q=pt.matrixTransform(svg.getScreenCTM().inverse());
-  if(q.x<bx0||q.x>bx0+bw||q.y<by0||q.y>by0+bh) return;
-  probe=[xMinD+(q.x-bx0)/bw*(xMaxD-xMinD), yMinD+(by0+bh-q.y)/bh*(yMaxD-yMinD)];
-  if(!running) redraw();
+  return pt.matrixTransform(svg.getScreenCTM().inverse());
+}
+function inBoundary(q){ return q.x>=bx0&&q.x<=bx0+bw&&q.y>=by0&&q.y<=by0+bh; }
+function setProbe(q){ probe=[xMinD+(q.x-bx0)/bw*(xMaxD-xMinD), yMinD+(by0+bh-q.y)/bh*(yMaxD-yMinD)]; }
+function hoverAt(q){
+  // null outside the network panel; {l:0} inside it; {l,u} on a hidden node
+  if(q.x<PX0||q.x>PX0+PW||q.y<PY0-10||q.y>PY0+PH) return null;
+  var best={l:0}, bd=8*8;
+  for(var l=1;l<net.sizes.length-1;l++) for(var u=0;u<WIDTH;u++){
+    var dx=q.x-netColX(l), dy=q.y-netNodeY(l,u);
+    if(dx*dx+dy*dy<bd){ bd=dx*dx+dy*dy; best={l:l,u:u}; }
+  }
+  return best;
+}
+function sameHover(a,b){ return a===b||(a&&b&&a.l===b.l&&a.u===b.u); }
+document.getElementById('stage').addEventListener('pointermove', function(e){
+  if(view!=='net') return;
+  var q=svgPoint(e), dirty=false;
+  if(inBoundary(q)){
+    if(pinned&&leftSincePin) pinned=false;
+    if(!pinned){ setProbe(q); dirty=true; }
+  } else leftSincePin=true;
+  var h=hoverAt(q);
+  if(!sameHover(h,hover)){ hover=h; dirty=true; }
+  if(dirty&&!running) redraw();
+});
+// pointerdown, not click, so pinning works mid-training while the figure is rebuilt
+document.getElementById('stage').addEventListener('pointerdown', function(e){
+  if(view!=='net') return;
+  var q=svgPoint(e);
+  if(inBoundary(q)){ setProbe(q); pinned=true; leftSincePin=false; if(!running) redraw(); }
+});
+document.getElementById('stage').addEventListener('pointerleave', function(){
+  leftSincePin=true;
+  if(hover){ hover=null; if(!running) redraw(); }
 });
 
 var SAT=Math.sqrt(0.99);   // |tanh| above ~0.995 means tanh' = 1-a^2 < 0.01
@@ -320,11 +360,80 @@ function drawGradients(g){
   txt(g,PX0,PY0-6,'ts gl','gradient |∂L/∂a| per layer, log axis 10⁻⁶ … 1; red = outside');
 }
 
+// a two-button toggle for the top-right panel, right-aligned at (xr, y)
+function drawTopToggle(g, xr, y){
+  var opts=[['loss','loss'],['tanh','tanh']], bw=38, bh=17, x=xr-bw*opts.length;
+  opts.forEach(function(o,i){
+    var on=topView===o[0], bg=el('g',{style:'cursor:pointer'});
+    bg.appendChild(el('rect',{x:x+i*bw,y:y,width:bw,height:bh,rx:0,fill:on?'var(--surface-1)':'var(--surface)',stroke:'var(--border-strong)','stroke-width':0.8}));
+    if(on) bg.appendChild(el('line',{x1:x+i*bw+1,y1:y+bh-1,x2:x+(i+1)*bw-1,y2:y+bh-1,stroke:'var(--blue)','stroke-width':1.6}));
+    var t=txt(bg,x+i*bw+bw/2,y+12.5,'tn',o[1],{'text-anchor':'middle',style:'font-size:12px'+(on?';fill:var(--text-primary)':'')});
+    // pointerdown, not click: during training the figure is rebuilt every frame, so the
+    // button under pointerup is often a new element and a click would never fire
+    bg.addEventListener('pointerdown',function(e){ e.preventDefault(); topView=o[0]; topChosen=true; redraw(); });
+    g.appendChild(bg);
+  });
+}
+
+// deterministic jitter in [-1,1), so points hold still as the probe moves
+function jit(a,b,c){ var h=Math.imul(a*73856093^b*19349663^c*83492791^0x9e3779b9,0x85ebca6b); h^=h>>>13; h=Math.imul(h,0xc2b2ae35); h^=h>>>16; return (h>>>0)/2147483648-1; }
+// isotropic gaussian jitter of std sig pixels, as an [dx, dy] pair (Box-Muller)
+function gjit(a,b,c,sig){
+  var r=sig*Math.sqrt(-2*Math.log(Math.max(1e-9,(jit(a,b,c)+1)/2))), t=Math.PI*(jit(c,a,b)+1);
+  return [r*Math.cos(t), r*Math.sin(t)];
+}
+// hidden layers run from violet (L1) to green (deepest)
+function layerColor(l,n){ return 'color-mix(in oklab, var(--green-ink) '+Math.round(100*(n>1?(l-1)/(n-1):0))+'%, var(--violet-ink))'; }
+
+var HMAX=5;   // pre-activation axis of the tanh plot; beyond it, points pile at the edge
+// the tanh curve (or, in gradients mode, its derivative) with every hidden unit on it
+function drawTanh(g, x0, y0, w, h){
+  var n=net.sizes.length-2, deriv=view==='grad';
+  var f=deriv ? function(z){ var t=Math.tanh(z); return 1-t*t; } : Math.tanh;
+  var tx=function(v){ return x0+(Math.max(-HMAX,Math.min(HMAX,v))+HMAX)/(2*HMAX)*w; };
+  var ty=deriv ? function(a){ return y0+h-6-a*(h-12); } : function(a){ return y0+h/2-a*(h/2-6); };
+  // saturated region, tanh' < 0.01, shaded in both tails
+  var hs=Math.atanh(SAT);
+  g.appendChild(el('rect',{x:x0,y:y0,width:tx(-hs)-x0,height:h,fill:'var(--red)',opacity:0.08}));
+  g.appendChild(el('rect',{x:tx(hs),y:y0,width:x0+w-tx(hs),height:h,fill:'var(--red)',opacity:0.08}));
+  g.appendChild(el('line',{x1:x0,y1:ty(0),x2:x0+w,y2:ty(0),stroke:'var(--border)','stroke-width':0.8}));
+  g.appendChild(el('line',{x1:tx(0),y1:y0,x2:tx(0),y2:y0+h,stroke:'var(--border)','stroke-width':0.8}));
+  (deriv?[0,1]:[-1,0,1]).forEach(function(a){ txt(g,x0-4,ty(a)+4,'tn gl',String(a),{'text-anchor':'end',style:'font-size:12px'}); });
+  [-4,-2,2,4].forEach(function(v){ txt(g,tx(v),ty(0)+13,'tn gl',String(v),{'text-anchor':'middle',style:'font-size:11px'}); });
+  txt(g,x0+w-3,ty(0)-4,'tn gl','h',{'text-anchor':'end',style:'font-size:12px;font-style:italic'});
+  var pts=[]; for(var k=0;k<=160;k++){ var v=-HMAX+2*HMAX*k/160; pts.push(tx(v)+','+ty(f(v))); }
+  g.appendChild(el('polyline',{points:pts.join(' '),fill:'none',stroke:'var(--text-muted)','stroke-width':1.4}));
+  var name=deriv?'tanh′(h)':'tanh(h)';
+  if(view==='net'){
+    // one digit per hidden unit on the probe input, labeled by its layer
+    var pres=[]; forward(probe,net,false,pres);
+    var pick=null;
+    for(var l=1;l<=n;l++) for(var u=0;u<WIDTH;u++){
+      var z=pres[l-1][u], j=gjit(l,u,1,3), px=tx(z)+j[0], py=ty(f(z))+4+j[1];
+      if(hover&&hover.l===l&&hover.u===u){ pick=[px,py,l]; continue; }
+      txt(g,px,py,'num',String(l),{'text-anchor':'middle',style:'font-size:11px;font-weight:600',
+        fill:hover?'var(--text-muted)':layerColor(l,n),opacity:hover?0.3:1});
+    }
+    if(pick) txt(g,pick[0],pick[1]+1,'num gl',String(pick[2]),{'text-anchor':'middle',style:'font-size:15px;font-weight:700',fill:layerColor(pick[2],n)});
+    txt(g,x0,y0-3,'ts gl',name+' on the probe point; digit = layer');
+  } else {
+    // every hidden unit on every training point, as a jittered cloud of dots
+    DATA.forEach(function(pt,d){
+      var pres=[]; forward(pt.x,net,false,pres);
+      for(var l=1;l<=n;l++) for(var u=0;u<WIDTH;u++){
+        var z=pres[l-1][u];
+        var j=gjit(l,u,d,3);
+        g.appendChild(el('circle',{cx:tx(z)+j[0],cy:ty(f(z))+j[1],r:1.1,fill:layerColor(l,n),opacity:0.45}));
+      }
+    });
+    txt(g,x0,y0-3,'ts gl',name+': all units on all 120 points');
+    txt(g,x0+6,y0+13,'tn gl','L1 violet → L'+n+' green',{style:'font-size:12px'});
+  }
+}
+
 function drawNetwork(g){
   var sizes=net.sizes, acts=forward(probe,net,true), L=sizes.length;
-  var colX=function(l){ return PX0+14+l*(PW-28)/(L-1); };
-  var sp=Math.min(15,(PH-24)/(WIDTH-1)), cy=PY0+(PH-10)/2;
-  var nodeY=function(l,i){ return cy+(i-(sizes[l]-1)/2)*sp; };
+  var colX=netColX, nodeY=netNodeY;
   // weights first, so nodes sit on top
   for(var l=0;l<net.W.length;l++){
     var Wl=net.W[l];
@@ -344,12 +453,13 @@ function drawNetwork(g){
       var x=colX(l2), y=nodeY(l2,k), sat=l2>0&&l2<L-1&&Math.abs(a)>SAT;
       g.appendChild(el('circle',{cx:x,cy:y,r:5,fill:'var(--surface)',stroke:sat?'var(--red)':'var(--border-strong)','stroke-width':sat?2:1}));
       g.appendChild(el('circle',{cx:x,cy:y,r:4.2,fill:a>0?'var(--orange)':'var(--blue)',opacity:Math.min(1,Math.abs(a))}));
+      if(hover&&hover.l===l2&&hover.u===k) g.appendChild(el('circle',{cx:x,cy:y,r:7.5,fill:'none',stroke:'var(--text-primary)','stroke-width':1.6}));
     }
   }
   txt(g,colX(0),PY0+PH-2,'tn','x',{'text-anchor':'middle',style:'font-size:12px'});
   for(var l3=1;l3<L-1;l3++) txt(g,colX(l3),PY0+PH-2,'tn','L'+l3,{'text-anchor':'middle',style:'font-size:12px'});
   txt(g,colX(L-1),PY0+PH-2,'tn','out',{'text-anchor':'middle',style:'font-size:12px'});
-  txt(g,PX0,PY0-6,'ts gl','network on the probe point ◎ (hover the boundary to move it)');
+  txt(g,PX0,PY0-6,'ts gl','network on probe ◎ (hover boundary to move, click to pin)');
 }
 
 function redraw(){
@@ -377,8 +487,11 @@ function redraw(){
     g.appendChild(el('circle',{cx:bpx(probe[0]),cy:bpy(probe[1]),r:1.6,fill:'var(--text-primary)'}));
   }
 
-  // panel 2: loss curve; the x axis widens as training continues
+  // panel 2: the tanh curve with every hidden unit on it (shown on reset), or
+  // the loss curve (shown once training starts), whose x axis widens as training continues
   var lx0=300, ly0=12, lw=450, lh=100;
+  drawTopToggle(g, lx0+lw, ly0-21);
+  if(topView==='tanh') drawTanh(g, lx0, ly0, lw, lh); else {
   var span=Math.max(STEP_LIMIT, runTarget, stepCount);
   g.appendChild(el('line',{x1:lx0,y1:ly0,x2:lx0,y2:ly0+lh,stroke:'var(--border-strong)','stroke-width':1}));
   g.appendChild(el('line',{x1:lx0,y1:ly0+lh,x2:lx0+lw,y2:ly0+lh,stroke:'var(--border-strong)','stroke-width':1}));
@@ -398,6 +511,7 @@ function redraw(){
     g.appendChild(el('polyline',{points:pts,fill:'none',stroke:'var(--blue-ink)','stroke-width':1.8}));
   }
   txt(g,lx0,ly0-3,'ts gl','training loss (log scale), step '+stepCount+' / '+span);
+  }
 
   // panel 3: hidden activations, as histograms or as the network
   var stats=hiddenStats();
