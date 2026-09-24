@@ -16,12 +16,14 @@ var DATA=[];
 })();
 
 // ---------- activations ----------
-// lr is the fixed learning rate; dfa is the derivative written in terms of the output a = f(h), which is all
+// lr is the default learning rate; dfa is the derivative written in terms of the output a = f(h), which is all
 // backprop needs; lo..hi is the range the activation histograms cover, and ylo..yhi
 // the vertical range of the nonlinearity plot
 var ACTS={
   tanh:   {f:Math.tanh, dfa:function(a){ return 1-a*a; }, lo:-1, hi:1, ylo:-1, yhi:1, lr:0.6},
   sigmoid:{f:function(h){ return 1/(1+Math.exp(-h)); }, dfa:function(a){ return a*(1-a); }, lo:0, hi:1, ylo:0, yhi:1, lr:0.6},
+  // softsign h/(1+|h|): tanh's shape, but its tails flatten polynomially, not exponentially
+  softsign:{f:function(h){ return h/(1+Math.abs(h)); }, dfa:function(a){ var q=1-Math.abs(a); return q*q; }, lo:-1, hi:1, ylo:-1, yhi:1, lr:0.6},
   // relu diverges at 0.6: its slope does not shrink as h grows, so big steps compound
   relu:   {f:function(h){ return h>0?h:0; }, dfa:function(a){ return a>0?1:0; }, lo:0, hi:3, ylo:0, yhi:5, lr:0.2}
 };
@@ -109,9 +111,8 @@ function trainStep(apply){
   var N=DATA.length;
   for(var l2=0;l2<L;l2++){
     for(var o3=0;o3<net.W[l2].length;o3++){
-      var LR=ACTS[ACT].lr;
-      net.b[l2][o3]-=LR*gb[l2][o3]/N;
-      for(var i4=0;i4<net.W[l2][o3].length;i4++) net.W[l2][o3][i4]-=LR*gW[l2][o3][i4]/N;
+      net.b[l2][o3]-=lr*gb[l2][o3]/N;
+      for(var i4=0;i4<net.W[l2][o3].length;i4++) net.W[l2][o3][i4]-=lr*gW[l2][o3][i4]/N;
     }
   }
   stepCount++;
@@ -322,7 +323,7 @@ function drawGradients(g){
 
 // a two-button toggle for the top-right panel, right-aligned at (xr, y)
 function drawTopToggle(g, xr, y){
-  var opts=[['loss','loss'],['tanh',ACT]], bw=ACT==='sigmoid'?54:40, bh=17, x=xr-bw*opts.length;
+  var opts=[['loss','loss'],['tanh',ACT]], bw=Math.max(40,7*ACT.length+10), bh=17, x=xr-bw*opts.length;
   opts.forEach(function(o,i){
     var on=topView===o[0], bg=el('g',{style:'cursor:pointer'});
     bg.appendChild(el('rect',{x:x+i*bw,y:y,width:bw,height:bh,rx:0,fill:on?'var(--surface-1)':'var(--surface)',stroke:'var(--border-strong)','stroke-width':0.8}));
@@ -361,7 +362,7 @@ function drawTanh(g, x0, y0, w, h){
   }
   g.appendChild(el('line',{x1:x0,y1:ty(0),x2:x0+w,y2:ty(0),stroke:'var(--border)','stroke-width':0.8}));
   g.appendChild(el('line',{x1:tx(0),y1:y0,x2:tx(0),y2:y0+h,stroke:'var(--border)','stroke-width':0.8}));
-  var yt=deriv?[0,1]:ACT==='tanh'?[-1,0,1]:ACT==='sigmoid'?[0,0.5,1]:[0,5];
+  var yt=deriv?[0,1]:A.ylo<0?[A.ylo,0,A.yhi]:ACT==='sigmoid'?[0,0.5,1]:[0,A.yhi];
   yt.forEach(function(a){ txt(g,x0-4,ty(a)+4,'tn gl',String(a).replace('-','−'),{'text-anchor':'end',style:'font-size:12px'}); });
   [-4,-2,2,4].forEach(function(v){ txt(g,tx(v),ty(0)+13,'tn gl',String(v).replace('-','−'),{'text-anchor':'middle',style:'font-size:11px'}); });
   txt(g,x0+w-3,ty(0)-4,'tn gl','h',{'text-anchor':'end',style:'font-size:12px;font-style:italic'});
@@ -498,9 +499,17 @@ var actSeg=document.getElementById('actSeg');
 if(actSeg) actSeg.addEventListener('click',function(e){
   var b=e.target.closest('button'); if(!b) return;
   ACT=b.dataset.a;
+  setLr(ACTS[ACT].lr);
   Array.from(actSeg.children).forEach(function(x){ x.classList.toggle('on',x===b); });
   resetAll();
 });
 
+// learning rate: a log slider; changing it mid-run just changes later steps
+var lr;
+function showLr(){ document.getElementById('lrVal').textContent=lr<0.1?lr.toPrecision(2):lr<10?lr.toFixed(2):lr.toFixed(1); }
+function onLr(){ lr=Math.pow(10,parseFloat(document.getElementById('lr').value)); showLr(); }
+function setLr(v){ lr=v; document.getElementById('lr').value=Math.log10(v); showLr(); }
+
+setLr(ACTS[ACT].lr);
 showStd();
 resetAll();
