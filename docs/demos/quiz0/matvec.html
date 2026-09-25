@@ -11,6 +11,8 @@
 #alg{position:relative;flex:0 0 430px;min-width:260px}
 #geo{position:relative;flex:1 1 auto;min-width:280px}
 #geo svg{position:absolute;inset:0;width:100%;height:100%}
+#geo svg.grab{cursor:grab;touch-action:none}
+#geo svg.grab:active{cursor:grabbing}
 .cel{position:absolute;left:0;top:0;width:44px;height:30px;display:flex;align-items:center;justify-content:center;
  font-size:17px;font-variant-numeric:tabular-nums;transform-origin:22px 15px;white-space:nowrap}
 input.cel{border:1px solid transparent;border-radius:6px;background:transparent;text-align:center;
@@ -64,10 +66,6 @@ select.sm{height:34px;padding:0 6px;font-size:15px}
 <span class="klab">build</span>
 <input type="range" id="ts" min="0" max="400" step="1" value="0" oninput="setT(+this.value/100,1)">
 <button id="nxt" onclick="nextStep()">Next step &rarr;</button>
-<!-- the orbit control keeps its box even when hidden, so the figure is the same
-     height in two and three dimensions -->
-<span id="orb" style="visibility:hidden;display:inline-flex;align-items:center;gap:8px;margin-left:14px"><span class="dim">turn</span>
-<input type="range" id="az" min="-180" max="180" step="1" value="32" oninput="draw()" style="flex:0 0 130px;min-width:130px"></span>
 </div>
 <div class="phases" id="ph">
  <span onclick="gotoStep(0)">split</span><span onclick="gotoStep(1)">transpose</span><span onclick="gotoStep(2)">scale</span><span onclick="gotoStep(3)">add</span></div>
@@ -199,11 +197,11 @@ function layoutAlg(){
 }
 
 /* ---------- the geometry panel ---------- */
-var VW=560,VH=420,gb=null;
+var VW=560,VH=420,gb=null,AZ=32,EL=22;
 function pr(v){
  var a=[v[0]||0,v[1]||0,v[2]||0];
  if(R<=2)return [a[0],-a[1]];
- var az=+document.getElementById('az').value*Math.PI/180,el=22*Math.PI/180;
+ var az=AZ*Math.PI/180,el=EL*Math.PI/180;
  return [a[0]*Math.cos(az)+a[1]*Math.sin(az),
         -(-a[0]*Math.sin(az)*Math.sin(el)+a[1]*Math.cos(az)*Math.sin(el)+a[2]*Math.cos(el))];
 }
@@ -278,6 +276,7 @@ function drawGeo(){
    if(dl<2){dx=0;dy=-1;dl=1;}
    s+=TXT(rp[0]+dx/dl*18,rp[1]+dy/dl*18+5,'Ax = ('+result().map(fmt).join(', ')+')','var(--green-ink)',dx<0?'end':'start');}}
  s+='<circle cx="'+O[0].toFixed(1)+'" cy="'+O[1].toFixed(1)+'" r="3" fill="var(--text-primary)"/>';
+ if(R===3)s+=TXT(VW-8,VH-8,'drag to turn','var(--text-muted)','end','tn');
  return s;
 }
 
@@ -348,12 +347,12 @@ function setdim(){
  for(i=0;i<nr;i++){B.push([]);for(j=0;j<nc;j++)B[i].push(i<R&&j<C?A[i][j]:(i===j%nr?1:0));}
  var Y=[];for(j=0;j<nc;j++)Y.push(j<C?X[j]:2);
  R=nr;C=nc;A=B;X=Y;
- document.getElementById('orb').style.visibility=(R===3)?'visible':'hidden';
+ document.querySelector('#geo svg').classList.toggle('grab',R===3);
  reset();
 }
 function quiz(){R=2;C=3;A=[[1,2,-1],[0,1,0]];X=[3,4,5];
  document.getElementById('rows').value='2';document.getElementById('cols').value='3';
- document.getElementById('orb').style.visibility='hidden';reset();}
+ document.querySelector('#geo svg').classList.remove('grab');reset();}
 function rnd(){
  // small integers, no all-zero column, and at least one negative weight: a column
  // that walks backwards is the part people get wrong by hand
@@ -364,6 +363,19 @@ function rnd(){
  if(X.every(function(v){return v>0;}))X[Math.floor(Math.random()*C)]*=-1;
  reset();
 }
+// In three dimensions, dragging the figure turns it: across turns it about the vertical,
+// and up and down tilts the view between below and above.
+(function(){
+ var svg=document.querySelector('#geo svg'),last=null;
+ svg.addEventListener('pointerdown',function(e){if(R!==3)return;
+  last=[e.clientX,e.clientY];svg.setPointerCapture(e.pointerId);});
+ svg.addEventListener('pointermove',function(e){if(!last)return;
+  AZ=((AZ-(e.clientX-last[0])*0.6+180)%360+360)%360-180;
+  EL=Math.max(-85,Math.min(85,EL+(e.clientY-last[1])*0.6));
+  last=[e.clientX,e.clientY];if(!playing)draw();});
+ var up=function(){last=null;};
+ svg.addEventListener('pointerup',up);svg.addEventListener('pointercancel',up);
+})();
 function reset(){build();fitGeo();t=0;pause();draw();}
 window.addEventListener('resize',function(){fitGeo();draw();});
 if(window.ResizeObserver)new ResizeObserver(function(){draw();}).observe(document.getElementById('alg'));
