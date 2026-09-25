@@ -7,7 +7,8 @@
 <meta name="description" content="One true curve, many noisy samples, and a flexibility dial: bias, variance and training error as the model gets more flexible.">
 <link rel="stylesheet" href="../demo.css">
 <style>
-#wrap{position:relative}
+/* sized from its width, not left to flex: the long caption below would squeeze it to nothing */
+#wrap{position:relative;flex:0 0 auto;width:100%;aspect-ratio:1040/430;max-height:75vh;min-height:300px}
 @media (max-width:820px){#wrap{flex:0 0 auto;height:auto;aspect-ratio:680/860}}
 #wrap svg{position:absolute;inset:0;width:100%;height:100%}
 .ans table{border-collapse:collapse;margin-top:4px;font-size:15px}
@@ -135,7 +136,7 @@ function draw(){
  var left=s;s='';
  // right: the curves
  s+='<rect x="'+RX0+'" y="'+RY0+'" width="'+(RX1-RX0)+'" height="'+(RY1-RY0)+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
- s+=TX((RX0+RX1)/2,24,'against flexibility: 50 samples, measured over the middle of the range','var(--text-secondary)','middle');
+ s+=TX((RX0+RX1)/2,24,'against flexibility, averaged over 50 samples','var(--text-secondary)','middle');
  var tk=[0.001,0.01,0.1,1,10,100,1000];
  for(i=0;i<tk.length;i++){var ty=RYv(tk[i]);
   s+='<line x1="'+RX0+'" y1="'+ty.toFixed(1)+'" x2="'+RX1+'" y2="'+ty.toFixed(1)+'" stroke="var(--border)" stroke-width="0.6"/>';
