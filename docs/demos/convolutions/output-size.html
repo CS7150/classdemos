@@ -92,6 +92,7 @@ table.ly td.eq{color:var(--text-primary)}
 <div class="seg" id="seg3">
 <button data-p="slide" class="on">the slide&rsquo;s stack</button>
 <button data-p="alex">AlexNet</button>
+<button data-p="vgg">VGG-16</button>
 <button data-p="lenet">LeNet 1989</button>
 <button data-p="deep">too deep</button>
 </div>
@@ -180,14 +181,21 @@ document.getElementById('seg1').addEventListener('click',function(e){var b=e.tar
 
 /* ================= part 3: a stack, drawn in 3D ================= */
 var IN={C:3,H:32},LAYERS=[],PHI=28,THE=18,POS=[],AXES={};
+// the layer being pointed at, else the one last clicked or dragged: its label, table row
+// and filter are emphasised
+var HOV=-1,ACT=-1;function activeLayer(){return HOV>=0?HOV:ACT;}
 var PRESETS={
  slide:{C:3,H:32,L:[[5,1,0,6],[3,1,0,10],[3,1,0,12]]},
  // AlexNet's five convolutions and three overlapping max-pools, as one stream
  alex:{C:3,H:227,cam:[12,22],L:[[11,4,0,96],[3,2,0,'pool'],[5,1,2,256],[3,2,0,'pool'],[3,1,1,384],[3,1,1,384],[3,1,1,256],[3,2,0,'pool']]},
  lenet:{C:1,H:16,L:[[5,2,2,12],[5,2,2,12]]},
+ // VGG-16's thirteen 3x3 convolutions, padded to keep their size, and five 2x2 pools
+ vgg:{C:3,H:224,cam:[10,20],L:[[3,1,1,64],[3,1,1,64],[2,2,0,'pool'],[3,1,1,128],[3,1,1,128],[2,2,0,'pool'],
+  [3,1,1,256],[3,1,1,256],[3,1,1,256],[2,2,0,'pool'],[3,1,1,512],[3,1,1,512],[3,1,1,512],[2,2,0,'pool'],
+  [3,1,1,512],[3,1,1,512],[3,1,1,512],[2,2,0,'pool']]},
  deep:{C:1,H:16,L:[[5,1,0,8],[5,1,0,8],[5,1,0,8],[5,1,0,8]]}};
 var PRESET='slide';
-function loadPreset(p){PRESET=p;POS=[];var q=PRESETS[p];IN={C:q.C,H:q.H};PHI=q.cam?q.cam[0]:28;THE=q.cam?q.cam[1]:18;
+function loadPreset(p){PRESET=p;POS=[];ACT=HOV=-1;var q=PRESETS[p];IN={C:q.C,H:q.H};PHI=q.cam?q.cam[0]:28;THE=q.cam?q.cam[1]:18;
  LAYERS=q.L.map(function(l){return l[3]==='pool'?{K:l[0],S:l[1],P:l[2],pool:true}:{K:l[0],S:l[1],P:l[2],C:l[3]};});
  document.getElementById('same').checked=false;
  Array.from(document.getElementById('seg3').children).forEach(function(b){b.classList.toggle('on',b.dataset.p===p);});
@@ -212,7 +220,7 @@ function table(){
  var same=document.getElementById('same').checked,h='<tr><th></th><th>kernel K</th><th>stride S</th><th>pad P</th><th>filters</th><th>output</th><th>size arithmetic</th><th></th></tr>';
  h+='<tr><td>input</td><td colspan="3" style="color:var(--text-muted)">channels <input data-in="C" type="number" min="1" max="512" value="'+IN.C+'"> &nbsp;size <input data-in="H" type="number" min="1" max="512" value="'+IN.H+'"></td><td></td><td id="o0" class="eq"></td><td></td><td></td></tr>';
  var nc=0,np=0;
- LAYERS.forEach(function(l,i){h+='<tr><td>'+(l.pool?'pool '+(++np):'conv '+(++nc))+'</td>'+
+ LAYERS.forEach(function(l,i){h+='<tr id="row'+i+'"><td>'+(l.pool?'pool '+(++np):'conv '+(++nc))+'</td>'+
   ['K','S','P','C'].map(function(f){if(f==='C'&&l.pool)return '<td style="color:var(--text-muted);text-align:center">&mdash;</td>';return '<td><input data-i="'+i+'" data-f="'+f+'" type="number" min="'+(f==='P'?0:1)+'" max="'+(f==='C'?512:f==='K'?31:f==='S'?8:15)+'" value="'+(f==='P'?pOf(l):l[f])+'"'+(f==='P'&&same&&!l.pool?' disabled':'')+'></td>';}).join('')+
   '<td id="o'+(i+1)+'"></td><td id="a'+(i+1)+'"></td><td><button data-rm="'+i+'" title="remove this layer">&times;</button></td></tr>';});
  h+='<tr><td colspan="8"><button id="add">+ add a conv</button> <button id="addp">+ add a pool</button></td></tr>';
@@ -259,11 +267,23 @@ function draw3(){
   // so a big first layer does not push the small late ones apart
   var nx=sz[i+1]&&sz[i+1].H>0?sz[i+1].H:q.H;
   t+=-lo;b.o=[t*C.R[0],0,t*C.R[2]];t+=hi+0.1*Hmax+0.3*Math.max(q.H,nx);blocks.push(b);});
- var many=blocks.length>5;
+ // Recipe labels.  A short stack gets one per run of identical layers, with the exact
+ // sums.  A long one gets one per description (kernel, stride, padding, conv or pool),
+ // shared by every layer it fits, like VGG's thirteen 3x3s, with the sum written for
+ // any W and a leader line to each of its layers.
+ var nL=blocks.length-1,share=nL>5,groups=[];
+ function key(L){return [L.K,L.S,pOf(L),L.pool?'p':'c'+(share?'':L.C)].join();}
+ for(var gi=1;gi<blocks.length;gi++){var L0=LAYERS[gi-1],g=null;
+  if(share)g=groups.filter(function(x){return x.key===key(L0);})[0];
+  else{var last=groups[groups.length-1];if(last&&last.key===key(L0)&&blocks[gi-1].q.H===blocks[last.m[last.m.length-1]-1].q.H)g=last;}
+  if(g)g.m.push(gi);else groups.push({key:key(L0),m:[gi]});}
+ // two rows of labels only if one row cannot hold them (the desktop figure is 1000 wide)
+ var many=groups.reduce(function(a,g){return a+Math.max.apply(null,glabel(g).map(tw));},0)>980;
  function at(b,p){return [p[0]+b.o[0],p[1],p[2]+b.o[2]];}
  // project everything once to fit the picture to the frame
  // with many layers the recipes above the gaps alternate between two rows
- var VW=mob?560:1000,VH=mob?420:(many?440:380),top=mob?30:(many?124:70),bot=34;
+ // shared labels leave room for leader lines down to their layers
+ var VW=mob?560:1000,VH=mob?420:(many?460:share?420:380),top=mob?30:(many?140:share?104:70),bot=34;
  function pr(p){return [dot(p,C.R),-dot(p,C.U)];}
  var xs=[],ys=[];
  blocks.forEach(function(b){[b.x0,b.x1].forEach(function(X){[b.y0,b.y1].forEach(function(Y){[b.z0,b.z1].forEach(function(Z){var r=pr(at(b,[X,Y,Z]));xs.push(r[0]);ys.push(r[1]);});});});});
@@ -278,8 +298,8 @@ function draw3(){
  // translucent, over that.  For one box inside another this order is exact: the
  // filter hides the block's far edges wherever it is in front of them, and the
  // block's near faces veil the filter.
- function faces(b,x0,x1,y0,y1,z0,z1,col,shade,front,fop){var o='';
-  boxFaces(x0,x1,y0,y1,z0,z1).forEach(function(f){if((dot(f.n,C.V)>1e-6)!==front)return;
+ function faces(b,x0,x1,y0,y1,z0,z1,col,shade,front,fop,keep){var o='';
+  boxFaces(x0,x1,y0,y1,z0,z1).forEach(function(f){if((dot(f.n,C.V)>1e-6)!==front||(keep&&!keep(f)))return;
    o+='<polygon points="'+f.p.map(function(p){var q=P2(at(b,p));return q[0].toFixed(1)+','+q[1].toFixed(1);}).join(' ')+
     '" fill="'+mix(col,shade[f.k])+'" fill-opacity="'+fop+'" stroke="color-mix(in oklab, '+col+' 70%, var(--text-primary))" stroke-width="1" stroke-linejoin="round"/>';});
   return o;}
@@ -295,6 +315,7 @@ function draw3(){
  AXES={};
  order.forEach(function(b){
   var bcol=b.i===0?GREEN:BLUE,nb=blocks.filter(function(c){return c.i===b.i+1;})[0],l=LAYERS[b.i];
+  var pre='',post='',start=s.length;   // filter pieces behind the whole block, and in front of it
   s+=faces(b,b.x0,b.x1,b.y0,b.y1,b.z0,b.z1,bcol,SH,false,0.6);
   // the cell this block receives: on the far wall when its face is turned away
   var cell=b.i>0?cellAt(b):null;
@@ -302,8 +323,21 @@ function draw3(){
   if(l){var fails=!nb,p=pOf(l),ps=POS[b.i],r0=ps[0]*l.S-p,c0=ps[1]*l.S-p;
    // the filter: K x K at its window position, spanning the block's full depth
    var kx0=b.x0+c0,kx1=kx0+l.K,ky1=b.y1-r0,ky0=ky1-l.K,kz0=b.z0,kz1=b.z1;
-   s+='<g class="filt" data-i="'+b.i+'" style="cursor:'+(fails?'default':'grab')+'"'+(fails?' opacity="0.75"':'')+'>'+
-    faces(b,kx0,kx1,ky0,ky1,kz0,kz1,fails?RED:l.pool?VIOLET:ORANGE,fails?{front:40,top:28,side:34}:{front:62,top:44,side:52},true,1)+'</g>';
+   // Back faces, inside, front faces is exact only for what is inside the block.  In
+   // the padding the filter sticks out, so it is cut along the block's side planes:
+   // the piece inside goes between the block's faces; a piece outside goes after the
+   // whole block if it is on the viewer's side of a plane it crosses, else before it.
+   // Only the filter's own outer faces are drawn, so the cuts leave no seams inside.
+   var gOpen='<g class="filt" data-i="'+b.i+'" style="cursor:'+(fails?'default':'grab')+'"'+(fails?' opacity="0.75"':'')+(b.i===activeLayer()?' stroke-width="2.4"':'')+'>';
+   var kcol=fails?RED:l.pool?VIOLET:ORANGE,ksh=fails?{front:40,top:28,side:34}:{front:62,top:44,side:52};
+   var XS=[[kx0,Math.min(kx1,b.x0),-1],[Math.max(kx0,b.x0),Math.min(kx1,b.x1),0],[Math.max(kx0,b.x1),kx1,1]],
+       YS=[[ky0,Math.min(ky1,b.y0),-1],[Math.max(ky0,b.y0),Math.min(ky1,b.y1),0],[Math.max(ky0,b.y1),ky1,1]];
+   XS.forEach(function(X){if(X[1]-X[0]<1e-9)return;YS.forEach(function(Y){if(Y[1]-Y[0]<1e-9)return;
+    var outer=function(f){var n=f.n;return n[2]!==0||(n[0]>0&&X[1]===kx1)||(n[0]<0&&X[0]===kx0)||(n[1]>0&&Y[1]===ky1)||(n[1]<0&&Y[0]===ky0);};
+    var piece=gOpen+faces(b,X[0],X[1],Y[0],Y[1],kz0,kz1,kcol,ksh,true,1,outer)+'</g>';
+    if(!X[2]&&!Y[2]){s+=piece;return;}
+    var near=(X[2]&&dot([X[2],0,0],C.V)>1e-6)||(Y[2]&&dot([0,Y[2],0],C.V)>1e-6);
+    if(near)post+=piece;else pre+=piece;});});
    var o0=P2(at(b,[b.x0,b.y1,b.z0])),o1=P2(at(b,[b.x0+1,b.y1,b.z0])),o2=P2(at(b,[b.x0,b.y1-1,b.z0]));
    AXES[b.i]={ex:[o1[0]-o0[0],o1[1]-o0[1]],ey:[o2[0]-o0[0],o2[1]-o0[1]]};
    // the whole K x K x C box is the input to one output, so a line from each of its
@@ -312,27 +346,55 @@ function draw3(){
     [[kx0,ky1,kz0],[kx1,ky1,kz0],[kx0,ky0,kz0],[kx1,ky0,kz0],[kx0,ky1,kz1],[kx1,ky1,kz1],[kx0,ky0,kz1],[kx1,ky0,kz1]].forEach(function(q2){var q=P2(at(b,q2));
      s+='<line x1="'+q[0].toFixed(1)+'" y1="'+q[1].toFixed(1)+'" x2="'+T2[0].toFixed(1)+'" y2="'+T2[1].toFixed(1)+'" stroke="'+lineCol(l)+'" stroke-width="0.9" opacity="0.75" pointer-events="none"/>';});}}
   s+=faces(b,b.x0,b.x1,b.y0,b.y1,b.z0,b.z1,bcol,SH,true,0.45).replace(/<polygon /g,'<polygon pointer-events="none" ');
+  s=s.slice(0,start)+pre+s.slice(start)+post;
   if(cell&&frontOn)s+=cell.poly+'<circle cx="'+cell.c[0].toFixed(1)+'" cy="'+cell.c[1].toFixed(1)+'" r="3.2" fill="'+cell.col+'"/>';
  });
  // labels: each block's size under it; on a desktop, each layer's recipe above the gap
  var lab='';
- blocks.forEach(function(b){var p=P2(at(b,[(b.x0+b.x1)/2,b.y0,0])),q=b.q;
-  lab+=T(p[0],p[1]+18+(many&&b.i%2?16:0),q.C+'&times;'+q.H+'&times;'+q.H,'tn','middle',b.i===0?'var(--green-ink)':'var(--blue-ink)');});
- if(!mob)for(i=1;i<blocks.length;i++){var a=blocks[i-1],b2=blocks[i],l2=LAYERS[i-1];
-  var ea=-1e9,eb=1e9;[a.x0,a.x1].forEach(function(X){[a.z0,a.z1].forEach(function(Z){ea=Math.max(ea,P2(at(a,[X,0,Z]))[0]);});});
+ // a block the same shape as the one before it is not labelled again
+ var shown=0;
+ blocks.forEach(function(b,k){var p=P2(at(b,[(b.x0+b.x1)/2,b.y0,0])),q=b.q,pr=k?blocks[k-1].q:null;
+  if(pr&&pr.C===q.C&&pr.H===q.H)return;
+  lab+=T(p[0],p[1]+18+(share&&shown++%2?16:0),q.C+'&times;'+q.H+'&times;'+q.H,'tn','middle',b.i===0?'var(--green-ink)':'var(--blue-ink)');});
+ function gapMid(i){var a=blocks[i-1],b2=blocks[i],ea=-1e9,eb=1e9;
+  [a.x0,a.x1].forEach(function(X){[a.z0,a.z1].forEach(function(Z){ea=Math.max(ea,P2(at(a,[X,0,Z]))[0]);});});
   [b2.x0,b2.x1].forEach(function(X){[b2.z0,b2.z1].forEach(function(Z){eb=Math.min(eb,P2(at(b2,[X,0,Z]))[0]);});});
-  var mx=(ea+eb)/2;
-  var ty=many&&i%2===0?52:0;
-  if(many)lab+='<line x1="'+mx.toFixed(1)+'" y1="'+(62+ty)+'" x2="'+mx.toFixed(1)+'" y2="'+(top-6)+'" stroke="var(--border-strong)" stroke-width="0.8" stroke-dasharray="2 3"/>';
-  lab+=T(mx,24+ty,l2.pool?l2.K+'&times;'+l2.K+' max pool':l2.K+'&times;'+l2.K+' conv, '+l2.C+' filters','tn','middle',l2.pool?'var(--pool-ink)':'');
-  lab+=T(mx,40+ty,'stride '+l2.S+', pad '+pOf(l2),'tn','middle');
-  lab+=T(mx,56+ty,arithShort(a.q.H,l2),'tn','middle','var(--text-primary)');}
+  return (ea+eb)/2;}
+ function uniq(a){return a.filter(function(v,k){return a.indexOf(v)===k;});}
+ function glabel(g){var L=LAYERS[g.m[0]-1],p=pOf(L),n=g.m.length,out=[];
+  out.push(L.K+'&times;'+L.K+(L.pool?' max pool':' conv')+(n>1&&!share?' &times;'+n:'')+', stride '+L.S+(p?', pad '+p:''));
+  if(!L.pool)out.push(uniq(g.m.map(function(m){return LAYERS[m-1].C;})).join(', ')+' filters'+(share&&n>1?' ('+n+' layers)':''));
+  else if(share&&n>1)out.push(n+' layers');
+  var ins=g.m.map(function(m){return blocks[m-1].q.H;}),outs=g.m.map(function(m){return blocks[m]?blocks[m].q.H:0;});
+  if(!share||uniq(ins).length===1)out.push(arithShort(ins[0],L)+(n>1?', each':''));
+  else{var e='W &minus; '+L.K+(p?' + '+2*p:''),f=L.S===1?e+' + 1':'&lfloor;('+e+')/'+L.S+'&rfloor; + 1';
+   var keep=ins.every(function(w,k){return outs[k]===w;});
+   out.push(keep?f+' = W: keeps '+uniq(ins).join(', '):f+': '+uniq(ins.map(function(w,k){return w+'&rarr;'+outs[k];})).join(', '));}
+  return out;}
+ // Labels sit over their layers.  Each is as wide as its longest line (about 7 figure
+ // units a character); they share one row when they fit side by side, else alternate
+ // between two, and within a row they are nudged apart so they never overlap.
+ function tw(t){return 7*t.replace(/<[^>]*>/g,'').replace(/&[a-z#0-9]+;/gi,'x').length+14;}
+ groups.forEach(function(g){var xs=g.m.map(gapMid);g.x=xs.reduce(function(a,b){return a+b;},0)/xs.length;
+  g.w=Math.max.apply(null,glabel(g).map(tw));});
+ var twoRows=many,rows=[[],[]];
+ groups.forEach(function(g,gk){g.row=twoRows?gk%2:0;rows[g.row].push(g);});
+ rows.forEach(function(r){r.sort(function(a,b){return a.x-b.x;});var k;
+  for(k=1;k<r.length;k++)r[k].x=Math.max(r[k].x,r[k-1].x+(r[k-1].w+r[k].w)/2);
+  var over=r.length?r[r.length-1].x+r[r.length-1].w/2-(VW-4):0;if(over>0)r.forEach(function(g){g.x-=over;});
+  for(k=r.length-2;k>=0;k--)r[k].x=Math.min(r[k].x,r[k+1].x-(r[k].w+r[k+1].w)/2);});
+ if(!mob)groups.forEach(function(g){var al=activeLayer(),on=g.m.indexOf(al+1)>=0,B=on?' font-weight="700"':'',L=LAYERS[g.m[0]-1];
+  var lines=glabel(g),ty=g.row?16*4:0,mx=g.x,y0=24+ty,ybot=y0+16*(lines.length-1)+6;
+  if(share||many)g.m.forEach(function(m){var hot=on&&m===al+1;
+   lab+='<line x1="'+mx.toFixed(1)+'" y1="'+ybot+'" x2="'+gapMid(m).toFixed(1)+'" y2="'+(top-6)+'" stroke="'+(hot?'var(--text-secondary)':'var(--border-strong)')+'" stroke-width="'+(hot?1.4:0.7)+'"'+(hot?'':' stroke-dasharray="2 3"')+'/>';});
+  lines.forEach(function(t,k){lab+=T(mx,y0+16*k,t,'tn','middle',k===0&&L.pool?'var(--pool-ink)':k===lines.length-1||on?'var(--text-primary)':'',B);});});
  if(bad){var lastB=blocks[blocks.length-1],p3=[-1e9];[lastB.x0,lastB.x1].forEach(function(X){[lastB.z0,lastB.z1].forEach(function(Z){var q=P2(at(lastB,[X,0,Z]));if(q[0]>p3[0])p3=q;});}),li=sz.length-2,lb2=LAYERS[li];
   lab+=T(Math.min(VW-8,p3[0]+24),oy+sc*((mny+mxy)/2)-8,'&#10007; conv '+(li+1)+': '+lb2.K+'&times;'+lb2.K+' on '+sz[li].H+'&times;'+sz[li].H,'tn','start','var(--red)');
   lab+=T(Math.min(VW-8,p3[0]+24),oy+sc*((mny+mxy)/2)+10,'nothing left','tn','start','var(--red)');}
  lab+=T(VW-8,VH-6,'drag a filter to scan it, anywhere else to turn (depth not drawn to scale)','tn','end');
  document.getElementById('fig3').setAttribute('viewBox','0 0 '+VW+' '+VH);
  document.getElementById('stage3').innerHTML=s+lab;
+ LAYERS.forEach(function(_,k){var r=document.getElementById('row'+k);if(r)r.style.fontWeight=k===activeLayer()?'700':'';});
  // table outputs and the readout
  var h=IN.H;
  document.getElementById('o0').innerHTML=IN.C+'&times;'+IN.H+'&times;'+IN.H;
@@ -347,6 +409,10 @@ function draw3(){
   'The rest of the shrinking, 55 &rarr; 27 &rarr; 13 &rarr; 6, is done by <b style="color:var(--pool-ink)">3&times;3 max-pools at stride 2</b>, which overlap by a pixel. '+
   'The 256&times;6&times;6 at the end is what fc6 reads: 9,216 numbers. (The paper says 224&times;224 inputs, but (224 &minus; 11)/4 + 1 = 54.25; only 227 gives 55. '+
   'And it split conv2, conv4 and conv5 across two GPUs, so each of their filters read only half of the channels below.)';
+ else if(PRESET==='vgg')r+='VGG-16 (Simonyan and Zisserman 2014) uses nothing but 3&times;3 convolutions, each padded by 1 so it never changes the size: 224 &minus; 3 + 2 + 1 = 224. '+
+  'All the shrinking is done by five <b style="color:var(--pool-ink)">2&times;2 max-pools at stride 2</b>, each halving it: 224 &rarr; 112 &rarr; 56 &rarr; 28 &rarr; 14 &rarr; 7, while the channels double from 64 to 512. '+
+  'Why only 3&times;3s? Two in a row see a 5&times;5 patch and three see 7&times;7 (see <a href="receptive-field.html">receptive fields</a>), with fewer weights, 27C&sup2; against 49C&sup2; for one 7&times;7, and a nonlinearity between each. '+
+  'The 512&times;7&times;7 at the end is 25,088 numbers for the first fully connected layer.';
  else if(PRESET==='lenet')r+='LeNet 1989: 16&times;16 inputs, then 12 feature maps of 8&times;8 and 12 of 4&times;4, each from 5&times;5 windows two pixels apart. Stride 2 alone gives ⌊(16 &minus; 5)/2⌋ + 1 = 6, not 8; the paper lets windows run past the border onto background, which in today&rsquo;s terms is padding 2. (Its second layer also reads only 8 of the 12 maps; here every filter reads all of them.)';
  else if(PRESET==='deep')r+='Unpadded 5&times;5 layers take 4 off each time: 16, 12, 8, 4, and then a 5&times;5 window no longer fits in a 4&times;4 map.';
  if(document.getElementById('same').checked)r+=' <b>Same padding</b>: P = (K&minus;1)/2 puts back exactly the K&minus;1 each layer would take off, so with stride 1 the size stops shrinking; stride still divides it.';
@@ -369,9 +435,11 @@ function chain(j){var sz=sizes(),k,a;
 (function(){var svg=document.getElementById('fig3'),lastp=null,fd=null;
  svg.addEventListener('pointerdown',function(e){var g=e.target.closest&&e.target.closest('.filt');
   svg.setPointerCapture(e.pointerId);e.preventDefault();
+  if(g){ACT=+g.dataset.i;draw3();}
   if(g&&LAYERS[+g.dataset.i]&&AXES[+g.dataset.i]&&sizes()[+g.dataset.i+1]&&!sizes()[+g.dataset.i+1].bad){var i=+g.dataset.i;fd={i:i,x:e.clientX,y:e.clientY,p:POS[i].slice(),k:svg.viewBox.baseVal.width/svg.getBoundingClientRect().width};return;}
   lastp=[e.clientX,e.clientY];});
  svg.addEventListener('pointermove',function(e){
+  if(!fd&&!lastp){var hg=e.target.closest&&e.target.closest('.filt'),h=hg?+hg.dataset.i:-1;if(h!==HOV){HOV=h;draw3();}}
   if(fd){// solve screen motion = a * (one column) + b * (one row), in figure units
    var A=AXES[fd.i],dx=(e.clientX-fd.x)*fd.k,dy=(e.clientY-fd.y)*fd.k,det=A.ex[0]*A.ey[1]-A.ex[1]*A.ey[0];if(Math.abs(det)<1e-9)return;
    var a=(dx*A.ey[1]-dy*A.ey[0])/det,b=(A.ex[0]*dy-A.ex[1]*dx)/det,S=LAYERS[fd.i].S;
@@ -381,7 +449,7 @@ function chain(j){var sz=sizes(),k,a;
   if(!lastp)return;
   PHI=Math.max(-80,Math.min(80,PHI-(e.clientX-lastp[0])*0.4));THE=Math.max(-60,Math.min(80,THE+(e.clientY-lastp[1])*0.4));
   lastp=[e.clientX,e.clientY];draw3();});
- var up=function(){lastp=null;fd=null;};svg.addEventListener('pointerup',up);svg.addEventListener('pointercancel',up);})();
+ var up=function(){lastp=null;fd=null;};svg.addEventListener('pointerleave',function(){if(HOV>=0){HOV=-1;draw3();}});svg.addEventListener('pointerup',up);svg.addEventListener('pointercancel',up);})();
 
 function caption(){
  document.getElementById('caption').innerHTML=
