@@ -75,7 +75,7 @@ table.ly td.eq{color:var(--text-primary)}
 <div class="rd" id="rd1"></div>
 
 <h2>A stack of layers<span>: each one shrinks what it is given</span></h2>
-<p class="quiz">Each activation drawn as a block, channels &times; height &times; width, with the front face to scale. Between blocks, one filter: K&times;K across the <i>full depth</i> of its input, making one number of the next block. <b>Drag to turn the picture.</b> Edit any layer below.</p>
+<p class="quiz">Each activation drawn as a block, channels &times; height &times; width, with the front face to scale. Between blocks, one filter: K&times;K across the <i>full depth</i> of its input, making one number of the next block. <b>Drag a filter</b> to scan it across its input and watch which output it makes; <b>drag anywhere else</b> to turn the picture. Edit any layer below.</p>
 
 <svg id="fig3" viewBox="0 0 1000 380" role="img">
 <title>A stack of convolution layers drawn as shrinking 3D blocks</title>
@@ -176,7 +176,7 @@ document.getElementById('seg1').addEventListener('click',function(e){var b=e.tar
  var v=b.dataset.v.split(',');['w','k','s','p'].forEach(function(id,i){document.getElementById(id).value=v[i];});setP();});
 
 /* ================= part 3: a stack, drawn in 3D ================= */
-var IN={C:3,H:32},LAYERS=[],PHI=28,THE=18;
+var IN={C:3,H:32},LAYERS=[],PHI=28,THE=18,POS=[],AXES={};
 var PRESETS={
  slide:{C:3,H:32,L:[[5,1,0,6],[3,1,0,10],[3,1,0,12]]},
  alex227:{C:3,H:227,L:[[11,4,0,96]]},
@@ -184,7 +184,7 @@ var PRESETS={
  lenet:{C:1,H:16,L:[[5,2,2,12],[5,2,2,12]]},
  deep:{C:1,H:16,L:[[5,1,0,8],[5,1,0,8],[5,1,0,8],[5,1,0,8]]}};
 var PRESET='slide';
-function loadPreset(p){PRESET=p;var q=PRESETS[p];IN={C:q.C,H:q.H};
+function loadPreset(p){PRESET=p;POS=[];var q=PRESETS[p];IN={C:q.C,H:q.H};
  LAYERS=q.L.map(function(l){return {K:l[0],S:l[1],P:l[2],C:l[3]};});
  document.getElementById('same').checked=false;
  Array.from(document.getElementById('seg3').children).forEach(function(b){b.classList.toggle('on',b.dataset.p===p);});
@@ -194,6 +194,11 @@ function pOf(l){return document.getElementById('same').checked?Math.floor((l.K-1
 function sizes(){var out=[{C:IN.C,H:IN.H}],h=IN.H;
  for(var i=0;i<LAYERS.length;i++){var l=LAYERS[i],o=outSize(h,l.K,l.S,pOf(l));
   out.push({C:l.C,H:o,bad:o<=0});if(o<=0)break;h=o;}return out;}
+// the same sum, short enough to sit above the gap between two blocks
+function arithShort(h,l){var p=pOf(l),num=h-l.K+2*p,o=outSize(h,l.K,l.S,p);
+ var e=h+' &minus; '+l.K+(p?' + '+2*p:'');
+ if(num<0)return e+' &lt; 0';
+ return l.S===1?e+' + 1 = '+o:'&lfloor;('+e+')/'+l.S+'&rfloor; + 1 = '+o;}
 function arith(h,l){var p=pOf(l),num=h-l.K+2*p,o=outSize(h,l.K,l.S,p);
  var e=h+' &minus; '+l.K+(p?' + 2&middot;'+p:'');
  if(num<0)return e+' = '+m(num)+' &lt; 0: nothing';
@@ -254,31 +259,42 @@ function draw3(){
  function P2(p){var r=pr(p);return [ox+sc*r[0],oy+sc*r[1]];}
  function poly(pts,fill,stroke,sw,op){return '<polygon points="'+pts.map(function(p){var q=P2(p);return q[0].toFixed(1)+','+q[1].toFixed(1);}).join(' ')+
   '" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+(sw||1)+'" stroke-linejoin="round"'+(op!=null?' opacity="'+op+'"':'')+'/>';}
- function prism(b,x0,x1,y0,y1,z0,z1,col,shade){var o='';
-  boxFaces(x0,x1,y0,y1,z0,z1).forEach(function(f){if(dot(f.n,C.V)<=1e-6)return;
-   o+=poly(f.p.map(function(p){return at(b,p);}),mix(col,shade[f.k]),'color-mix(in oklab, '+col+' 70%, var(--text-primary))',1);});return o;}
- // far blocks first
+ // A block is drawn as its back faces, then what is inside it, then its front faces,
+ // translucent, over that.  For one box inside another this order is exact: the
+ // filter hides the block's far edges wherever it is in front of them, and the
+ // block's near faces veil the filter.
+ function faces(b,x0,x1,y0,y1,z0,z1,col,shade,front,fop){var o='';
+  boxFaces(x0,x1,y0,y1,z0,z1).forEach(function(f){if((dot(f.n,C.V)>1e-6)!==front)return;
+   o+='<polygon points="'+f.p.map(function(p){var q=P2(at(b,p));return q[0].toFixed(1)+','+q[1].toFixed(1);}).join(' ')+
+    '" fill="'+mix(col,shade[f.k])+'" fill-opacity="'+fop+'" stroke="color-mix(in oklab, '+col+' 70%, var(--text-primary))" stroke-width="1" stroke-linejoin="round"/>';});
+  return o;}
  var order=blocks.slice().sort(function(a,b){return dot(at(a,[(a.x0+a.x1)/2,0,(a.z0+a.z1)/2]),C.V)-dot(at(b,[(b.x0+b.x1)/2,0,(b.z0+b.z1)/2]),C.V);});
- var lines='';
+ var frontOn=dot([0,0,-1],C.V)>1e-6,SH={front:34,top:18,side:26};
+ // where each filter sits, as the output cell it makes: row oi, column oj
+ blocks.forEach(function(b){var nb=blocks.filter(function(c){return c.i===b.i+1;})[0],ps=POS[b.i]||[0,0];
+  POS[b.i]=nb?[Math.max(0,Math.min(nb.q.H-1,ps[0])),Math.max(0,Math.min(nb.q.H-1,ps[1]))]:[0,0];});
+ function cellAt(nb){var ps=POS[nb.i-1],x=nb.x0+ps[1],y=nb.y1-ps[0];
+  return {poly:poly([[x,y,0],[x+1,y,0],[x+1,y-1,0],[x,y-1,0]].map(function(p){return at(nb,p);}),PINK,PINK,1),c:P2(at(nb,[x+0.5,y-0.5,0]))};}
+ AXES={};
  order.forEach(function(b){
-  s+=prism(b,b.x0,b.x1,b.y0,b.y1,b.z0,b.z1,b.i===0?GREEN:BLUE,{front:34,top:18,side:26});
-  // the filter that reads this block, sitting in its top-left corner and spanning its depth
-  var nb=blocks.filter(function(c){return c.i===b.i+1;})[0],l=LAYERS[b.i];
-  if(l){var e=0.012*Hmax,fails=!nb,Kk=fails?l.K:Math.min(l.K,b.q.H+2*pOf(l));
-   var kx0=b.x0-e,kx1=b.x0+Kk,ky1=b.y1+e,ky0=b.y1-Kk,kz0=b.z0-e,kz1=b.z1+e;
-   var kp=prism(b,kx0,kx1,ky0,ky1,kz0,kz1,fails?RED:ORANGE,fails?{front:30,top:20,side:25}:{front:62,top:44,side:52});
-   s+=fails?'<g opacity="0.55">'+kp+'</g>':kp;
-   if(nb){var T2=P2(at(nb,[nb.x0+0.5,nb.y1-0.5,-e]));
-    [[kx0,ky1,kz0],[kx1,ky1,kz0],[kx0,ky0,kz0],[kx1,ky0,kz0],[kx1,ky1,kz1],[kx1,ky0,kz1]].forEach(function(p){var q=P2(at(b,p));
-     lines+='<line x1="'+q[0].toFixed(1)+'" y1="'+q[1].toFixed(1)+'" x2="'+T2[0].toFixed(1)+'" y2="'+T2[1].toFixed(1)+'" stroke="'+PINK+'" stroke-width="0.9" opacity="0.75"/>';});
-    lines+='@@'+nb.i+'@@';}}
+  var bcol=b.i===0?GREEN:BLUE,nb=blocks.filter(function(c){return c.i===b.i+1;})[0],l=LAYERS[b.i];
+  s+=faces(b,b.x0,b.x1,b.y0,b.y1,b.z0,b.z1,bcol,SH,false,0.6);
+  // the cell this block receives: on the far wall when its face is turned away
+  var cell=b.i>0?cellAt(b):null;
+  if(cell&&!frontOn)s+=cell.poly;
+  if(l){var fails=!nb,p=pOf(l),ps=POS[b.i],r0=ps[0]*l.S-p,c0=ps[1]*l.S-p;
+   // the filter: K x K at its window position, spanning the block's full depth
+   var kx0=b.x0+c0,kx1=kx0+l.K,ky1=b.y1-r0,ky0=ky1-l.K,kz0=b.z0,kz1=b.z1;
+   s+='<g class="filt" data-i="'+b.i+'" style="cursor:'+(fails?'default':'grab')+'"'+(fails?' opacity="0.75"':'')+'>'+
+    faces(b,kx0,kx1,ky0,ky1,kz0,kz1,fails?RED:ORANGE,fails?{front:40,top:28,side:34}:{front:62,top:44,side:52},true,1)+'</g>';
+   var o0=P2(at(b,[b.x0,b.y1,b.z0])),o1=P2(at(b,[b.x0+1,b.y1,b.z0])),o2=P2(at(b,[b.x0,b.y1-1,b.z0]));
+   AXES[b.i]={ex:[o1[0]-o0[0],o1[1]-o0[1]],ey:[o2[0]-o0[0],o2[1]-o0[1]]};
+   if(nb){var T2=cellAt(nb).c,zz=frontOn?kz0:kz1;
+    [[kx0,ky1],[kx1,ky1],[kx0,ky0],[kx1,ky0]].forEach(function(q2){var q=P2(at(b,[q2[0],q2[1],zz]));
+     s+='<line x1="'+q[0].toFixed(1)+'" y1="'+q[1].toFixed(1)+'" x2="'+T2[0].toFixed(1)+'" y2="'+T2[1].toFixed(1)+'" stroke="'+PINK+'" stroke-width="0.9" opacity="0.75" pointer-events="none"/>';});}}
+  s+=faces(b,b.x0,b.x1,b.y0,b.y1,b.z0,b.z1,bcol,SH,true,0.45).replace(/<polygon /g,'<polygon pointer-events="none" ');
+  if(cell&&frontOn)s+=cell.poly+'<circle cx="'+cell.c[0].toFixed(1)+'" cy="'+cell.c[1].toFixed(1)+'" r="3.2" fill="'+PINK+'"/>';
  });
- // the one output cell each filter makes, drawn on its block's front face
- blocks.forEach(function(nb){if(nb.i===0)return;var u=Math.max(1,0.02*Hmax),c=P2(at(nb,[nb.x0+0.5,nb.y1-0.5,0]));
-  var cell=poly([[nb.x0,nb.y1,-0.001],[nb.x0+1,nb.y1,-0.001],[nb.x0+1,nb.y1-1,-0.001],[nb.x0,nb.y1-1,-0.001]].map(function(p){return at(nb,p);}),PINK,PINK,1)+
-   '<circle cx="'+c[0].toFixed(1)+'" cy="'+c[1].toFixed(1)+'" r="3.2" fill="'+PINK+'"/>';
-  lines=lines.replace('@@'+nb.i+'@@',cell);});
- s+=lines;
  // labels: each block's size under it; on a desktop, each layer's recipe above the gap
  var lab='';
  blocks.forEach(function(b){var p=P2(at(b,[(b.x0+b.x1)/2,b.y0,0])),q=b.q;
@@ -289,11 +305,11 @@ function draw3(){
   var mx=(ea+eb)/2;
   lab+=T(mx,24,l2.K+'&times;'+l2.K+' conv, '+l2.C+' filters','tn','middle');
   lab+=T(mx,40,'stride '+l2.S+', pad '+pOf(l2),'tn','middle');
-  lab+=T(mx,56,arith(a.q.H,l2),'tn','middle','var(--text-primary)');}
+  lab+=T(mx,56,arithShort(a.q.H,l2),'tn','middle','var(--text-primary)');}
  if(bad){var lastB=blocks[blocks.length-1],p3=[-1e9];[lastB.x0,lastB.x1].forEach(function(X){[lastB.z0,lastB.z1].forEach(function(Z){var q=P2(at(lastB,[X,0,Z]));if(q[0]>p3[0])p3=q;});}),li=sz.length-2,lb2=LAYERS[li];
   lab+=T(Math.min(VW-8,p3[0]+24),oy+sc*((mny+mxy)/2)-8,'&#10007; conv '+(li+1)+': '+lb2.K+'&times;'+lb2.K+' on '+sz[li].H+'&times;'+sz[li].H,'tn','start','var(--red)');
   lab+=T(Math.min(VW-8,p3[0]+24),oy+sc*((mny+mxy)/2)+10,'nothing left','tn','start','var(--red)');}
- lab+=T(VW-8,VH-6,'depth &#8733; &#8730;channels; drag to turn','tn','end');
+ lab+=T(VW-8,VH-6,'depth &#8733; &#8730;channels; drag a filter to scan it, anywhere else to turn','tn','end');
  document.getElementById('fig3').setAttribute('viewBox','0 0 '+VW+' '+VH);
  document.getElementById('stage3').innerHTML=s+lab;
  // table outputs and the readout
@@ -315,12 +331,22 @@ function draw3(){
 }
 document.getElementById('seg3').addEventListener('click',function(e){var b=e.target.closest('button');if(b)loadPreset(b.dataset.p);});
 // drag to turn: across is azimuth, up and down is elevation
-(function(){var svg=document.getElementById('fig3'),lastp=null;
- svg.addEventListener('pointerdown',function(e){lastp=[e.clientX,e.clientY];svg.setPointerCapture(e.pointerId);e.preventDefault();});
- svg.addEventListener('pointermove',function(e){if(!lastp)return;
+// drag a filter to move it window by window; drag anywhere else to turn the view
+(function(){var svg=document.getElementById('fig3'),lastp=null,fd=null;
+ svg.addEventListener('pointerdown',function(e){var g=e.target.closest&&e.target.closest('.filt');
+  svg.setPointerCapture(e.pointerId);e.preventDefault();
+  if(g&&LAYERS[+g.dataset.i]&&AXES[+g.dataset.i]){var i=+g.dataset.i;fd={i:i,x:e.clientX,y:e.clientY,p:POS[i].slice(),k:svg.viewBox.baseVal.width/svg.getBoundingClientRect().width};return;}
+  lastp=[e.clientX,e.clientY];});
+ svg.addEventListener('pointermove',function(e){
+  if(fd){// solve screen motion = a * (one column) + b * (one row), in figure units
+   var A=AXES[fd.i],dx=(e.clientX-fd.x)*fd.k,dy=(e.clientY-fd.y)*fd.k,det=A.ex[0]*A.ey[1]-A.ex[1]*A.ey[0];if(Math.abs(det)<1e-9)return;
+   var a=(dx*A.ey[1]-dy*A.ey[0])/det,b=(A.ex[0]*dy-A.ex[1]*dx)/det,S=LAYERS[fd.i].S;
+   var np=[fd.p[0]+Math.round(b/S),fd.p[1]+Math.round(a/S)];
+   if(np[0]!==POS[fd.i][0]||np[1]!==POS[fd.i][1]){POS[fd.i]=np;draw3();}return;}
+  if(!lastp)return;
   PHI=Math.max(-80,Math.min(80,PHI-(e.clientX-lastp[0])*0.4));THE=Math.max(-60,Math.min(80,THE+(e.clientY-lastp[1])*0.4));
   lastp=[e.clientX,e.clientY];draw3();});
- var up=function(){lastp=null;};svg.addEventListener('pointerup',up);svg.addEventListener('pointercancel',up);})();
+ var up=function(){lastp=null;fd=null;};svg.addEventListener('pointerup',up);svg.addEventListener('pointercancel',up);})();
 
 function caption(){
  document.getElementById('caption').innerHTML=
