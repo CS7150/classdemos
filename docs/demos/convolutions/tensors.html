@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The 4D weight tensor</title>
+<meta name="description" content="A convolution layer's weights drawn as a grid of small kernels, one row per output channel and one column per input channel: pick an output pixel and watch its per-channel dot products and bias add up.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 16px;max-width:1100px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+.quiz{margin:0}
+svg{max-height:68vh;touch-action:none}
+.row{gap:7px}
+button,select{height:30px;font-size:13px;padding:0 9px}
+.seg button{height:28px;font-size:12.5px;padding:0 9px}
+.klab{font-size:12.5px}
+.rd{font-size:14px;line-height:1.55;min-height:3em}
+.cap{font-size:12.5px;line-height:1.55;padding-top:4px}
+#fig [data-o]{cursor:pointer}
+@media (max-width:820px){#fig .ts{font-size:19px}#fig .tn{font-size:17px}}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Convolution demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>The 4D weight tensor<span>: C<sub>out</sub> &times; C<sub>in</sub> &times; K &times; K, drawn as a grid of kernels</span></h1>
+<p class="quiz">A convolution layer&rsquo;s weights are one small kernel for every pair of an output channel and an input channel. <b>Point at any output pixel</b> to see which inputs and which kernels make it, and the numbers adding up.</p>
+
+<svg id="fig" viewBox="0 0 900 560" role="img">
+<title>Input channels, the kernel grid, biases and output channels of one convolution layer</title>
+<desc>Along the top, the input's channels. Below them, a grid of small kernels: one row per output channel, one column per input channel, each column sitting under the channel it reads. Each row ends in that output channel's bias and then its output map. For the chosen output pixel, the patch it reads is outlined in every input channel, its row of kernels is highlighted with each kernel's dot product written underneath, and the sum plus the bias gives the output value.</desc>
+<g id="stage"></g>
+</svg>
+
+<div class="row">
+<span class="klab">input channels C<sub>in</sub></span>
+<select id="ci" onchange="setShape()"><option>1</option><option>2</option><option selected>3</option><option>4</option></select>
+<span class="klab">output channels C<sub>out</sub></span>
+<select id="co" onchange="setShape()"><option>1</option><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option></select>
+<span class="klab">kernel K</span>
+<select id="kk" onchange="setShape()"><option>1</option><option selected>3</option><option>5</option></select>
+<button onclick="SEED++;gen();draw()">Random weights</button>
+</div>
+<div class="row">
+<span class="klab">presets</span>
+<button onclick="preset('slide')">The slide&rsquo;s layer: 3 &rarr; 6, 5&times;5</button>
+<button onclick="preset('1x1')">1&times;1: a matrix at every pixel</button>
+<span class="klab" style="margin-left:8px">draw activations as</span>
+<div class="seg" id="view"><button data-v="maps" class="on">C maps of H&times;W</button><button data-v="vecs">H&times;W grid of C-vectors</button></div>
+</div>
+<div class="rd" id="readout"></div>
+<div class="cap" id="caption"></div>
+
+<script>
+var CI=3,CO=4,K=3,H=10,SEED=1,VIEW='maps',PRE=null;
+var X=[],W=[],B=[],OUT=[],SEL={o:0,i:3,j:3};
+var ORANGE='var(--orange)',BLUE='var(--blue)',PINK='var(--pink)',INK='var(--text-primary)';
+var CHCOL=['var(--red)','var(--green)','var(--blue)'],PATCOL=[INK,'var(--violet)','var(--warm)','var(--green)'];
+
+function rng(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);
+ t=t+Math.imul(t^t>>>7,61|t)^t;return ((t^t>>>14)>>>0)/4294967296;};}
+function r1(v){return Math.round(v*10)/10;}
+// Inputs and weights are kept to one decimal, so every product is a whole number of
+// hundredths and the sums shown to two decimals add up exactly.
+function scene(c,i,j){var sun=(i-2.5)*(i-2.5)+(j-6.5)*(j-6.5)<5.5;
+ if(sun)return [1,0.8,0.2][c];
+ if(i<6)return [0.3+0.05*i,0.4,0.9-0.05*i][c];
+ return [0.2,0.6-0.05*(i-6),0.2][c];}
+var PATS=[function(i,j){return (i-4.5)*(i-4.5)+(j-4.5)*(j-4.5)<11?1:0;},
+ function(i,j){return j%3===0?1:0;},
+ function(i,j){return (i+j)/18;},
+ function(i,j){return ((i>>1)+(j>>1))%2;}];
+function chcol(c){return CI===3?CHCOL[c]:PATCOL[c];}
+function chname(c){return CI===3?['R','G','B'][c]:'ch '+c;}
+function gen(){
+ var R=rng(SEED*7919),g=function(){var u=0,v=0;while(!u)u=R();while(!v)v=R();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);};
+ var c,i,j,o,u,v;X=[];
+ for(c=0;c<CI;c++){var m=[];for(i=0;i<H;i++){var row=[];for(j=0;j<H;j++)row.push(r1(CI===3?scene(c,i,j):PATS[c](i,j)));m.push(row);}X.push(m);}
+ W=[];B=[];
+ for(o=0;o<CO;o++){var wr=[];for(c=0;c<CI;c++){var k=[];for(u=0;u<K;u++){var kr=[];for(v=0;v<K;v++)kr.push(Math.max(-1,Math.min(1,r1(g()*(K===1?0.6:0.4)))));k.push(kr);}wr.push(k);}
+  W.push(wr);B.push(Math.max(-0.5,Math.min(0.5,r1(g()*0.2))));}
+ if(PRE==='1x1'&&CI===3&&CO===2&&K===1){W=[[[[0.3]],[[0.6]],[[0.1]]],[[[1]],[[-1]],[[0]]]];B=[0,0];}
+ conv();
+}
+function part(o,c,i,j){var s=0;for(var u=0;u<K;u++)for(var v=0;v<K;v++)s+=W[o][c][u][v]*X[c][i+u][j+v];return s;}
+function conv(){var N=H-K+1;OUT=[];
+ for(var o=0;o<CO;o++){var m=[];for(var i=0;i<N;i++){var row=[];for(var j=0;j<N;j++){var s=B[o];for(var c=0;c<CI;c++)s+=part(o,c,i,j);row.push(s);}m.push(row);}OUT.push(m);}
+ SEL.o=Math.min(SEL.o,CO-1);SEL.i=Math.min(SEL.i,N-1);SEL.j=Math.min(SEL.j,N-1);}
+
+/* ---------- drawing ---------- */
+function T(x,y,s,cls,anc,fill,extra){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'"'+
+ (anc?' text-anchor="'+anc+'"':'')+(fill?' style="fill:'+fill+'"':'')+(extra||'')+'>'+s+'</text>';}
+function R(x,y,w,h,fill,op,extra){return '<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+h.toFixed(1)+'" fill="'+fill+'"'+(op!==undefined?' opacity="'+op.toFixed(2)+'"':'')+(extra||'')+'/>';}
+function box(x,y,w,h,col,sw,dash){return '<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+h.toFixed(1)+'" fill="none" stroke="'+col+'" stroke-width="'+(sw||1)+'"'+(dash?' stroke-dasharray="'+dash+'"':'')+' pointer-events="none"/>';}
+function fmt(v){v=Math.round(v*100)/100;return (v<0?'−':'')+Math.abs(v).toFixed(2);}
+function par(v){return v<0?'('+fmt(v)+')':fmt(v);}
+function f1(v){v=Math.round(v*10)/10;return (v<0?'−':'')+Math.abs(v).toFixed(1);}
+function signed(v,m){return v>=0?ORANGE:BLUE;}
+function mobile(){return !!(window.matchMedia&&window.matchMedia('(max-width:820px)').matches);}
+
+// A map of values in [0,1] in one colour, or signed values in orange and blue.
+function map(x0,y0,m,cs,col,vmax){var s=R(x0,y0,m[0].length*cs,m.length*cs,'var(--surface)',undefined,' stroke="var(--border)"');
+ for(var i=0;i<m.length;i++)for(var j=0;j<m[i].length;j++){var v=m[i][j];if(Math.abs(v)<0.02)continue;
+  s+=R(x0+j*cs,y0+i*cs,cs,cs,col||signed(v),Math.min(1,Math.abs(v)/(vmax||1)));}
+ return s;}
+function kernel(x0,y0,k,cs,wmax){var s=R(x0,y0,K*cs,K*cs,'var(--surface)',undefined,' stroke="var(--border-strong)"');
+ for(var u=0;u<K;u++)for(var v=0;v<K;v++){var w=k[u][v];if(Math.abs(w)<0.02)continue;s+=R(x0+v*cs,y0+u*cs,cs,cs,signed(w),Math.min(1,Math.abs(w)/wmax));}
+ if(K===1)s+=T(x0+cs/2,y0+cs/2+5,f1(k[0][0]),'tn','middle',INK);
+ return s;}
+// a cell holding a whole C-vector as side-by-side bars: [0,1] values rise from the
+// floor, signed ones from the middle
+function vcell(x0,y0,cs,vals,cols,vmax,hi){var n=vals.length,bw=(cs-3)/n,s='';
+ for(var c=0;c<n;c++){var v=vals[c],x=x0+1.5+c*bw,col=cols?cols[c]:signed(v),op=hi===undefined||hi===c?1:0.35;
+  if(cols){var h=(cs-3)*Math.min(1,v);s+=R(x,y0+cs-1.5-h,bw*0.85,h,col,op);}
+  else{var h2=(cs/2-1.5)*Math.min(1,Math.abs(v)/vmax);s+=R(x,v>=0?y0+cs/2-h2:y0+cs/2,bw*0.85,h2,col,op);}}
+ return s;}
+
+function draw(){
+ var mob=mobile(),N=H-K+1,o,c,i,j,s='';
+ var L=mob?{lx:62,inCs:7,colW:84,bw:40,gap:78}:{lx:96,inCs:10,colW:124,bw:46,gap:96};
+ var IN=H*L.inCs,rowH=CO<=2?118:CO<=4?84:66,top=VIEW==='maps'?IN:(mob?140:170);
+ var Y0=44,KY=Y0+top+66;
+ var kcs=Math.min(K===1?30:K===3?15:10,(rowH-22)/K),KB=K*kcs;
+ var colX=function(c){return L.lx+c*L.colW+IN/2;};           // column centre
+ var biasX=L.lx+(CI-1)*L.colW+IN/2+KB/2+34,outX=biasX+L.bw+L.gap;
+ var OS=VIEW==='maps'?Math.min(rowH-12,IN):0,ocs=OS/N;
+ var vmax=1e-9,wmax=0.3;OUT.forEach(function(m){m.forEach(function(r){r.forEach(function(v){vmax=Math.max(vmax,Math.abs(v));});});});
+ W.forEach(function(a){a.forEach(function(k){k.forEach(function(r){r.forEach(function(v){wmax=Math.max(wmax,Math.abs(v));});});});});
+ var sel=SEL,parts=[];for(c=0;c<CI;c++)parts.push(part(sel.o,c,sel.i,sel.j));
+ var total=OUT[sel.o][sel.i][sel.j];
+
+ // the input
+ s+=T(L.lx-10,Y0-18,'input x: C<tspan baseline-shift="sub" font-size="70%">in</tspan> × H × W = '+CI+' × '+H+' × '+H,'ts','start');
+ if(VIEW==='maps'){
+  for(c=0;c<CI;c++){var x0=colX(c)-IN/2;
+   s+=map(x0,Y0,X[c],L.inCs,chcol(c),1);
+   s+=box(x0+sel.j*L.inCs,Y0+sel.i*L.inCs,K*L.inCs,K*L.inCs,PINK,2.2);
+   s+=T(colX(c),Y0+IN+15,chname(c),'tn','middle',CI===3?chcol(c):'');}
+  if(CI===3&&!mob){var pc=6,px0=8,py0=Y0+(IN-H*pc)/2;
+   for(i=0;i<H;i++)for(j=0;j<H;j++)s+=R(px0+j*pc,py0+i*pc,pc,pc,'rgb('+X.map(function(m){return Math.round(255*m[i][j]);}).join(',')+')');
+   s+=box(px0+sel.j*pc,py0+sel.i*pc,K*pc,K*pc,'var(--bg)',1.5);
+   s+=T(px0+H*pc/2,py0+H*pc+15,'together','tn','middle');}
+ }else{
+  var gcs=top/H,gx=L.lx;
+  s+=R(gx,Y0,top,top,'var(--surface)',undefined,' stroke="var(--border)"');
+  for(i=0;i<H;i++)for(j=0;j<H;j++)s+=vcell(gx+j*gcs,Y0+i*gcs,gcs,X.map(function(m){return m[i][j];}),X.map(function(m,c){return chcol(c);}));
+  s+=box(gx+sel.j*gcs,Y0+sel.i*gcs,K*gcs,K*gcs,PINK,2.2);
+  s+=T(gx+top+14,Y0+16,'each pixel holds a '+CI+'-vector:','tn','start');
+  for(c=0;c<CI;c++)s+=T(gx+top+14,Y0+36+c*18,'<tspan style="fill:'+chcol(c)+'">■</tspan> '+chname(c),'tn','start');
+ }
+
+ // the kernel grid: one row per output channel, one column per input channel
+ s+=T(L.lx-10,KY-30,'weights W: C<tspan baseline-shift="sub" font-size="70%">out</tspan> × C<tspan baseline-shift="sub" font-size="70%">in</tspan> × K × K = '+CO+' × '+CI+' × '+K+' × '+K,'ts','start');
+ s+=T(biasX+L.bw/2,KY-6,'bias','tn','middle');
+ var otl=VIEW==='maps'?'output y: '+CO+' × '+N+' × '+N:'output y: '+N+' × '+N+' grid of '+CO+'-vectors';
+ s+=T(outX,KY-6,otl,'tn','start');
+ for(o=0;o<CO;o++){var ry=KY+o*rowH,on=o===sel.o,ky=ry+(rowH-KB)/2-6;
+  s+='<g opacity="'+(on?1:0.4)+'">';
+  s+=T(L.lx-14,ky+KB/2+5,'out '+o,'tn','end',on?'var(--pink-ink)':'');
+  for(c=0;c<CI;c++){var kx=colX(c)-KB/2;
+   s+=kernel(kx,ky,W[o][c],kcs,wmax);
+   if(on){s+=box(kx-2,ky-2,KB+4,KB+4,PINK,2);s+=T(colX(c),ky+KB+16,fmt(parts[c]),'tn','middle','var(--pink-ink)');}
+   s+=T(c<CI-1?colX(c)+L.colW/2:(colX(c)+KB/2+biasX)/2,ky+KB/2+5,'+','ts','middle');}
+  s+=R(biasX,ky+KB/2-13,L.bw,26,'var(--surface-1)',undefined,' stroke="'+(on?PINK:'var(--border)')+'"');
+  s+=T(biasX+L.bw/2,ky+KB/2+5,f1(B[o]),'tn','middle',INK);
+  s+=T(biasX+L.bw+10,ky+KB/2+5,'=','ts','start');
+  if(on)s+=T(biasX+L.bw+26,ky+KB/2+5,fmt(total),'ts','start','var(--pink-ink)');
+  if(VIEW==='maps'){var oy=ry+(rowH-OS)/2-6;
+   s+=map(outX,oy,OUT[o],ocs,null,vmax);
+   if(on)s+=box(outX+sel.j*ocs,oy+sel.i*ocs,ocs,ocs,PINK,2.2);
+   for(i=0;i<N;i++)for(j=0;j<N;j++)s+=R(outX+j*ocs,oy+i*ocs,ocs,ocs,'transparent',undefined,' data-o="'+o+'" data-i="'+i+'" data-j="'+j+'"');}
+  s+='</g>';
+  // the whole row picks the output channel
+  s+=R(L.lx-60,ry,biasX+L.bw-L.lx+60,rowH-8,'transparent',undefined,' data-o="'+o+'"');}
+ var right=outX+OS;
+ if(VIEW==='vecs'){var gs=Math.min(CO*rowH-12,mob?200:260),vcs=gs/N,gy=KY;
+  s+=R(outX,gy,gs,gs,'var(--surface)',undefined,' stroke="var(--border)"');
+  for(i=0;i<N;i++)for(j=0;j<N;j++){s+=vcell(outX+j*vcs,gy+i*vcs,vcs,OUT.map(function(m){return m[i][j];}),null,vmax,i===sel.i&&j===sel.j?sel.o:undefined);
+   s+=R(outX+j*vcs,gy+i*vcs,vcs,vcs,'transparent',undefined,' data-o="'+sel.o+'" data-i="'+i+'" data-j="'+j+'"');}
+  s+=box(outX+sel.j*vcs,gy+sel.i*vcs,vcs,vcs,PINK,2.2);
+  s+=T(outX,gy+gs+18,'bar '+sel.o+' of the chosen pixel is out '+sel.o,'tn','start');
+  right=outX+gs;}
+ s+=T(outX,KY+CO*rowH+10,'<tspan style="fill:var(--orange)">■</tspan> +  <tspan style="fill:var(--blue)">■</tspan> −','tn','start');
+ var Wd=Math.max(right+(VIEW==='vecs'?40:24),VIEW==='vecs'?L.lx+top+120:0,outX+otl.length*(mob?9.5:7.5)+8),Hd=KY+CO*rowH+22;
+ var svg=document.getElementById('fig');svg.setAttribute('viewBox','0 0 '+Math.ceil(Wd)+' '+Math.ceil(Hd));
+ document.getElementById('stage').innerHTML=s;
+ readout(parts,total);
+}
+function readout(parts,total){
+ var N=H-K+1,o=SEL.o,h='y['+o+', '+SEL.i+', '+SEL.j+'] = ';
+ h+=parts.map(function(p,c){return '<span style="color:var(--pink-ink)">'+par(p)+'</span>';}).join(' + ')+' + '+par(B[o])+' = <b>'+fmt(total)+'</b>';
+ h+=' &mdash; one '+K+'&times;'+K+' dot product per input channel, plus the bias of output channel '+o+'.';
+ var np=CO*CI*K*K,n32=32-K+1;
+ h+='<br>Parameters: '+CO+'&times;'+CI+'&times;'+K+'&times;'+K+' = '+np+' weights + '+CO+' biases = <b>'+(np+CO)+'</b>. '+
+  'A batch of N images: N&times;'+CI+'&times;'+H+'&times;'+H+' in, N&times;'+CO+'&times;'+N+'&times;'+N+' out. '+
+  'The same layer on the slide&rsquo;s 32&times;32 input: N&times;'+CI+'&times;32&times;32 &rarr; N&times;'+CO+'&times;'+n32+'&times;'+n32+'.';
+ if(K===1)h+='<br>With K = 1 the layer is a '+CO+'&times;'+CI+' matrix applied to the '+CI+'-vector at every pixel: a <a href="../quiz0/matvec.html">matrix times a vector</a>, '+N*N+' times over.'+
+  (PRE==='1x1'&&CI===3&&CO===2?' Here row 0 turns colour into brightness (0.3R + 0.6G + 0.1B) and row 1 is red minus green.':'');
+ document.getElementById('readout').innerHTML=h;
+}
+function caption(){
+ document.getElementById('caption').innerHTML=
+ '<b>Four axes.</b> A kernel for a 2D image is K&times;K, but a layer has one for every pair of an output channel and an input channel, so its weights are C<sub>out</sub>&times;C<sub>in</sub>&times;K&times;K. '+
+ 'Read the grid like a matrix: row <i>o</i> holds everything output channel <i>o</i> uses, and column <i>c</i> holds everything that reads input channel <i>c</i>. '+
+ 'A <b>filter</b> is a whole row, C<sub>in</sub>&times;K&times;K: filters always extend the full depth of the input. '+
+ 'So each output value is a sum over input channels of K&times;K dot products, plus one bias per output channel, and the layer is a matrix&ndash;vector product whose entries are kernels and whose vector entries are maps.'+
+ '<div style="margin-top:4px"><b>Two pictures of the same activations.</b> C maps of H&times;W, or an H&times;W grid with a C-vector at every pixel: '+
+ 'the second is why a 1&times;1 convolution is just a C<sub>out</sub>&times;C<sub>in</sub> matrix applied pixel by pixel. With a batch in front, activations are N&times;C&times;H&times;W.</div>'+
+ '<div style="margin-top:4px"><b>Counting.</b> Parameters do not depend on the image size at all: C<sub>out</sub>&middot;C<sub>in</sub>&middot;K&sup2; + C<sub>out</sub>. '+
+ 'AlexNet&rsquo;s conv3 is 3&times;3&times;256&times;384 = <b>884,736</b> weights. Its first fully connected layer, fc6, connects a 256&times;6&times;6 activation to 4096 units: '+
+ '256&times;6&times;6&times;4096 = <b>37,748,736</b> weights, over forty times as many (the lecture slide prints 37,748,376, a transposed digit). A fully connected layer is a convolution whose kernel covers the whole input.</div>';
+}
+
+/* ---------- controls ---------- */
+function setShape(){CI=+document.getElementById('ci').value;CO=+document.getElementById('co').value;K=+document.getElementById('kk').value;PRE=null;gen();draw();}
+function preset(p){PRE=p;
+ if(p==='slide'){CI=3;CO=6;K=5;}else{CI=3;CO=2;K=1;}
+ document.getElementById('ci').value=CI;document.getElementById('co').value=CO;document.getElementById('kk').value=K;
+ SEL={o:0,i:2,j:4};gen();draw();}
+document.getElementById('view').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;
+ VIEW=b.dataset.v;Array.from(this.children).forEach(function(x){x.classList.toggle('on',x===b);});draw();});
+(function(){var svg=document.getElementById('fig'),down=false;
+ function pick(e){var t=e.target.closest&&e.target.closest('[data-o]');if(!t)return;
+  var o=+t.dataset.o,i=t.dataset.i,j=t.dataset.j,n={o:o,i:i===undefined?SEL.i:+i,j:j===undefined?SEL.j:+j};
+  if(n.o!==SEL.o||n.i!==SEL.i||n.j!==SEL.j){SEL=n;draw();}}
+ svg.addEventListener('pointerdown',function(e){down=true;pick(e);});
+ // hovering an output pixel picks it too; rows only change on a click
+ svg.addEventListener('pointermove',function(e){var t=e.target.closest&&e.target.closest('[data-i]');if(t||down)pick(e);});
+ window.addEventListener('pointerup',function(){down=false;});})();
+document.addEventListener('keydown',function(e){if(e.target.tagName==='SELECT')return;var N=H-K+1;
+ var m={ArrowLeft:[0,-1],ArrowRight:[0,1],ArrowUp:[-1,0],ArrowDown:[1,0]}[e.key];
+ if(m){e.preventDefault();SEL.i=Math.max(0,Math.min(N-1,SEL.i+m[0]));SEL.j=Math.max(0,Math.min(N-1,SEL.j+m[1]));draw();}
+ else if(e.key==='['||e.key===']'){SEL.o=(SEL.o+(e.key===']'?1:CO-1))%CO;draw();}});
+window.addEventListener('resize',draw);
+gen();caption();draw();
+</script>
+</body>
+</html>

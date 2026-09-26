@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>1D convolution, step by step</title>
+<meta name="description" content="The lecture's example, animated: a three-wide kernel slides along a ten-long signal, multiplies, adds, and drops one output per position.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 16px;max-width:1100px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+.quiz{margin:0}
+svg{max-height:60vh;touch-action:none}
+.row{gap:7px}
+button{height:30px;font-size:13px;padding:0 9px}
+.seg button{height:28px;font-size:12.5px;padding:0 8px}
+.klab{font-size:12.5px}
+input[type=range]{flex:1 1 160px;min-width:100px}
+.rd{font-size:14px;line-height:1.5;min-height:3em}
+.cap{font-size:12.5px;line-height:1.55;padding-top:4px}
+.cell{cursor:ns-resize}
+.cv{font-size:17px;font-variant-numeric:tabular-nums}
+.ix{font-size:11.5px}
+/* on a phone the figure is drawn at about half size, so its type is set larger */
+#fig.m .tn{font-size:20px}#fig.m .ts{font-size:21px}#fig.m .cv{font-size:23px}#fig.m .ix{font-size:16px}
+input.ovl{position:fixed;z-index:10;text-align:center;font-size:17px;font-family:inherit;border:2px solid var(--blue);border-radius:6px;
+ background:var(--surface);color:var(--text-primary);padding:0}
+input.ovl::-webkit-outer-spin-button,input.ovl::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Convolution demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>1D convolution, step by step<span>: slide, multiply, add</span></h1>
+<p class="quiz">The lecture&rsquo;s example: a ten-long signal and the three-wide edge-finder &minus;&frac12; +1 &minus;&frac12;. Press Play, or step one output at a time. <b>Drag any number up or down</b>, or click it to type.</p>
+
+<svg id="fig" viewBox="0 0 1040 545" role="img">
+<title>A kernel sliding along a signal, producing one output per position</title>
+<desc>A row of ten signal cells; under a highlighted three-wide window, the three kernel weights, their three products with the signal, and the sum dropping into a row of eight output cells. Below, the signal and the output drawn as stems on a shared axis.</desc>
+<g id="stage"></g>
+</svg>
+
+<div class="row">
+<button class="main" id="play" onclick="toggle()">Play</button>
+<button id="nxt" onclick="nextStep()">Next step &rarr;</button>
+<span class="klab">step</span>
+<input type="range" id="ts" min="0" max="800" step="1" value="0" oninput="setT(+this.value/100,1)">
+</div>
+<div class="row">
+<span class="klab">kernel</span>
+<div class="seg" id="pre">
+<button data-w="-0.5,1,-0.5">edge-finder</button><button data-w="0.333333,0.333333,0.333333">blur</button><button data-w="-1,0,1">difference</button><button data-w="0,1,0">identity</button><button data-w="1,0,0">shift</button>
+</div>
+<div class="seg" id="mode">
+<button data-c="0" class="on">cross-correlation</button><button data-c="1">true convolution</button>
+</div>
+<button onclick="slideExample()">Slide&rsquo;s example</button>
+</div>
+<div class="rd" id="readout"></div>
+<div class="cap" id="caption"></div>
+
+<script>
+var X=[0,0,1,2,1,0,1,1,0,0],W=[-0.5,1,-0.5],N=10,K=3,NO=N-K+1;
+var t=0,playing=false,raf=null,last=0,STOP=NO,CONV=false,FL=0,fraf=null;
+var BLUE='var(--blue)',GREEN='var(--green)',PINK='var(--pink)',CH=46;
+var SUBS=['₀','₁','₂','₃','₄','₅','₆','₇','₈','₉'];
+
+function cl(v){return Math.max(0,Math.min(1,v));}
+function smooth(a,b,x){var u=cl((x-a)/(b-a));return u*u*(3-2*u);}
+function lerp(a,b,f){return a+(b-a)*f;}
+function fmt(v){var r=Math.round(v*100)/100;if(Math.abs(r)<1e-9)r=0;return (r<0?'−':'')+String(Math.abs(r));}
+function sgn(v){var s=fmt(v);return s==='0'||s[0]==='−'?s:'+'+s;}
+function par(v){return v<0?'('+fmt(v)+')':fmt(v);}
+// The kernel as it meets the window: as written for cross-correlation, reversed
+// for true convolution.
+function we(){return CONV?W.slice().reverse():W;}
+function out(i){var w=we(),s=0;for(var k=0;k<K;k++)s+=w[k]*X[i+k];return s;}
+
+/* ---------- the timeline ---------- */
+// Step s runs from t = s to s+1: the window slides into place, the products
+// appear, and their sum drops into output s.  On a boundary the step just
+// finished is the one shown, as in the matrix-vector demo.
+function stepAt(){if(t<=0)return {s:-1,f:0};var s=Math.min(NO-1,Math.ceil(t-1e-9)-1);return {s:s,f:t-s};}
+
+/* ---------- drawing ---------- */
+function mobile(){return !!(window.matchMedia&&window.matchMedia('(max-width:820px)').matches);}
+function geo(){return mobile()?
+ {vb:'0 0 660 600',X0:30,CW:60,yX:64,yW:146,yP:232,yY:330,yS0:440,yS1:580,top:true}:
+ {vb:'0 0 1040 545',X0:200,CW:64,yX:46,yW:128,yP:206,yY:298,yS0:392,yS1:520,top:false};}
+var G;
+function T(x,y,s,cls,anc,fill,extra){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'"'+
+ (anc?' text-anchor="'+anc+'"':'')+(fill?' style="fill:'+fill+'"':'')+(extra||'')+'>'+s+'</text>';}
+function cx(j){return G.X0+(j+0.5)*G.CW;}
+function cell(x,y,val,opts){opts=opts||{};var w=G.CW-8,s='<g'+(opts.e?' class="cell" data-e="'+opts.e+'"':'')+(opts.op!=null?' opacity="'+opts.op.toFixed(3)+'"':'')+'>';
+ s+='<rect x="'+(x+4).toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+w+'" height="'+CH+'" rx="6" fill="'+(opts.fill||'var(--surface)')+'" stroke="'+(opts.stroke||'var(--border-strong)')+'"'+(opts.dash?' stroke-dasharray="4 3"':'')+'/>';
+ if(opts.tint)s+='<rect x="'+(x+4).toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+w+'" height="'+CH+'" rx="6" fill="'+opts.tint[0]+'" opacity="'+opts.tint[1].toFixed(2)+'" pointer-events="none"/>';
+ if(val!=null)s+='<text x="'+(x+G.CW/2).toFixed(1)+'" y="'+(y+CH/2+6).toFixed(1)+'" text-anchor="middle" class="cv" style="fill:'+(opts.ink||'var(--text-primary)')+';font-weight:'+(opts.bold?600:400)+'" pointer-events="none">'+val+'</text>';
+ return s+'</g>';}
+function label(y,s,up){return G.top?T(G.X0+4,y-10-(up||0),s,'tn','start'):T(G.X0-14,y+CH/2+5,s,'ts','end');}
+function wtint(v){return [v>0?'var(--orange)':'var(--blue)',Math.min(0.45,Math.abs(v)*0.35)];}
+
+function draw(){
+ G=geo();
+ var st=stepAt(),s=st.s,f=st.f,w=we(),i,j,k,h='';
+ var p=s<=0?0:lerp(s-1,s,smooth(0,0.3,f));            // the window's left column
+ var x0=G.X0+p*G.CW;
+ // the window, reaching down through the kernel and the products
+ h+='<rect x="'+(x0-2).toFixed(1)+'" y="'+(G.yX-8)+'" width="'+(K*G.CW+4)+'" height="'+(G.yP+CH+8-(G.yX-8))+'" rx="10" fill="'+BLUE+'" opacity="0.07" stroke="'+BLUE+'" stroke-width="1.5"/>';
+ // signal
+ h+=label(G.yX,'signal x',G.top?24:0);   // on a phone it sits above the indices
+ for(j=0;j<N;j++){h+=cell(G.X0+j*G.CW,G.yX,fmt(X[j]),{e:'x:'+j});
+  h+=T(cx(j),G.yX-8,'x'+SUBS[j],'tn ix','middle');}
+ // kernel: each weight rides in its slot, and a flip swaps the outer two along arcs
+ h+=label(G.yW,CONV?'kernel w, flipped':'kernel w');
+ for(k=0;k<K;k++){var slot=lerp(k,K-1-k,FL),lift=(k-(K-1)/2)*Math.sin(Math.PI*FL)*-34,kx=x0+slot*G.CW;
+  h+=cell(kx,G.yW+lift,fmt(W[k]),{e:'w:'+k,tint:wtint(W[k])});
+  h+=T(kx+G.CW/2,G.yW+CH+15+lift,'w'+SUBS[k],'tn ix','middle');}
+ if(!G.top)for(k=0;k<K;k++)h+=T(x0+(k+0.5)*G.CW,G.yX+CH+(G.yW-G.yX-CH)/2+5,'×','tn','middle');
+ // products, their + signs, and the sum dropping into its output
+ h+=label(G.yP,'products');
+ if(s>=0){var op=smooth(0.3,0.5,f),sum=out(s);
+  // the previous step's products fade where they were while the window moves on
+  if(s>0&&f<0.3){var q=s-1,oo=1-smooth(0,0.15,f);
+   for(k=0;k<K;k++)h+=cell(G.X0+(q+k)*G.CW,G.yP,fmt(w[k]*X[q+k]),{op:oo,dash:true,ink:'var(--text-secondary)'});}
+  for(k=0;k<K;k++){h+=cell(x0+k*G.CW,G.yP,fmt(w[k]*X[s+k]),{op:op,dash:true,ink:'var(--text-secondary)'});
+   if(k)h+=T(x0+k*G.CW,G.yP+CH/2+5,'+','tn','middle','',' opacity="'+op.toFixed(2)+'"');}
+  var g=smooth(0.55,0.9,f);
+  if(g>0&&g<1)h+=T(cx(s+1),lerp(G.yP+CH+22,G.yY+CH/2+6,g),'= '+sgn(sum),'cv gl','middle','',' style="font-weight:600;fill:var(--green-ink)"');}
+ // outputs, each under the centre of its window
+ h+=label(G.yY,'output y');
+ for(i=0;i<NO;i++){var done=i<s||(i===s&&f>=0.9),fx=i===s?smooth(0.85,0.95,f):done?1:0;
+  h+=cell(G.X0+(i+1)*G.CW,G.yY,fx>0?sgn(out(i)):null,{dash:fx===0,stroke:fx>0?'var(--green)':'var(--border)',tint:fx>0?['var(--green)',0.12*fx]:null,op:fx>0?1:0.6,bold:true});
+  h+=T(cx(i+1),G.yY+CH+15,'y'+SUBS[i],'tn ix','middle');}
+ // stems: the signal, and every output, uncomputed ones hollow
+ var ys=[];for(i=0;i<NO;i++)ys.push(out(i));
+ var lo=Math.min(0,Math.min.apply(null,X),Math.min.apply(null,ys)),hi=Math.max(0.5,Math.max.apply(null,X),Math.max.apply(null,ys));
+ function py(v){return G.yS1-(v-lo)/(hi-lo)*(G.yS1-G.yS0-16);}
+ h+=T(G.top?G.X0+4:G.X0-14,G.top?G.yS0-10:G.yS0+14,'<tspan style="fill:var(--blue)">●</tspan> x   <tspan style="fill:var(--green)">●</tspan> y, as stems',G.top?'tn':'ts',G.top?'start':'end');
+ h+='<line x1="'+G.X0+'" y1="'+py(0).toFixed(1)+'" x2="'+(G.X0+N*G.CW)+'" y2="'+py(0).toFixed(1)+'" stroke="var(--border-strong)"/>';
+ for(j=0;j<N;j++){var sx=cx(j)-7;
+  h+='<line x1="'+sx+'" y1="'+py(0).toFixed(1)+'" x2="'+sx+'" y2="'+py(X[j]).toFixed(1)+'" stroke="'+BLUE+'" stroke-width="2"/><circle cx="'+sx+'" cy="'+py(X[j]).toFixed(1)+'" r="4" fill="'+BLUE+'"/>';}
+ for(i=0;i<NO;i++){var ox=cx(i+1)+7,dn=i<s||(i===s&&f>=0.9);
+  h+='<line x1="'+ox+'" y1="'+py(0).toFixed(1)+'" x2="'+ox+'" y2="'+py(ys[i]).toFixed(1)+'" stroke="'+GREEN+'" stroke-width="2" opacity="'+(dn?1:0.35)+'"'+(dn?'':' stroke-dasharray="3 2"')+'/>'+
+   '<circle cx="'+ox+'" cy="'+py(ys[i]).toFixed(1)+'" r="4" fill="'+(dn?GREEN:'var(--bg)')+'" stroke="'+GREEN+'" stroke-width="1.5" opacity="'+(dn?1:0.5)+'"/>';}
+ var svg=document.getElementById('fig');svg.setAttribute('viewBox',G.vb);svg.classList.toggle('m',G.top);
+ document.getElementById('stage').innerHTML=h;
+ document.getElementById('ts').value=Math.round(t*100);
+ document.getElementById('nxt').innerHTML=t>=NO?'Start over':'Next step &rarr;';
+ readout(s,f);
+}
+function readout(s,f){
+ var h,w=we();
+ if(s<0)h='Each output is the kernel&rsquo;s dot product with one three-wide window of the signal. '+N+' inputs and a '+K+'-wide kernel leave room for <b>'+NO+'</b> windows, so '+NO+' outputs.';
+ else{var e=[];for(var k=0;k<K;k++)e.push(par(w[k])+'&middot;'+par(X[s+k]));
+  h='y'+SUBS[s]+' = '+(CONV?'w'+SUBS[2]+'x'+SUBS[s]+' + w'+SUBS[1]+'x'+SUBS[s+1]+' + w'+SUBS[0]+'x'+SUBS[s+2]:'w'+SUBS[0]+'x'+SUBS[s]+' + w'+SUBS[1]+'x'+SUBS[s+1]+' + w'+SUBS[2]+'x'+SUBS[s+2])+
+   ' = '+e.join(' + ')+' = <b>'+fmt(out(s))+'</b>';
+  if(t>=NO)h+='. All '+NO+' outputs: <b>'+Array.from({length:NO},function(_,i){return fmt(out(i));}).join(', ')+'</b>.';}
+ document.getElementById('readout').innerHTML=h;
+}
+function caption(){
+ document.getElementById('caption').innerHTML=
+ '<b>The rule.</b> y[<i>i</i>] = &Sigma;<sub><i>k</i></sub> w[<i>k</i>]&middot;x[<i>i</i>+<i>k</i>]: lay the kernel over the window starting at <i>i</i>, multiply, add. '+
+ 'A signal of width <i>W</i> and a kernel of width <i>K</i> leave <i>W</i> &minus; <i>K</i> + 1 windows, so the output is two shorter than the input here. '+
+ 'Keeping the width, by padding the ends with zeros, comes up in a later demo.'+
+ '<div style="margin-top:4px"><b>What the edge-finder finds.</b> &minus;&frac12; +1 &minus;&frac12; compares each value with the average of its two neighbours. '+
+ 'It is zero on any flat stretch or straight ramp, positive on a peak (the 2) and on each end of a plateau (the pair of 1s), and negative in a dip, like the 0 between two 1s, or at the foot of a rise. '+
+ 'Try <b>blur</b>, which averages instead, or <b>shift</b>, whose output is the signal moved over by one.</div>'+
+ '<div style="margin-top:4px"><b>Convolution or cross-correlation?</b> What is animated by default, sliding w as written, is strictly <i>cross-correlation</i>. '+
+ 'True convolution flips the kernel first: y[<i>i</i>] = &Sigma;<sub><i>k</i></sub> w[<i>k</i>]&middot;x[<i>i</i>+<i>K</i>&minus;1&minus;<i>k</i>], which is what makes it commute and associate in signal processing. '+
+ 'Deep learning libraries compute cross-correlation and call it convolution, and nothing is lost: the kernel is learned, so a network that needed the flipped one would simply learn it flipped. '+
+ 'That is why the lecture says to forget the distinction. For a symmetric kernel like the edge-finder the two agree; try <b>difference</b> or <b>shift</b> to see them differ.</div>'+
+ '<div style="margin-top:4px"><b>What nobody asked, but everybody should see.</b> Every output is the same dot product at a different offset, so the whole convolution is one '+
+ '<a href="../quiz0/matvec.html">matrix-vector product</a>: an '+NO+'&times;'+N+' matrix whose rows are copies of w, each moved one column right. '+
+ 'Of its '+(NO*N)+' entries only '+K+' distinct numbers are free, and that sharing is where convolution&rsquo;s economy comes from.</div>';
+}
+
+/* ---------- controls ---------- */
+function setT(v,stop){t=Math.max(0,Math.min(NO,v));if(stop)pause();draw();}
+function step(now){var dt=Math.min(0.05,(now-last)/1000);last=now;
+ if(playing){t+=dt*0.7;if(t>=STOP){t=STOP;pause();}}
+ draw();raf=playing?requestAnimationFrame(step):null;}
+function pause(){playing=false;document.getElementById('play').textContent=t>=NO?'Replay':'Play';
+ if(raf){cancelAnimationFrame(raf);raf=null;}}
+function toggle(){if(playing){pause();return;}
+ if(t>=NO)t=0;STOP=NO;playing=true;document.getElementById('play').textContent='Pause';
+ last=performance.now();raf=requestAnimationFrame(step);}
+function nextStep(){if(playing)pause();if(t>=NO){t=0;draw();}
+ STOP=Math.min(NO,Math.floor(t+1e-9)+1);playing=true;document.getElementById('play').textContent='Pause';
+ last=performance.now();raf=requestAnimationFrame(step);}
+function rewind(){t=0;pause();draw();}
+function markPreset(){Array.from(document.getElementById('pre').children).forEach(function(b){
+ var v=b.dataset.w.split(',').map(Number);b.classList.toggle('on',v.every(function(x,k){return Math.abs(x-W[k])<1e-3;}));});}
+function setVal(kind,j,v){if(isNaN(v))return;v=Math.max(-9,Math.min(9,v));
+ if(kind==='x')X[j]=v;else W[j]=v;markPreset();rewind();}
+function slideExample(){X=[0,0,1,2,1,0,1,1,0,0];W=[-0.5,1,-0.5];setMode(false,true);markPreset();rewind();}
+document.getElementById('pre').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;
+ W=b.dataset.w.split(',').map(Number);markPreset();rewind();});
+// Flipping animates the outer weights swapping places along arcs.
+function setMode(c,now){CONV=c;Array.from(document.getElementById('mode').children).forEach(function(b){b.classList.toggle('on',+b.dataset.c===(c?1:0));});
+ var goal=c?1:0;if(fraf)cancelAnimationFrame(fraf);
+ if(now){FL=goal;return;}
+ var f0=FL,t0=performance.now();
+ (function f(n){var u=cl((n-t0)/700);FL=lerp(f0,goal,u<0.5?2*u*u:1-Math.pow(-2*u+2,2)/2);draw();if(u<1)fraf=requestAnimationFrame(f);else fraf=null;})(t0);}
+document.getElementById('mode').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;
+ var c=b.dataset.c==='1';if(c!==CONV){t=0;pause();setMode(c);}});
+// Drag a number up or down to change it, or click it to type.  The handlers sit
+// on the svg, which outlives the redraws.
+(function(){var svg=document.getElementById('fig'),d=null;
+ svg.addEventListener('pointerdown',function(e){var g=e.target.closest&&e.target.closest('[data-e]');if(!g)return;
+  var a=g.dataset.e.split(':');d={kind:a[0],j:+a[1],y:e.clientY,v0:a[0]==='x'?X[+a[1]]:W[+a[1]],moved:false};
+  svg.setPointerCapture(e.pointerId);e.preventDefault();});
+ svg.addEventListener('pointermove',function(e){if(!d)return;var n=Math.round((d.y-e.clientY)/16);
+  if(n)d.moved=true;if(d.moved){var step=d.kind==='x'?1:0.5,v=Math.round((d.v0+n*step)/step)*step;
+   if(d.kind==='x'?v!==X[d.j]:v!==W[d.j])setVal(d.kind,d.j,v);}});
+ svg.addEventListener('pointerup',function(){if(!d)return;var dd=d;d=null;if(!dd.moved)typeAt(dd.kind,dd.j);});
+ svg.addEventListener('pointercancel',function(){d=null;});})();
+function typeAt(kind,j){
+ var g=document.querySelector('[data-e="'+kind+':'+j+'"] rect');if(!g)return;
+ var r=g.getBoundingClientRect(),inp=document.createElement('input');
+ inp.type='number';inp.step='any';inp.className='ovl';inp.value=kind==='x'?X[j]:Math.round(W[j]*1000)/1000;
+ inp.style.left=r.left+'px';inp.style.top=r.top+'px';inp.style.width=r.width+'px';inp.style.height=r.height+'px';
+ document.body.appendChild(inp);inp.focus();inp.select();
+ var done=false;function commit(){if(done)return;done=true;var v=parseFloat(inp.value);inp.remove();if(!isNaN(v))setVal(kind,j,v);}
+ inp.addEventListener('keydown',function(e){if(e.key==='Enter')commit();else if(e.key==='Escape'){done=true;inp.remove();}e.stopPropagation();});
+ inp.addEventListener('blur',commit);}
+document.addEventListener('keydown',function(e){if(e.target.tagName==='INPUT')return;
+ if(e.key===' '){e.preventDefault();toggle();}
+ else if(e.key==='Enter'){e.preventDefault();nextStep();}
+ else if(e.key==='ArrowLeft')setT(t-0.1,1);
+ else if(e.key==='ArrowRight')setT(t+0.1,1);});
+window.addEventListener('resize',draw);
+markPreset();caption();draw();
+</script>
+</body>
+</html>

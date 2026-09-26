@@ -51,9 +51,10 @@ footer a{color:var(--text-secondary)}
   <p class="eyebrow">Northeastern University &middot; CS 7150 &middot; Fall 2026</p>
   <h1>Convolutions, explained</h1>
   <p>Interactive pieces for the convolution lecture and <a href="http://yann.lecun.com/exdb/publis/pdf/lecun-89e.pdf">LeCun et al. 1989</a>:
-     first, why comparing images pixel by pixel fails as soon as something moves; then the oriented
-     detector Hubel and Wiesel found in the cat's visual cortex, rebuilt as a small grid of weights, and why
-     you need a copy of it at every position.</p>
+     first, why comparing images pixel by pixel fails as soon as something moves, and the oriented
+     detector Hubel and Wiesel found in the cat&rsquo;s visual cortex; then the operation itself, in 1D
+     and 2D; why sharing weights makes it shift-equivariant, and pooling makes it invariant; how far
+     each unit sees as layers stack, and where padding creeps in; and the four axes of a layer&rsquo;s weights.</p>
 </header>
 
 <ol class="qs">
@@ -76,6 +77,55 @@ footer a{color:var(--text-secondary)}
      goes silent, which is why the same detector has to be copied to every position; a bank of eight
      angles reads out the orientation.</p>
   <a class="go" href="orientation.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">The operation</div>
+  <h2><a href="conv1d.html">1D convolution, step by step</a></h2>
+  <p class="what">The lecture&rsquo;s example animated: the three-wide edge-finder slides along a ten-long
+     signal, multiplies, adds, and drops one output per position, with both drawn as stems. Edit any
+     number, try blur or shift, and flip the kernel to see true convolution against the
+     cross-correlation that libraries actually compute.</p>
+  <a class="go" href="conv1d.html">Open the explainer &rarr;</a>
+</li>
+<!-- weight-sharing -->
+
+<li class="done">
+  <div class="qtag">The operation, in 2D</div>
+  <h2><a href="conv2d.html">2D convolution and oriented edges</a></h2>
+  <p class="what">Step a 3&times;3 window over the lecture&rsquo;s striped image: the vertical edge-finder
+     lights up and the horizontal one finds nothing. Then draw a picture and convolve it live with
+     edge-finders at any angle, Sobel, blur and sharpen, or weights you drag yourself.</p>
+  <a class="go" href="conv2d.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">Weight sharing, in action</div>
+  <h2><a href="equivariance.html">Equivariance and invariance</a></h2>
+  <p class="what">Shift then convolve, or convolve then shift: the two paths meet exactly, because every
+     position uses the same weights. Pool over positions and the result stops caring where the digit is.
+     Then turn on stride 2 and watch an odd shift break both.</p>
+  <a class="go" href="equivariance.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">Depth, stride, padding</div>
+  <h2><a href="receptive-field.html">Receptive field through the layers</a></h2>
+  <p class="what">A 1D network drawn unit by unit: point at any unit to light the cone of inputs it
+     depends on. Stack layers and the field grows by (K&minus;1)&middot;d each; add stride and the growth
+     multiplies. With same padding, watch the band of units that have read zeros widen with depth
+     until edge units near the top see mostly padding.</p>
+  <a class="go" href="receptive-field.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">Four axes</div>
+  <h2><a href="tensors.html">The 4D weight tensor</a></h2>
+  <p class="what">A layer&rsquo;s weights drawn as a grid of kernels, one row per output channel and one
+     column per input channel. Point at any output pixel to see the patch it reads in every channel,
+     one dot product per kernel, and the bias adding up; switch between C maps and a grid of
+     C-vectors, where a 1&times;1 convolution is a matrix at every pixel.</p>
+  <a class="go" href="tensors.html">Open the explainer &rarr;</a>
 </li>
 </ol>
 
