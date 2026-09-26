@@ -136,9 +136,10 @@ footer a{color:var(--text-secondary)}
   <div class="qtag">Normalization axes</div>
   <h2><a href="norms.html">Which axes get normalized</a></h2>
   <p class="what">A batch of activations drawn as a block of cells, N examples by C channels by
-     positions. Pick BatchNorm, LayerNorm, InstanceNorm or GroupNorm and click any cell: the cells
-     that share its mean and standard deviation light up, with the numbers. Only BatchNorm depends
-     on the rest of the batch, which is why transformers use LayerNorm.</p>
+     positions. Pick BatchNorm, LayerNorm, InstanceNorm, GroupNorm, or the per-token LayerNorm and
+     RMSNorm that transformers use, and click any cell: the cells that share its statistics light up,
+     with the numbers. Only BatchNorm depends on the rest of the batch; and why modern transformers put
+     the norm inside the residual branch (pre-norm).</p>
   <a class="go" href="norms.html">Open the explainer &rarr;</a>
 </li>
 </ol>
