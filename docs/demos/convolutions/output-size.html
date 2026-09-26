@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How big is the output?</title>
+<meta name="description" content="Why a K×K window on a W×W image leaves (W−K+2P)/S+1 outputs: count where the window can start. Stepped on the lecture's 7×7 example, then a stack of layers drawn as shrinking 3D blocks, from the slide's 32→28→26→24 to AlexNet and LeNet 1989.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 16px;max-width:1100px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+h2{font-size:15.5px;font-weight:600;margin:10px 0 0;border-top:1px solid var(--border);padding-top:10px}
+h2 span{font-weight:400;color:var(--text-secondary)}
+.quiz{margin:0}
+svg{max-height:56vh;touch-action:none;user-select:none;-webkit-user-select:none}
+#fig3{max-height:52vh;cursor:grab}
+#fig3:active{cursor:grabbing}
+.row{gap:7px}
+button,select{height:30px;font-size:13px;padding:0 9px}
+.seg{flex-wrap:wrap}
+.seg button{height:28px;font-size:12px;padding:0 8px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:22px}
+input[type=range]{flex:0 1 110px;min-width:70px}
+label.cb{font-size:13px}
+.rd{font-size:14px;line-height:1.5;min-height:3em}
+.cap{font-size:12.5px;line-height:1.55;padding-top:4px}
+table.ly{border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+table.ly th{font-weight:400;color:var(--text-muted);text-align:left;padding:2px 8px 2px 0;white-space:nowrap}
+table.ly td{padding:2px 8px 2px 0;color:var(--text-secondary);white-space:nowrap}
+table.ly input{width:48px;height:26px;font-size:13px;font-family:inherit;border:1px solid var(--border-strong);border-radius:6px;
+ background:var(--surface);color:var(--text-primary);padding:0 4px;text-align:right}
+table.ly input:disabled{opacity:.5}
+table.ly button{height:24px;font-size:12px;padding:0 7px}
+table.ly td.bad{color:var(--red);font-weight:500}
+table.ly td.eq{color:var(--text-primary)}
+.tw{overflow-x:auto;max-width:100%}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Convolution demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>How big is the output?<span>: count where the window can start</span></h1>
+<p class="quiz">The lecture&rsquo;s question: a 3&times;3 filter on a 7&times;7 input, how big is the output? Every output is one place the window fits, so <b>count the places</b>. Press Play, then change the kernel, stride and padding.</p>
+
+<svg id="fig1" viewBox="0 0 1000 420" role="img">
+<title>A window stepped over an input grid, and the output it fills</title>
+<desc>Left, the input grid, with zero padding drawn as dashed cells around it, a dot in every cell where the window can start, and the current window outlined; cells the window never reaches are hatched. Right, the output grid, one cell per start position, filling in as the window moves.</desc>
+<defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="var(--red)" stroke-width="1.6" opacity="0.55"/></pattern></defs>
+<g id="stage1"></g>
+</svg>
+
+<div class="row">
+<button class="main" id="play" onclick="toggle()">Play</button>
+<button id="nxt" onclick="nextStep()">Next step &rarr;</button>
+<span class="klab">step</span>
+<input type="range" id="ts" min="0" max="25" step="1" value="0" oninput="pause();TC=+this.value;draw1()" style="flex:1 1 140px">
+<span class="knum" id="tsv" style="min-width:48px"></span>
+</div>
+<div class="row">
+<span class="klab">input W</span><input type="range" id="w" min="5" max="13" step="1" value="7" oninput="setP()"><span class="knum" id="wv"></span>
+<span class="klab">kernel K</span><input type="range" id="k" min="1" max="7" step="1" value="3" oninput="setP()"><span class="knum" id="kv"></span>
+<span class="klab">stride S</span><input type="range" id="s" min="1" max="4" step="1" value="1" oninput="setP()"><span class="knum" id="sv"></span>
+<span class="klab">padding P</span><input type="range" id="p" min="0" max="3" step="1" value="0" oninput="setP()"><span class="knum" id="pv"></span>
+</div>
+<div class="row">
+<span class="klab">try</span>
+<div class="seg" id="seg1">
+<button data-v="7,3,1,0" class="on">the slide: 7&times;7, 3&times;3</button>
+<button data-v="7,3,2,0">stride 2</button>
+<button data-v="8,3,2,0">a stride that doesn&rsquo;t fit</button>
+<button data-v="7,5,1,0">a bigger kernel</button>
+<button data-v="7,3,1,1">padding 1: same size</button>
+</div>
+</div>
+<div class="rd" id="rd1"></div>
+
+<h2>A stack of layers<span>: each one shrinks what it is given</span></h2>
+<p class="quiz">Each activation drawn as a block, channels &times; height &times; width, with the front face to scale. Between blocks, one filter: K&times;K across the <i>full depth</i> of its input, making one number of the next block. <b>Drag to turn the picture.</b> Edit any layer below.</p>
+
+<svg id="fig3" viewBox="0 0 1000 380" role="img">
+<title>A stack of convolution layers drawn as shrinking 3D blocks</title>
+<desc>Each activation tensor is a solid box: its front face is height by width, to scale, and its depth is the number of channels. Between consecutive boxes a small orange box, the filter, sits in the input's top-left corner spanning its full depth, with thin lines converging to one cell of the next box.</desc>
+<g id="stage3"></g>
+</svg>
+
+<div class="row">
+<span class="klab">preset</span>
+<div class="seg" id="seg3">
+<button data-p="slide" class="on">the slide&rsquo;s stack</button>
+<button data-p="alex227">AlexNet conv1 (227)</button>
+<button data-p="alex224">AlexNet as printed (224)</button>
+<button data-p="lenet">LeNet 1989</button>
+<button data-p="deep">too deep</button>
+</div>
+<label class="cb"><input type="checkbox" id="same" onchange="sameChanged()">same padding everywhere</label>
+</div>
+<div class="tw"><table class="ly" id="tbl"></table></div>
+<div class="rd" id="rd3"></div>
+<div class="cap" id="caption"></div>
+
+<script>
+var BLUE='var(--blue)',PINK='var(--pink)',ORANGE='var(--orange)',GREEN='var(--green)',RED='var(--red)',INK='var(--text-primary)';
+var rad=Math.PI/180;
+function mobile(){return !!(window.matchMedia&&window.matchMedia('(max-width:820px)').matches);}
+function T(x,y,s,cls,anc,fill,extra){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'"'+
+ (anc?' text-anchor="'+anc+'"':'')+(fill?' style="fill:'+fill+'"':'')+(extra||'')+'>'+s+'</text>';}
+function mix(c,pct){return 'color-mix(in oklab, '+c+' '+pct+'%, var(--surface))';}
+function m(v){return String(v).replace('-','−');}
+// The rule, as a count of start positions 0, S, 2S, ... that still leave room for K.
+function outSize(W,K,S,P){var span=W+2*P-K;return span<0?0:Math.floor(span/S)+1;}
+
+/* ================= part 1: one layer, stepped ================= */
+var W=7,K=3,S=1,P=0,TC=0,playing=false,raf=null,last=0;
+function n1(){return outSize(W,K,S,P);}
+function setP(){
+ W=+document.getElementById('w').value;K=+document.getElementById('k').value;
+ S=+document.getElementById('s').value;P=+document.getElementById('p').value;
+ Array.from(document.getElementById('seg1').children).forEach(function(b){b.classList.toggle('on',b.dataset.v===[W,K,S,P].join(','));});
+ TC=0;pause();draw1();
+}
+function lay1(){var mob=mobile(),Wp=W+2*P,room=mob?330:400,cs=Math.min(34,room/Wp);
+ return mob?{vb:'0 0 380 '+Math.round(50+Wp*cs+80+Math.max(1,n1())*cs+20),cs:cs,ix:25,iy:50,ox:25,oy:50+Wp*cs+80}:
+  {vb:'0 0 1000 '+Math.round(Math.max(300,Wp*cs+110)),cs:cs,ix:20,iy:50,ox:20+Wp*cs+Math.max(0,n1()*S+K-Wp)*cs+110,oy:50};}
+function draw1(){
+ ['w','k','s','p'].forEach(function(id){document.getElementById(id+'v').textContent=document.getElementById(id).value;});
+ var L=lay1(),cs=L.cs,Wp=W+2*P,n=n1(),tot=n*n,s='',a,b,i,j;
+ var ts=document.getElementById('ts');ts.max=tot;if(TC>tot)TC=tot;ts.value=TC;
+ document.getElementById('tsv').textContent=TC+' / '+tot;
+ var cur=TC-1,cr=Math.floor(cur/n),cc=cur%n;      // the window just computed
+ var reach=(n-1)*S+K;                              // padded cells past this are never read
+ var ix=L.ix,iy=L.iy;
+ s+=T(ix,iy-12,'input: '+W+' &times; '+W+(P?', padded by '+P+' on every side':''),'ts','start');
+ for(i=0;i<Wp;i++)for(j=0;j<Wp;j++){var x=ix+j*cs,y=iy+i*cs,pad=i<P||j<P||i>=P+W||j>=P+W;
+  s+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+cs.toFixed(1)+'" height="'+cs.toFixed(1)+'" fill="'+(pad?'none':'var(--surface)')+
+   '" stroke="'+(pad?'var(--text-muted)':'var(--border)')+'" stroke-width="'+(pad?0.8:0.7)+'"'+(pad?' stroke-dasharray="3 3"':'')+'/>';
+  if(pad&&cs>=16)s+=T(x+cs/2,y+cs/2+4,'0','tn','middle','var(--text-muted)');
+  if(n>0&&(i>=reach||j>=reach))s+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+cs.toFixed(1)+'" height="'+cs.toFixed(1)+'" fill="url(#hatch)"/>';}
+ // start positions: filled once visited, hollow until then
+ for(a=0;a<n;a++)for(b=0;b<n;b++){var k2=a*n+b,cx=ix+(b*S+0.5)*cs,cy=iy+(a*S+0.5)*cs,done=k2<TC;
+  s+='<circle cx="'+cx.toFixed(1)+'" cy="'+cy.toFixed(1)+'" r="'+Math.max(2.5,cs*0.16).toFixed(1)+'" fill="'+(done?PINK:'var(--surface)')+'" stroke="'+(done?PINK:'var(--text-muted)')+'" stroke-width="1.3"/>';}
+ if(TC>0&&n>0){
+  s+='<rect x="'+(ix+cc*S*cs).toFixed(1)+'" y="'+(iy+cr*S*cs).toFixed(1)+'" width="'+(K*cs).toFixed(1)+'" height="'+(K*cs).toFixed(1)+'" fill="'+PINK+'" fill-opacity="0.1" stroke="'+PINK+'" stroke-width="3" rx="2"/>';
+  // at the end of a row, the next jump would hang off the edge
+  if(cc===n-1){var gx=ix+(cc+1)*S*cs;
+   s+='<rect x="'+gx.toFixed(1)+'" y="'+(iy+cr*S*cs).toFixed(1)+'" width="'+(K*cs).toFixed(1)+'" height="'+(K*cs).toFixed(1)+'" fill="none" stroke="'+RED+'" stroke-width="2" stroke-dasharray="5 4" rx="2"/>';
+   s+=T(gx+K*cs+4,iy+cr*S*cs+14,'&#10007; won&rsquo;t fit','tn','start','var(--red)');}}
+ if(n>0&&reach<Wp)s+=T(ix,iy+Wp*cs+20,'<tspan style="fill:var(--red)">hatched</tspan>: never under any window','tn','start');
+ s+=T(ix,iy+Wp*cs+(n>0&&reach<Wp?38:20),'<tspan style="fill:var(--pink)">&#9679;</tspan> where the window can start: '+n+' across, '+n+' down','tn','start');
+ // the output
+ var ox=L.ox,oy=L.oy;
+ s+=T(ox,oy-12,n>0?'output: '+n+' &times; '+n:'output: nothing, the window never fits','ts','start',n>0?'':'var(--red)');
+ for(a=0;a<n;a++)for(b=0;b<n;b++){var k3=a*n+b,x2=ox+b*cs,y2=oy+a*cs,dn=k3<TC;
+  s+='<rect x="'+x2.toFixed(1)+'" y="'+y2.toFixed(1)+'" width="'+cs.toFixed(1)+'" height="'+cs.toFixed(1)+'" fill="'+(dn?mix(BLUE,k3===cur?55:28):'var(--surface)')+'" stroke="'+(k3===cur?PINK:'var(--border)')+'" stroke-width="'+(k3===cur?2.5:0.7)+'"/>';}
+ var svg=document.getElementById('fig1');svg.setAttribute('viewBox',L.vb);
+ document.getElementById('stage1').innerHTML=s;
+ // readout: the count, spelled out
+ var span=Wp-K,h;
+ if(n===0)h='The padded input is '+Wp+' wide and the kernel '+K+': the window cannot start anywhere, so there is <b style="color:var(--red)">no output</b>.';
+ else{var st=[];for(i=0;i<Math.min(n,5);i++)st.push(i*S);
+  h='Along a row the window can start at <b>'+st.join(', ')+(n>5?', &hellip;, '+(n-1)*S:'')+'</b>: every multiple of '+S+' up to '+
+   (P?'('+W+' + 2&middot;'+P+')':W)+' &minus; '+K+' = '+span+'. That is ⌊'+span+' / '+S+'⌋ + 1 = <b>'+n+'</b> starts, so the output is <b>'+n+' &times; '+n+'</b>.';
+  if(span%S)h+=' The division leaves '+(span%S)+' over: the last '+(Wp-reach>1?(Wp-reach)+' columns and rows':'column and row')+' are <span style="color:var(--red)">never read</span>.';
+  if(P&&n===W)h+=' Padding by '+P+' = (K&minus;1)/2 keeps the size.';}
+ document.getElementById('rd1').innerHTML=h;
+}
+function step(now){var dt=Math.min(0.1,(now-last)/1000);last=now;
+ if(playing){ACC+=dt*Math.max(2.5,n1()*n1()/7);while(ACC>=1&&TC<n1()*n1()){TC++;ACC-=1;}
+  if(TC>=n1()*n1())pause();draw1();}
+ raf=playing?requestAnimationFrame(step):null;}
+var ACC=0;
+function pause(){playing=false;document.getElementById('play').textContent=TC>=n1()*n1()&&TC>0?'Replay':'Play';if(raf){cancelAnimationFrame(raf);raf=null;}}
+function toggle(){if(playing){pause();return;}if(TC>=n1()*n1())TC=0;playing=true;ACC=0;
+ document.getElementById('play').textContent='Pause';last=performance.now();raf=requestAnimationFrame(step);}
+function nextStep(){pause();if(TC>=n1()*n1())TC=0;else TC++;draw1();}
+document.getElementById('seg1').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;
+ var v=b.dataset.v.split(',');['w','k','s','p'].forEach(function(id,i){document.getElementById(id).value=v[i];});setP();});
+
+/* ================= part 3: a stack, drawn in 3D ================= */
+var IN={C:3,H:32},LAYERS=[],PHI=28,THE=18;
+var PRESETS={
+ slide:{C:3,H:32,L:[[5,1,0,6],[3,1,0,10],[3,1,0,12]]},
+ alex227:{C:3,H:227,L:[[11,4,0,96]]},
+ alex224:{C:3,H:224,L:[[11,4,0,96]]},
+ lenet:{C:1,H:16,L:[[5,2,2,12],[5,2,2,12]]},
+ deep:{C:1,H:16,L:[[5,1,0,8],[5,1,0,8],[5,1,0,8],[5,1,0,8]]}};
+var PRESET='slide';
+function loadPreset(p){PRESET=p;var q=PRESETS[p];IN={C:q.C,H:q.H};
+ LAYERS=q.L.map(function(l){return {K:l[0],S:l[1],P:l[2],C:l[3]};});
+ document.getElementById('same').checked=false;
+ Array.from(document.getElementById('seg3').children).forEach(function(b){b.classList.toggle('on',b.dataset.p===p);});
+ table();draw3();}
+function pOf(l){return document.getElementById('same').checked?Math.floor((l.K-1)/2):l.P;}
+// sizes through the stack; stops at the first layer that leaves nothing
+function sizes(){var out=[{C:IN.C,H:IN.H}],h=IN.H;
+ for(var i=0;i<LAYERS.length;i++){var l=LAYERS[i],o=outSize(h,l.K,l.S,pOf(l));
+  out.push({C:l.C,H:o,bad:o<=0});if(o<=0)break;h=o;}return out;}
+function arith(h,l){var p=pOf(l),num=h-l.K+2*p,o=outSize(h,l.K,l.S,p);
+ var e=h+' &minus; '+l.K+(p?' + 2&middot;'+p:'');
+ if(num<0)return e+' = '+m(num)+' &lt; 0: nothing';
+ if(l.S===1)return e+' + 1 = '+o;
+ var q=num/l.S;
+ return '⌊('+e+') / '+l.S+'⌋ + 1 = '+(num%l.S?'⌊'+(+q.toFixed(2))+'⌋ + 1 = ':'')+o;}
+function table(){
+ var same=document.getElementById('same').checked,h='<tr><th></th><th>kernel K</th><th>stride S</th><th>pad P</th><th>filters</th><th>output</th><th>size arithmetic</th><th></th></tr>';
+ h+='<tr><td>input</td><td colspan="3" style="color:var(--text-muted)">channels <input data-in="C" type="number" min="1" max="512" value="'+IN.C+'"> &nbsp;size <input data-in="H" type="number" min="1" max="512" value="'+IN.H+'"></td><td></td><td id="o0" class="eq"></td><td></td><td></td></tr>';
+ LAYERS.forEach(function(l,i){h+='<tr><td>conv '+(i+1)+'</td>'+
+  ['K','S','P','C'].map(function(f){return '<td><input data-i="'+i+'" data-f="'+f+'" type="number" min="'+(f==='P'?0:1)+'" max="'+(f==='C'?512:f==='K'?31:f==='S'?8:15)+'" value="'+(f==='P'?pOf(l):l[f])+'"'+(f==='P'&&same?' disabled':'')+'></td>';}).join('')+
+  '<td id="o'+(i+1)+'"></td><td id="a'+(i+1)+'"></td><td><button data-rm="'+i+'" title="remove this layer">&times;</button></td></tr>';});
+ h+='<tr><td colspan="8"><button id="add">+ add a layer</button></td></tr>';
+ var t=document.getElementById('tbl');t.innerHTML=h;
+ t.querySelectorAll('input').forEach(function(inp){inp.addEventListener('input',function(){var v=Math.round(+inp.value);if(!(v>=+inp.min))return;
+  if(inp.dataset.in)IN[inp.dataset.in]=v;else LAYERS[+inp.dataset.i][inp.dataset.f]=v;unpreset();draw3();});});
+ t.querySelectorAll('button[data-rm]').forEach(function(b){b.onclick=function(){LAYERS.splice(+b.dataset.rm,1);unpreset();table();draw3();};});
+ document.getElementById('add').onclick=function(){var l=LAYERS[LAYERS.length-1]||{K:3,S:1,P:0,C:8};LAYERS.push({K:3,S:1,P:0,C:l.C});unpreset();table();draw3();};
+}
+function unpreset(){PRESET=null;Array.from(document.getElementById('seg3').children).forEach(function(b){b.classList.remove('on');});}
+function sameChanged(){table();draw3();}
+
+// Camera: orthographic, azimuth PHI around the vertical, elevation THE; x runs along
+// the stack, y is up (height), z goes back (channels).  Faces whose normal points at
+// the viewer are the only ones drawn, so a box needs no hidden edges.
+function cam(){var f=PHI*rad,t=THE*rad,V=[Math.sin(f)*Math.cos(t),Math.sin(t),-Math.cos(f)*Math.cos(t)],R=[Math.cos(f),0,Math.sin(f)];
+ var U=[R[1]*V[2]-R[2]*V[1],R[2]*V[0]-R[0]*V[2],R[0]*V[1]-R[1]*V[0]];return {V:V,R:R,U:U};}
+function dot(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];}
+function boxFaces(x0,x1,y0,y1,z0,z1){
+ var c=function(x,y,z){return [x,y,z];};
+ return [{n:[0,0,-1],k:'front',p:[c(x0,y0,z0),c(x1,y0,z0),c(x1,y1,z0),c(x0,y1,z0)]},
+  {n:[0,0,1],k:'side',p:[c(x0,y0,z1),c(x1,y0,z1),c(x1,y1,z1),c(x0,y1,z1)]},
+  {n:[1,0,0],k:'side',p:[c(x1,y0,z0),c(x1,y0,z1),c(x1,y1,z1),c(x1,y1,z0)]},
+  {n:[-1,0,0],k:'side',p:[c(x0,y0,z0),c(x0,y0,z1),c(x0,y1,z1),c(x0,y1,z0)]},
+  {n:[0,1,0],k:'top',p:[c(x0,y1,z0),c(x1,y1,z0),c(x1,y1,z1),c(x0,y1,z1)]},
+  {n:[0,-1,0],k:'top',p:[c(x0,y0,z0),c(x1,y0,z0),c(x1,y0,z1),c(x0,y0,z1)]}];}
+function draw3(){
+ var sz=sizes(),mob=mobile(),C=cam(),i,s='';
+ var Hmax=0;sz.forEach(function(q){if(q.H>0)Hmax=Math.max(Hmax,q.H);});
+ // depth grows as the square root of the channel count, so 3 and 96 both fit
+ function dep(c){return Hmax*Math.min(0.9,Math.max(0.05,0.11*Math.sqrt(c)));}
+ // Each block keeps its own orientation, but the blocks are laid out along the
+ // camera's horizontal, so the row stays level however the view is turned.
+ var blocks=[],t=0;
+ sz.forEach(function(q,i){if(q.H<=0)return;var d=dep(q.C),b={i:i,x0:0,x1:q.H,y0:-q.H/2,y1:q.H/2,z0:0,z1:d,q:q},lo=1e9,hi=-1e9;
+  [0,q.H].forEach(function(X){[0,d].forEach(function(Z){var r=X*C.R[0]+Z*C.R[2];lo=Math.min(lo,r);hi=Math.max(hi,r);});});
+  t+=-lo;b.o=[t*C.R[0],0,t*C.R[2]];t+=hi+0.35*Hmax;blocks.push(b);});
+ function at(b,p){return [p[0]+b.o[0],p[1],p[2]+b.o[2]];}
+ // project everything once to fit the picture to the frame
+ var VW=mob?560:1000,VH=mob?420:380,top=mob?30:70,bot=34;
+ function pr(p){return [dot(p,C.R),-dot(p,C.U)];}
+ var xs=[],ys=[];
+ blocks.forEach(function(b){[b.x0,b.x1].forEach(function(X){[b.y0,b.y1].forEach(function(Y){[b.z0,b.z1].forEach(function(Z){var r=pr(at(b,[X,Y,Z]));xs.push(r[0]);ys.push(r[1]);});});});});
+ var bad=sz[sz.length-1].bad,extraR=bad?(mob?150:190):0;
+ var mnx=Math.min.apply(null,xs),mxx=Math.max.apply(null,xs),mny=Math.min.apply(null,ys),mxy=Math.max.apply(null,ys);
+ var sc=Math.min((VW-40-extraR)/(mxx-mnx||1),(VH-top-bot)/(mxy-mny||1));
+ var ox=20+(VW-40-extraR-sc*(mxx-mnx))/2-sc*mnx,oy=top+(VH-top-bot-sc*(mxy-mny))/2-sc*mny;
+ function P2(p){var r=pr(p);return [ox+sc*r[0],oy+sc*r[1]];}
+ function poly(pts,fill,stroke,sw,op){return '<polygon points="'+pts.map(function(p){var q=P2(p);return q[0].toFixed(1)+','+q[1].toFixed(1);}).join(' ')+
+  '" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+(sw||1)+'" stroke-linejoin="round"'+(op!=null?' opacity="'+op+'"':'')+'/>';}
+ function prism(b,x0,x1,y0,y1,z0,z1,col,shade){var o='';
+  boxFaces(x0,x1,y0,y1,z0,z1).forEach(function(f){if(dot(f.n,C.V)<=1e-6)return;
+   o+=poly(f.p.map(function(p){return at(b,p);}),mix(col,shade[f.k]),'color-mix(in oklab, '+col+' 70%, var(--text-primary))',1);});return o;}
+ // far blocks first
+ var order=blocks.slice().sort(function(a,b){return dot(at(a,[(a.x0+a.x1)/2,0,(a.z0+a.z1)/2]),C.V)-dot(at(b,[(b.x0+b.x1)/2,0,(b.z0+b.z1)/2]),C.V);});
+ var lines='';
+ order.forEach(function(b){
+  s+=prism(b,b.x0,b.x1,b.y0,b.y1,b.z0,b.z1,b.i===0?GREEN:BLUE,{front:34,top:18,side:26});
+  // the filter that reads this block, sitting in its top-left corner and spanning its depth
+  var nb=blocks.filter(function(c){return c.i===b.i+1;})[0],l=LAYERS[b.i];
+  if(l){var e=0.012*Hmax,fails=!nb,Kk=fails?l.K:Math.min(l.K,b.q.H+2*pOf(l));
+   var kx0=b.x0-e,kx1=b.x0+Kk,ky1=b.y1+e,ky0=b.y1-Kk,kz0=b.z0-e,kz1=b.z1+e;
+   var kp=prism(b,kx0,kx1,ky0,ky1,kz0,kz1,fails?RED:ORANGE,fails?{front:30,top:20,side:25}:{front:62,top:44,side:52});
+   s+=fails?'<g opacity="0.55">'+kp+'</g>':kp;
+   if(nb){var T2=P2(at(nb,[nb.x0+0.5,nb.y1-0.5,-e]));
+    [[kx0,ky1,kz0],[kx1,ky1,kz0],[kx0,ky0,kz0],[kx1,ky0,kz0],[kx1,ky1,kz1],[kx1,ky0,kz1]].forEach(function(p){var q=P2(at(b,p));
+     lines+='<line x1="'+q[0].toFixed(1)+'" y1="'+q[1].toFixed(1)+'" x2="'+T2[0].toFixed(1)+'" y2="'+T2[1].toFixed(1)+'" stroke="'+PINK+'" stroke-width="0.9" opacity="0.75"/>';});
+    lines+='@@'+nb.i+'@@';}}
+ });
+ // the one output cell each filter makes, drawn on its block's front face
+ blocks.forEach(function(nb){if(nb.i===0)return;var u=Math.max(1,0.02*Hmax),c=P2(at(nb,[nb.x0+0.5,nb.y1-0.5,0]));
+  var cell=poly([[nb.x0,nb.y1,-0.001],[nb.x0+1,nb.y1,-0.001],[nb.x0+1,nb.y1-1,-0.001],[nb.x0,nb.y1-1,-0.001]].map(function(p){return at(nb,p);}),PINK,PINK,1)+
+   '<circle cx="'+c[0].toFixed(1)+'" cy="'+c[1].toFixed(1)+'" r="3.2" fill="'+PINK+'"/>';
+  lines=lines.replace('@@'+nb.i+'@@',cell);});
+ s+=lines;
+ // labels: each block's size under it; on a desktop, each layer's recipe above the gap
+ var lab='';
+ blocks.forEach(function(b){var p=P2(at(b,[(b.x0+b.x1)/2,b.y0,0])),q=b.q;
+  lab+=T(p[0],p[1]+18,q.C+'&times;'+q.H+'&times;'+q.H,'tn','middle',b.i===0?'var(--green-ink)':'var(--blue-ink)');});
+ if(!mob)for(i=1;i<blocks.length;i++){var a=blocks[i-1],b2=blocks[i],l2=LAYERS[i-1];
+  var ea=-1e9,eb=1e9;[a.x0,a.x1].forEach(function(X){[a.z0,a.z1].forEach(function(Z){ea=Math.max(ea,P2(at(a,[X,0,Z]))[0]);});});
+  [b2.x0,b2.x1].forEach(function(X){[b2.z0,b2.z1].forEach(function(Z){eb=Math.min(eb,P2(at(b2,[X,0,Z]))[0]);});});
+  var mx=(ea+eb)/2;
+  lab+=T(mx,24,l2.K+'&times;'+l2.K+' conv, '+l2.C+' filters','tn','middle');
+  lab+=T(mx,40,'stride '+l2.S+', pad '+pOf(l2),'tn','middle');
+  lab+=T(mx,56,arith(a.q.H,l2),'tn','middle','var(--text-primary)');}
+ if(bad){var lastB=blocks[blocks.length-1],p3=[-1e9];[lastB.x0,lastB.x1].forEach(function(X){[lastB.z0,lastB.z1].forEach(function(Z){var q=P2(at(lastB,[X,0,Z]));if(q[0]>p3[0])p3=q;});}),li=sz.length-2,lb2=LAYERS[li];
+  lab+=T(Math.min(VW-8,p3[0]+24),oy+sc*((mny+mxy)/2)-8,'&#10007; conv '+(li+1)+': '+lb2.K+'&times;'+lb2.K+' on '+sz[li].H+'&times;'+sz[li].H,'tn','start','var(--red)');
+  lab+=T(Math.min(VW-8,p3[0]+24),oy+sc*((mny+mxy)/2)+10,'nothing left','tn','start','var(--red)');}
+ lab+=T(VW-8,VH-6,'depth &#8733; &#8730;channels; drag to turn','tn','end');
+ document.getElementById('fig3').setAttribute('viewBox','0 0 '+VW+' '+VH);
+ document.getElementById('stage3').innerHTML=s+lab;
+ // table outputs and the readout
+ var h=IN.H;
+ document.getElementById('o0').innerHTML=IN.C+'&times;'+IN.H+'&times;'+IN.H;
+ for(i=0;i<LAYERS.length;i++){var oc=document.getElementById('o'+(i+1)),ac=document.getElementById('a'+(i+1));
+  if(i+1<sz.length){var q2=sz[i+1];oc.innerHTML=q2.bad?'nothing':q2.C+'&times;'+q2.H+'&times;'+q2.H;oc.className=q2.bad?'bad':'eq';
+   ac.innerHTML=arith(h,LAYERS[i]);ac.className=q2.bad?'bad':'';h=q2.H;}
+  else{oc.innerHTML='&mdash;';oc.className='';ac.innerHTML='';}}
+ var chain=sz.map(function(q){return q.bad?'<span style="color:var(--red)">nothing</span>':q.C+'&times;'+q.H+'&times;'+q.H;}).join(' &rarr; ');
+ var r='<b>'+chain+'</b>. ';
+ if(PRESET==='slide')r+='The slide&rsquo;s stack: with no padding and stride 1, each layer takes K&minus;1 off: 4, then 2, then 2.';
+ else if(PRESET==='alex227')r+='With a 227-pixel input, (227 &minus; 11)/4 + 1 = 55 exactly: every one of the 55 &times; 55 windows fits and none of the image is left over.';
+ else if(PRESET==='alex224')r+='The AlexNet paper says 224 &times; 224 inputs and 55 &times; 55 outputs, but (224 &minus; 11)/4 + 1 = 54.25, which floors to <b>54</b>. The numbers only agree with a 227 input (or with 2 pixels of padding, ⌊(224 &minus; 11 + 4)/4⌋ + 1 = 55): a long-noticed inconsistency in the paper.';
+ else if(PRESET==='lenet')r+='LeNet 1989: 16&times;16 inputs, then 12 feature maps of 8&times;8 and 12 of 4&times;4, each from 5&times;5 windows two pixels apart. Stride 2 alone gives ⌊(16 &minus; 5)/2⌋ + 1 = 6, not 8; the paper lets windows run past the border onto background, which in today&rsquo;s terms is padding 2. (Its second layer also reads only 8 of the 12 maps; here every filter reads all of them.)';
+ else if(PRESET==='deep')r+='Unpadded 5&times;5 layers take 4 off each time: 16, 12, 8, 4, and then a 5&times;5 window no longer fits in a 4&times;4 map.';
+ if(document.getElementById('same').checked)r+=' <b>Same padding</b>: P = (K&minus;1)/2 puts back exactly the K&minus;1 each layer would take off, so with stride 1 the size stops shrinking; stride still divides it.';
+ document.getElementById('rd3').innerHTML=r;
+}
+document.getElementById('seg3').addEventListener('click',function(e){var b=e.target.closest('button');if(b)loadPreset(b.dataset.p);});
+// drag to turn: across is azimuth, up and down is elevation
+(function(){var svg=document.getElementById('fig3'),lastp=null;
+ svg.addEventListener('pointerdown',function(e){lastp=[e.clientX,e.clientY];svg.setPointerCapture(e.pointerId);e.preventDefault();});
+ svg.addEventListener('pointermove',function(e){if(!lastp)return;
+  PHI=Math.max(-80,Math.min(80,PHI-(e.clientX-lastp[0])*0.4));THE=Math.max(-60,Math.min(80,THE+(e.clientY-lastp[1])*0.4));
+  lastp=[e.clientX,e.clientY];draw3();});
+ var up=function(){lastp=null;};svg.addEventListener('pointerup',up);svg.addEventListener('pointercancel',up);})();
+
+function caption(){
+ document.getElementById('caption').innerHTML=
+ '<b>The rule is a count.</b> A window of width K on a row of width W can start at 0, 1, &hellip;, W &minus; K and still fit, which is W &minus; K + 1 places; '+
+ 'each place makes one output. With stride S it only starts at multiples of S, 0, S, 2S, &hellip; up to W &minus; K, which is ⌊(W &minus; K)/S⌋ + 1 places; '+
+ 'padding by P makes the row W + 2P wide. Together: <b>output = ⌊(W &minus; K + 2P)/S⌋ + 1</b>, the same across and down. The slide&rsquo;s 7&times;7 input and 3&times;3 filter give 7 &minus; 3 + 1 = 5.'+
+ '<div style="margin-top:4px"><b>Why a stack shrinks.</b> With no padding and stride 1, every layer loses K &minus; 1: the slide&rsquo;s 32 becomes 28 after a 5&times;5, then 26 and 24 after 3&times;3s. '+
+ 'Stride divides the size instead, roughly by S, which is how AlexNet gets from 227 to 55 in one layer. When S does not divide W &minus; K + 2P, the floor throws the remainder away: those last rows and columns are never read. '+
+ 'Deep enough, an unpadded stack runs out of image. That is why most modern networks use <b>same padding</b>, P = (K &minus; 1)/2, and shrink only where they choose to, with stride or pooling; '+
+ 'the price is that the border is made of zeros that <a href="receptive-field.html">creep inward</a> layer by layer.</div>'+
+ '<div style="margin-top:4px"><b>The depth is not the kernel&rsquo;s business.</b> The filter is K&times;K spatially but always spans every input channel, and the number of filters sets the depth of the next block. '+
+ 'So channels never shrink by themselves; only H and W follow the rule above. See the <a href="tensors.html">4D weight tensor</a> for one filter&rsquo;s arithmetic, and <a href="conv2d.html">2D convolution</a> for what the window computes.</div>';
+}
+window.addEventListener('resize',function(){draw1();draw3();});
+document.addEventListener('keydown',function(e){if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;
+ if(e.key===' '){e.preventDefault();toggle();}else if(e.key==='Enter'){e.preventDefault();nextStep();}});
+caption();setP();loadPreset('slide');
+</script>
+</body>
+</html>

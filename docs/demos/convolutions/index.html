@@ -53,7 +53,7 @@ footer a{color:var(--text-secondary)}
   <p>Interactive pieces for the convolution lecture and <a href="http://yann.lecun.com/exdb/publis/pdf/lecun-89e.pdf">LeCun et al. 1989</a>:
      first, why comparing images pixel by pixel fails as soon as something moves, and the oriented
      detector Hubel and Wiesel found in the cat&rsquo;s visual cortex; then the operation itself, in 1D
-     and 2D, and as a fully connected matrix with zeros and tied weights; why sharing weights makes it shift-equivariant, and pooling makes it invariant; how far
+     and 2D, and as a fully connected matrix with zeros and tied weights; why sharing weights makes it shift-equivariant, and pooling makes it invariant; how big each layer's output is, how far
      each unit sees as layers stack, and where padding creeps in; and the four axes of a layer&rsquo;s weights.</p>
 </header>
 
@@ -115,6 +115,17 @@ footer a{color:var(--text-secondary)}
      position uses the same weights. Pool over positions and the result stops caring where the digit is.
      Then turn on stride 2 and watch an odd shift break both.</p>
   <a class="go" href="equivariance.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">Output size</div>
+  <h2><a href="output-size.html">How big is the output?</a></h2>
+  <p class="what">Count where the window can start: the slide&rsquo;s 3&times;3 filter on a 7&times;7 input fits in
+     5 places each way, so the output is 5&times;5. Add stride and padding to get
+     &lfloor;(W&minus;K+2P)/S&rfloor;+1, with the cells a stride never reads hatched. Then stack layers, drawn as
+     shrinking 3D blocks, from the slide&rsquo;s 32&rarr;28&rarr;26&rarr;24 to AlexNet&rsquo;s 224-vs-227 puzzle and a stack
+     too deep to fit.</p>
+  <a class="go" href="output-size.html">Open the explainer &rarr;</a>
 </li>
 
 <li class="done">
