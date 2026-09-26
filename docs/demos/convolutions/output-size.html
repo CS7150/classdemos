@@ -79,7 +79,7 @@ table.ly td.eq{color:var(--text-primary)}
 
 <svg id="fig3" viewBox="0 0 1000 380" role="img">
 <title>A stack of convolution layers drawn as shrinking 3D blocks</title>
-<desc>Each activation tensor is a solid box: its front face is height by width, to scale, and its depth is the number of channels. Between consecutive boxes a small orange box, the filter, sits in the input's top-left corner spanning its full depth, with thin lines converging to one cell of the next box.</desc>
+<desc>Each activation tensor is a solid box: its front face is height by width, to scale, and its depth grows with the number of channels, not to scale. Between consecutive boxes a small orange box, the filter, sits in the input's top-left corner spanning its full depth, with thin lines converging to one cell of the next box.</desc>
 <g id="stage3"></g>
 </svg>
 
@@ -324,7 +324,7 @@ function draw3(){
  if(bad){var lastB=blocks[blocks.length-1],p3=[-1e9];[lastB.x0,lastB.x1].forEach(function(X){[lastB.z0,lastB.z1].forEach(function(Z){var q=P2(at(lastB,[X,0,Z]));if(q[0]>p3[0])p3=q;});}),li=sz.length-2,lb2=LAYERS[li];
   lab+=T(Math.min(VW-8,p3[0]+24),oy+sc*((mny+mxy)/2)-8,'&#10007; conv '+(li+1)+': '+lb2.K+'&times;'+lb2.K+' on '+sz[li].H+'&times;'+sz[li].H,'tn','start','var(--red)');
   lab+=T(Math.min(VW-8,p3[0]+24),oy+sc*((mny+mxy)/2)+10,'nothing left','tn','start','var(--red)');}
- lab+=T(VW-8,VH-6,'depth &#8733; &#8730;channels; drag a filter to scan it, anywhere else to turn','tn','end');
+ lab+=T(VW-8,VH-6,'drag a filter to scan it, anywhere else to turn (depth not drawn to scale)','tn','end');
  document.getElementById('fig3').setAttribute('viewBox','0 0 '+VW+' '+VH);
  document.getElementById('stage3').innerHTML=s+lab;
  // table outputs and the readout
