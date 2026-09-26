@@ -75,7 +75,7 @@ table.ly td.eq{color:var(--text-primary)}
 <div class="rd" id="rd1"></div>
 
 <h2>A stack of layers<span>: each one shrinks what it is given</span></h2>
-<p class="quiz">Each activation drawn as a block, channels &times; height &times; width, with the front face to scale. Between blocks, one filter: K&times;K across the <i>full depth</i> of its input, making one number of the next block. <b>Drag a filter</b> to scan it across its input and watch which output it makes; <b>drag anywhere else</b> to turn the picture. Edit any layer below.</p>
+<p class="quiz">Each activation drawn as a block, channels &times; height &times; width, with the front face to scale. Between blocks, one filter: K&times;K across the <i>full depth</i> of its input, making one number of the next block. <b>Drag a filter</b> to scan it across its input and watch which output it makes; the filters before and after it follow when they must, so each one always reads the cell the one before it made. <b>drag anywhere else</b> to turn the picture. Edit any layer below.</p>
 
 <svg id="fig3" viewBox="0 0 1000 380" role="img">
 <title>A stack of convolution layers drawn as shrinking 3D blocks</title>
@@ -331,18 +331,30 @@ function draw3(){
 }
 document.getElementById('seg3').addEventListener('click',function(e){var b=e.target.closest('button');if(b)loadPreset(b.dataset.p);});
 // drag to turn: across is azimuth, up and down is elevation
+// Keep the chain intact after filter j moves.  Filter k's output cell, POS[k], is a
+// cell of block k+1, and it has to be one of the cells filter k+1 reads.  Upstream,
+// each earlier cell is pulled just inside the window that now reads it; downstream,
+// each later filter moves the fewest strides that still cover the cell it is given.
+function chain(j){var sz=sizes(),k,a;
+ function ok(k){return LAYERS[k]&&k+1<sz.length&&!sz[k+1].bad;}
+ for(k=j-1;k>=0;k--){if(!ok(k)||!ok(k+1))break;var L=LAYERS[k+1],P=pOf(L),H=sz[k+1].H;
+  for(a=0;a<2;a++){var w=POS[k+1][a]*L.S-P;POS[k][a]=Math.max(Math.max(0,w),Math.min(Math.min(H-1,w+L.K-1),POS[k][a]));}}
+ for(k=j+1;k<LAYERS.length;k++){if(!ok(k)||!ok(k-1))break;var L2=LAYERS[k],P2_=pOf(L2),n=sz[k+1].H;
+  for(a=0;a<2;a++){var c=POS[k-1][a],lo=Math.ceil((c+P2_-L2.K+1)/L2.S),hi=Math.floor((c+P2_)/L2.S);
+   POS[k][a]=Math.max(0,Math.min(n-1,Math.max(lo,Math.min(hi,POS[k][a]))));}}}
 // drag a filter to move it window by window; drag anywhere else to turn the view
 (function(){var svg=document.getElementById('fig3'),lastp=null,fd=null;
  svg.addEventListener('pointerdown',function(e){var g=e.target.closest&&e.target.closest('.filt');
   svg.setPointerCapture(e.pointerId);e.preventDefault();
-  if(g&&LAYERS[+g.dataset.i]&&AXES[+g.dataset.i]){var i=+g.dataset.i;fd={i:i,x:e.clientX,y:e.clientY,p:POS[i].slice(),k:svg.viewBox.baseVal.width/svg.getBoundingClientRect().width};return;}
+  if(g&&LAYERS[+g.dataset.i]&&AXES[+g.dataset.i]&&sizes()[+g.dataset.i+1]&&!sizes()[+g.dataset.i+1].bad){var i=+g.dataset.i;fd={i:i,x:e.clientX,y:e.clientY,p:POS[i].slice(),k:svg.viewBox.baseVal.width/svg.getBoundingClientRect().width};return;}
   lastp=[e.clientX,e.clientY];});
  svg.addEventListener('pointermove',function(e){
   if(fd){// solve screen motion = a * (one column) + b * (one row), in figure units
    var A=AXES[fd.i],dx=(e.clientX-fd.x)*fd.k,dy=(e.clientY-fd.y)*fd.k,det=A.ex[0]*A.ey[1]-A.ex[1]*A.ey[0];if(Math.abs(det)<1e-9)return;
    var a=(dx*A.ey[1]-dy*A.ey[0])/det,b=(A.ex[0]*dy-A.ex[1]*dx)/det,S=LAYERS[fd.i].S;
    var np=[fd.p[0]+Math.round(b/S),fd.p[1]+Math.round(a/S)];
-   if(np[0]!==POS[fd.i][0]||np[1]!==POS[fd.i][1]){POS[fd.i]=np;draw3();}return;}
+   if(np[0]!==POS[fd.i][0]||np[1]!==POS[fd.i][1]){var n=sizes()[fd.i+1].H;
+    POS[fd.i]=[Math.max(0,Math.min(n-1,np[0])),Math.max(0,Math.min(n-1,np[1]))];chain(fd.i);draw3();}return;}
   if(!lastp)return;
   PHI=Math.max(-80,Math.min(80,PHI-(e.clientX-lastp[0])*0.4));THE=Math.max(-60,Math.min(80,THE+(e.clientY-lastp[1])*0.4));
   lastp=[e.clientX,e.clientY];draw3();});
