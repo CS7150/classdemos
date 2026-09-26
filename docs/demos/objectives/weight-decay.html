@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Weight decay</title>
-<meta name="description" content="Weight decay as a shrink on every step, L2 against L1 as a ball against a diamond (and why L1 zeroes weights), a bumpy fit smoothed by a penalty on its weights, and why L2 inside Adam is not the same as decoupled weight decay.">
+<meta name="description" content="Weight decay as a shrink on every step, L2 against L1 as a ball against a diamond (and why L1 zeroes weights), a bumpy fit smoothed by a penalty on its weights, why L2 inside Adam is not the same as decoupled weight decay (AdamW), and how strong decay turns a max-margin classifier into the nearest-mean one.">
 <link rel="stylesheet" href="../demo.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
@@ -23,12 +23,17 @@ input[type=range]{flex:0 1 170px;min-width:90px}
 .cap{font-size:12.5px;line-height:1.55;padding-top:4px}
 .nav{display:flex;align-items:baseline;gap:10px}
 .eq{font-size:15px;overflow-x:auto;overflow-y:hidden}
+.awgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px 22px;margin:4px 0}
+.awt{font-size:14px;font-weight:600}
+.awc{font-weight:400;font-size:12.5px;color:var(--text-muted)}
+.prose4{font-size:14.5px;line-height:1.6;margin:6px 0;max-width:80ch}
+@media (max-width:760px){.awgrid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <div class="nav"><a href="./">&larr; Losses and regularization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
 <h1>Weight decay<span>: L2 against L1</span></h1>
-<p class="quiz">When parameters get large, a network can learn a bumpy function. The classic fix from regression is to charge for the size of the weights. Four views of what that charge does: to each step, to the answer, to the fitted function, and inside Adam.</p>
+<p class="quiz">When parameters get large, a network can learn a bumpy function. The classic fix from regression is to charge for the size of the weights. Five views of what that charge does: to each step, to the answer, to the fitted function, inside Adam, and to which classifier you get.</p>
 
 <h2>1. Every step shrinks the weights</h2>
 <p class="quiz">Homework 2.1 adds a penalty to the loss, <span id="t1"></span>. Its gradient is <span id="t2"></span>, so a gradient descent step becomes a <b>shrink</b> followed by the usual step. <b>Play</b> both runs from the same start, or drag the start point.</p>
@@ -81,14 +86,56 @@ input[type=range]{flex:0 1 170px;min-width:90px}
 </div>
 <div class="rd" id="rd3"></div>
 
-<h2>4. What nobody asked: L2 inside Adam is not weight decay</h2>
-<p class="quiz">For plain gradient descent, adding the penalty to the loss and shrinking the weights are the same thing. Inside Adam they are not, because Adam divides every gradient, including the penalty&rsquo;s, by that weight&rsquo;s recent gradient size. Two weights start at 1. Their loss gradients flip sign every step and average to zero, so only the regularizer moves them: one gets big gradients (&plusmn;10), one tiny ones (&plusmn;0.001).</p>
-<svg id="f4" viewBox="0 0 900 300" role="img">
-<title>Two weights under Adam with L2 in the loss, and under AdamW</title>
-<desc>Weight value against step for four runs. With L2 in the loss, the weight with big gradients barely shrinks while the weight with tiny gradients is driven to zero. With decoupled weight decay (AdamW), both shrink along the same curve.</desc>
+<h2>4. Weight decay inside Adam: L2 is not decay (AdamW)</h2>
+<p class="quiz">For plain gradient descent, adding &lambda;/2&middot;&#8214;&theta;&#8214;&sup2; to the loss and shrinking the weights every step are the same thing (part 1). Inside Adam they are not, because Adam divides each weight&rsquo;s step by the size of that weight&rsquo;s own recent gradients, and whatever you put into the gradient gets divided too, including the penalty.</p>
+<div class="awgrid">
+  <div><div class="awt" style="color:var(--orange-ink)">Adam with an L2 penalty <span class="awc">(torch.optim.Adam, weight_decay=&lambda;)</span></div><div class="eq" id="aw1"></div></div>
+  <div><div class="awt" style="color:var(--blue-ink)">AdamW: decoupled weight decay <span class="awc">(torch.optim.AdamW)</span></div><div class="eq" id="aw2"></div></div>
+</div>
+<p class="prose4">The only difference is where &lambda;&theta; goes. In Adam with L2 it is added to the gradient, so it passes through m and v and gets <b>divided by &radic;v&#770;</b>, which is roughly the size of that weight&rsquo;s gradients. In AdamW it is added after the division, so every weight loses the same fraction per step:</p>
+<div class="eq" id="aw3"></div>
+<p class="prose4">A weight with large gradients (big &radic;v&#770;) barely feels the Adam-with-L2 decay. A weight with tiny gradients has its decay divided by a tiny number, and when its gradients are smaller than &lambda;&theta; the decay dominates v itself, so the weight moves toward 0 at Adam&rsquo;s full step size &eta; per step. Below, eight weights all start at 1 with gradients of different sizes that flip sign every step and average to zero, so the decay is the only force that moves them.</p>
+<svg id="f4" viewBox="0 0 900 430" role="img">
+<title>Eight weights under Adam with L2 and under AdamW</title>
+<desc>Two rows of eight bars, one per weight, ordered by gradient size from 0.001 to 10, animated over training steps: with L2 inside Adam the small-gradient weights collapse to zero while the large-gradient ones barely shrink; with AdamW all eight shrink together. At right, the shrink per step against gradient size on log scales: flat for AdamW, falling as one over the gradient size for Adam with L2.</desc>
 <g id="g4"></g>
 </svg>
+<div class="row">
+  <button class="main" id="play4" onclick="toggle4()">&#9654; Play</button>
+  <span class="klab">step</span>
+  <input type="range" id="t4" min="0" max="600" step="1" value="0" oninput="stop4();T4=+this.value;draw4()" style="flex:2 1 200px">
+  <span class="knum" id="t4v">0</span>
+  <span class="klab">decay &lambda;</span>
+  <input type="range" id="lam4" min="-2" max="0" step="any" value="-1" oninput="run4();draw4()">
+  <span class="knum" id="lam4v">0.10</span>
+  <span class="klab">step size &eta;</span>
+  <input type="range" id="eta4" min="-3" max="-1" step="any" value="-2" oninput="run4();draw4()">
+  <span class="knum" id="eta4v">0.010</span>
+</div>
 <div class="rd" id="rd4"></div>
+<div class="cap"><b>Why it matters.</b> Weight decay is meant to be a prior: pull every weight toward 0 by the same fraction, so the ones the data doesn&rsquo;t need fade away. Inside Adam, the L2 version does nearly the opposite. The weights with big, frequent gradients, often the ones doing the most work, are hardly regularized at all; weights with small or rare gradients, such as the embedding of a rare word, are wiped out at full speed whether the data needs them or not. Loshchilov and Hutter (&ldquo;Decoupled Weight Decay Regularization,&rdquo; ICLR 2019) proposed taking the decay out of the gradient, and found that it makes Adam generalize better and makes good values of &lambda; much less tangled up with the learning rate. AdamW is now the default optimizer for training transformers. In SGD the two versions differ only by a rescaling of &lambda; (part 1), which is why the difference went unnoticed until adaptive optimizers. <span style="color:var(--text-muted)">(In the paper the whole update is also multiplied by a schedule factor &eta;<sub>t</sub>; PyTorch&rsquo;s AdamW does the same thing by first shrinking &theta; &larr; (1 &minus; &eta;&lambda;)&theta; and then taking the Adam step, with a default &lambda; of 0.01.)</span></div>
+
+<h2>5. Strong decay turns max margin into mean difference</h2>
+<p class="quiz">Train a linear classifier, logistic regression with weight decay &lambda;, on two separable classes. With no decay its direction heads for the <b>max-margin</b> separator, the one that stays as far as possible from the closest points. With strong decay it heads somewhere quite different: the <b>mean difference</b> &mu;<sub>+</sub> &minus; &mu;<sub>&minus;</sub>, the direction of the old <b>nearest-mean</b> (&ldquo;Euclidean&rdquo; or minimum-distance) classifier, which ignores the individual points and looks only at the two class averages. The data here is built so those two directions disagree.</p>
+<svg id="f5" viewBox="0 0 900 400" role="img">
+<title>Logistic regression with weight decay, between max margin and mean difference</title>
+<desc>Left: two classes of points, their means, the max-margin boundary and the nearest-mean boundary as dashed lines, and the logistic-regression boundary at the chosen decay as a solid line. Right: the angle of the weight vector against the decay on a log scale, moving from the max-margin angle at small decay to the mean-difference angle at large decay.</desc>
+<g id="g5"></g>
+</svg>
+<div class="row">
+  <span class="klab">weight decay &lambda;</span>
+  <input type="range" id="lam5" min="-5" max="1" step="any" value="-3" oninput="draw5()" style="flex:2 1 240px">
+  <span class="knum" id="lam5v">0.001</span>
+  <button onclick="sample5();draw5()">Resample</button>
+</div>
+<div class="rd" id="rd5"></div>
+<p class="prose4"><b>Why the mean difference.</b> Write the logistic loss in terms of each point&rsquo;s margin m<sub>i</sub> = y<sub>i</sub>(w&middot;x<sub>i</sub> + b), with y<sub>i</sub> = &plusmn;1. Strong decay keeps w tiny, so every margin is near 0, where the loss is nearly a straight line:</p>
+<div class="eq" id="e5a"></div>
+<p class="prose4">Keeping only the straight-line part, the objective is linear in w plus the decay, and its minimum is a scaled copy of the average of y<sub>i</sub>x<sub>i</sub>, which for balanced classes is the mean difference:</p>
+<div class="eq" id="e5b"></div>
+<p class="prose4">Every point pulls on w equally, however far it is from the boundary, so only the averages survive. <b>Why max margin.</b> With little decay on separable data, w can grow without bound, and as it grows the loss e<sup>&minus;m</sup> of all but the closest points becomes negligible; only the points nearest the boundary still pull, and w/&#8214;w&#8214; approaches the max-margin direction (Rosset, Zhu &amp; Hastie, 2004), the same direction plain gradient descent drifts toward with no decay at all (Soudry et al., 2018). <b>In between</b>, the next term of the expansion gives roughly w &asymp; (&lambda;I + &frac14;&Sigma;xx<sup>T</sup>/n)<sup>&minus;1</sup>&middot;&frac12;&thinsp;mean(yx): a ridge-regularized version of Fisher&rsquo;s discriminant, the Mahalanobis cousin of the nearest-mean rule. So the decay dial slides the classifier from &ldquo;trust the closest points&rdquo; to &ldquo;trust only the averages.&rdquo;</p>
+
+<h2>Why it works</h2>
 <div class="cap" id="cap"></div>
 
 <script>
@@ -302,29 +349,164 @@ function draw3(){
 }
 
 /* ================= 4. L2 in Adam vs AdamW ================= */
+// eight weights with gradient scales from 1e-3 to 10; their loss gradients flip
+// sign every step and average to zero, so only the decay moves them
+var K4=8, TT4=600, S4=[], H4=null, T4=0, playing4=false, raf4=null, last4=0;
+for(var k4=0;k4<K4;k4++) S4.push(Math.pow(10,-3+4*k4/(K4-1)));
 function adamRun(g0,decoupled,T,lr,lam){var th=1,m=0,v=0,b1=0.9,b2=0.999,eps=1e-8,h=[th];
  for(var t=1;t<=T;t++){var g=(t%2?g0:-g0);if(!decoupled)g+=lam*th;
   m=b1*m+(1-b1)*g;v=b2*v+(1-b2)*g*g;var mh=m/(1-Math.pow(b1,t)),vh=v/(1-Math.pow(b2,t));
   th-=lr*mh/(Math.sqrt(vh)+eps);if(decoupled)th-=lr*lam*th;h.push(th);}return h;}
+function lam4(){return Math.pow(10,+document.getElementById('lam4').value);}
+function eta4(){return Math.pow(10,+document.getElementById('eta4').value);}
+function run4(){
+ var lam=lam4(),eta=eta4();
+ document.getElementById('lam4v').textContent=lam.toFixed(lam<0.1?3:2);
+ document.getElementById('eta4v').textContent=eta.toFixed(3);
+ H4={A:S4.map(function(s){return adamRun(s,false,TT4,eta,lam);}),W:S4.map(function(s){return adamRun(s,true,TT4,eta,lam);})};
+}
+function sup(e){return '10<tspan dy="-6" style="font-size:10px">'+String(e).replace('-','−')+'</tspan>';}
 function draw4(){
- var mob=mobile(),TT=300,lr=0.01,lam=0.1,s='';
- var R=[{h:adamRun(10,false,TT,lr,lam),c:WARM,d:null,l:'L2 in loss, gradients ±10'},
-        {h:adamRun(0.001,false,TT,lr,lam),c:PINK,d:null,l:'L2 in loss, gradients ±0.001'},
-        {h:adamRun(10,true,TT,lr,lam),c:BLUE,d:'7 4',l:'AdamW, gradients ±10'},
-        {h:adamRun(0.001,true,TT,lr,lam),c:VIOLET,d:'2 4',l:'AdamW, gradients ±0.001'}];
- var X0=50,Y0=20,W=mob?360:520,H=mob?200:230;
- function px(k){return X0+k/TT*W;}function py(v){return Y0+H-(Math.max(-0.1,Math.min(1.05,v))+0.05)/1.1*H;}
- s+='<rect x="'+X0+'" y="'+Y0+'" width="'+W+'" height="'+H+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
- [0,0.5,1].forEach(function(v){s+=L(X0,py(v),X0+W,py(v),'var(--border)',0.6)+T(X0-6,py(v)+4,String(v),'tn','end');});
- s+=T(X0,Y0+H+16,'0','tn','start')+T(X0+W,Y0+H+16,TT+' steps','tn','end')+T(X0-6,Y0-6,'weight','tn','start');
- R.forEach(function(r){s+=path(r.h.map(function(v,k){return [px(k),py(v)];}),r.c,2.2,r.d);});
- var LX=mob?X0:X0+W+24,LY=mob?Y0+H+40:Y0+30;
- R.forEach(function(r,i){s+=L(LX,LY+i*22-4,LX+26,LY+i*22-4,r.c,2.4,r.d)+T(LX+32,LY+i*22,r.l+': '+r.h[TT].toFixed(r.h[TT]<0.01?4:2),'tn','start');});
- s+=T(LX,LY+4*22+10,'lr = 0.01, &lambda; = 0.1, both start at 1','tn','start');
- document.getElementById('f4').setAttribute('viewBox',mob?'0 0 440 '+(LY+4*22+30):'0 0 900 300');
+ var mob=mobile(),lam=lam4(),eta=eta4(),t=Math.round(T4),s='';
+ document.getElementById('t4').value=t;document.getElementById('t4v').textContent=t;
+ // two rows of bars
+ var X0=56,BW=mob?360:470,bw=BW/K4,RH=124,rows=[{key:'A',y:50,name:'Adam, L2 in the loss',col:'var(--orange)',ink:'var(--orange-ink)'},{key:'W',y:228,name:'AdamW, decoupled decay',col:BLUE,ink:'var(--blue-ink)'}];
+ var uni=Math.pow(1-eta*lam,t);
+ rows.forEach(function(r){
+  var by=function(v){return r.y+RH-Math.max(0,Math.min(1.05,v))/1.05*RH;};
+  s+=T(X0,r.y-24,r.name,'ts','start',r.ink);
+  s+=L(X0,r.y+RH,X0+BW,r.y+RH,'var(--border-strong)',1)+L(X0,by(1),X0+BW,by(1),'var(--border)',0.8,'3 3');
+  s+=T(X0-6,by(1)+4,'1','tn','end')+T(X0-6,r.y+RH+4,'0','tn','end');
+  s+=L(X0,by(uni),X0+BW,by(uni),'var(--blue-ink)',1.2,'6 4',0.6);
+  H4[r.key].forEach(function(h,k){
+   var v=h[t],x=X0+k*bw+bw*0.16,w=bw*0.68;
+   s+='<rect x="'+x.toFixed(1)+'" y="'+by(1).toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+(by(0)-by(1)).toFixed(1)+'" fill="none" stroke="var(--border)" stroke-dasharray="2 3"/>';
+   s+='<rect x="'+x.toFixed(1)+'" y="'+by(v).toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+Math.max(0.5,by(0)-by(v)).toFixed(1)+'" fill="'+r.col+'" opacity="0.75"/>';
+   s+=T(x+w/2,by(v)-4,f2(v),'tn','middle');
+  });
+ });
+ for(var k=0;k<K4;k++){var sk=S4[k];s+=T(X0+k*bw+bw/2,228+RH+16,sk<0.01?sk.toFixed(3):sk<1?sk.toPrecision(1):sk.toFixed(sk<10?1:0),'tn','middle');}
+ s+=T(X0+BW/2,228+RH+36,'each weight&rsquo;s gradient size (log scale)','tn','middle');
+ s+=T(X0+BW,228-24,'dashed: (1 &minus; &eta;&lambda;)<tspan dy="-6" style="font-size:10px">t</tspan>','tn','end','var(--blue-ink)');
+ // theory: shrink per step as a fraction of the weight, at theta = 1
+ var PX=mob?60:600,PY=mob?440:60,PW=mob?340:270,PH=mob?220:290;
+ var qx=function(v){return PX+(Math.log10(v)+4)/6*PW;},qy=function(v){return PY+PH-(Math.log10(Math.max(1e-7,Math.min(1,v)))+6)/6*PH;};
+ s+='<rect x="'+PX+'" y="'+PY+'" width="'+PW+'" height="'+PH+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
+ [-6,-4,-2,0].forEach(function(e){s+=L(PX,qy(Math.pow(10,e)),PX+PW,qy(Math.pow(10,e)),'var(--border)',0.6)+T(PX-5,qy(Math.pow(10,e))+4,sup(e),'tn','end');});
+ [-4,-2,0,2].forEach(function(e){s+=T(qx(Math.pow(10,e)),PY+PH+16,sup(e),'tn','middle');});
+ var fA=function(g){return eta*lam/Math.sqrt(g*g+lam*lam);},fW=function(){return eta*lam;};
+ var pa=[],pw=[];for(var i=0;i<=120;i++){var g=Math.pow(10,-4+6*i/120);pa.push([qx(g),qy(fA(g))]);pw.push([qx(g),qy(fW(g))]);}
+ s+=path(pa,'var(--orange-ink)',2.4)+path(pw,'var(--blue-ink)',2.4,'7 4');
+ S4.forEach(function(g){s+='<circle cx="'+qx(g).toFixed(1)+'" cy="'+qy(fA(g)).toFixed(1)+'" r="3.5" fill="var(--orange)"/><circle cx="'+qx(g).toFixed(1)+'" cy="'+qy(fW(g)).toFixed(1)+'" r="3.5" fill="'+BLUE+'"/>';});
+ s+=T(PX,PY-26,'shrink per step, as a fraction','ts','start')+T(PX,PY-10,'of the weight (at &theta; = 1)','ts','start');
+ s+=T(PX+PW/2,PY+PH+34,'gradient size','tn','middle');
+ s+=T(PX+PW-6,qy(fW())-6,'AdamW: &eta;&lambda;','tn','end','var(--blue-ink)');
+ s+=T(PX+PW-6,qy(fA(100))+16,'Adam + L2: &eta;&lambda;/&radic;v&#770;','tn','end','var(--orange-ink)');
+ document.getElementById('f4').setAttribute('viewBox',mob?'0 0 440 '+(PY+PH+46):'0 0 900 430');
  document.getElementById('g4').innerHTML=s;
- document.getElementById('rd4').innerHTML='With the penalty inside Adam, the weight with big gradients has shrunk only to <b>'+R[0].h[TT].toFixed(2)+'</b>, while the weight with tiny gradients has been driven to <b>'+R[1].h[TT].toFixed(4)+'</b>. '+
-  'With decoupled decay (AdamW) both end at <b>'+R[2].h[TT].toFixed(2)+'</b>, close to (1 &minus; lr&middot;&lambda;)<sup>300</sup> = '+Math.pow(1-lr*lam,TT).toFixed(2)+'.';
+ // readout
+ var A=H4.A.map(function(h){return h[t];}),dead=A.filter(function(v){return Math.abs(v)<0.02;}).length;
+ document.getElementById('rd4').innerHTML=t===0?'Press <b>Play</b>. Every weight starts at 1; the only systematic force on it is the decay.':
+  'Step '+t+'. <span style="color:var(--orange-ink)">Adam with L2</span>: the weight with the biggest gradients is still <b>'+f2(A[K4-1])+'</b>, while '+dead+' of the '+K4+' weights (the ones with the smallest gradients) are already near 0. '+
+  '<span style="color:var(--blue-ink)">AdamW</span>: all eight are at <b>'+f2(H4.W[0][t])+'</b>, close to (1 &minus; &eta;&lambda;)<sup>'+t+'</sup> = '+f2(uni)+', whatever their gradients.';
+}
+function stop4(){playing4=false;if(raf4)cancelAnimationFrame(raf4);raf4=null;document.getElementById('play4').innerHTML='&#9654; Play';}
+function frame4(now){var dt=Math.min(0.05,(now-last4)/1000);last4=now;T4=Math.min(TT4,T4+dt*120);draw4();if(T4>=TT4)stop4();else raf4=requestAnimationFrame(frame4);}
+function toggle4(){if(playing4){stop4();return;}if(T4>=TT4)T4=0;playing4=true;document.getElementById('play4').innerHTML='&#10074;&#10074; Pause';last4=performance.now();raf4=requestAnimationFrame(frame4);}
+katex.render('\\begin{aligned}g_t&=\\nabla\\mathcal L(\\theta_{t-1})\\;\\textcolor{#D85A30}{+\\,\\lambda\\,\\theta_{t-1}}\\\\ m_t&=\\beta_1 m_{t-1}+(1-\\beta_1)\\,g_t\\\\ v_t&=\\beta_2 v_{t-1}+(1-\\beta_2)\\,g_t^2\\\\ \\hat m_t&=\\tfrac{m_t}{1-\\beta_1^t},\\quad \\hat v_t=\\tfrac{v_t}{1-\\beta_2^t}\\\\ \\theta_t&=\\theta_{t-1}-\\eta\\,\\frac{\\hat m_t}{\\sqrt{\\hat v_t}+\\epsilon}\\end{aligned}',document.getElementById('aw1'),{throwOnError:false,displayMode:true});
+katex.render('\\begin{aligned}g_t&=\\nabla\\mathcal L(\\theta_{t-1})\\\\ m_t&=\\beta_1 m_{t-1}+(1-\\beta_1)\\,g_t\\\\ v_t&=\\beta_2 v_{t-1}+(1-\\beta_2)\\,g_t^2\\\\ \\hat m_t&=\\tfrac{m_t}{1-\\beta_1^t},\\quad \\hat v_t=\\tfrac{v_t}{1-\\beta_2^t}\\\\ \\theta_t&=\\theta_{t-1}-\\eta\\Big(\\frac{\\hat m_t}{\\sqrt{\\hat v_t}+\\epsilon}\\;\\textcolor{#378ADD}{+\\,\\lambda\\,\\theta_{t-1}}\\Big)\\end{aligned}',document.getElementById('aw2'),{throwOnError:false,displayMode:true});
+katex.render('\\text{shrink from the decay, per step:}\\qquad \\textcolor{#D85A30}{\\text{Adam + L2: }\\approx\\frac{\\eta\\lambda}{\\sqrt{\\hat v_t}}\\,\\theta} \\qquad\\qquad \\textcolor{#378ADD}{\\text{AdamW: }\\ \\eta\\lambda\\,\\theta}',document.getElementById('aw3'),{throwOnError:false,displayMode:true});
+
+/* ================= 5. max margin to mean difference ================= */
+// two separable clouds stretched along d = (1,1)/√2 and separated by a narrow gap
+// along n = (1,-1)/√2, with their centres also offset along d, so the mean
+// difference points mostly along d while the max-margin normal is n
+var D5=null, N5=40;
+function sample5(){
+ var r=Math.sqrt(0.5),dd=[r,r],nn=[r,-r],P=[];
+ [1,-1].forEach(function(y){for(var i=0;i<N5;i++){
+  var a=y*1.1+1.1*randn(), g;
+  do{ g=0.3+Math.abs(0.35*randn()); }while(g>1.2);          // at least 0.3 from the gap's centre line
+  var u=a, v=y*g+0.25*(y>0?0.4:-0.4);
+  P.push({x:[u*dd[0]+v*nn[0],u*dd[1]+v*nn[1]],y:y});}});
+ // centre the data, so the midpoint of the means is the origin
+ var cx=0,cy=0;P.forEach(function(p){cx+=p.x[0];cy+=p.x[1];});cx/=P.length;cy/=P.length;
+ P.forEach(function(p){p.x[0]-=cx;p.x[1]-=cy;});
+ D5={P:P};
+ var mp=[0,0],mm=[0,0];P.forEach(function(p){var m=p.y>0?mp:mm;m[0]+=p.x[0]/N5;m[1]+=p.x[1]/N5;});D5.mp=mp;D5.mm=mm;
+ // max margin: the best unit normal by search over angles, with the gap's midline as offset
+ var best=null;for(var k=0;k<3600;k++){var th=k/3600*2*Math.PI,u=[Math.cos(th),Math.sin(th)],lo=1e9,hi=-1e9;
+  P.forEach(function(p){var s=u[0]*p.x[0]+u[1]*p.x[1];if(p.y>0)lo=Math.min(lo,s);else hi=Math.max(hi,s);});
+  if(!best||lo-hi>best.m)best={m:lo-hi,u:u,c:(lo+hi)/2};}
+ D5.mm_=best;
+ D5.curve=null;
+}
+function randn(){var u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+// L2-regularized logistic regression, unregularized bias, mean loss; Newton's method
+function logreg5(lam,init){
+ var P=D5.P,n=P.length,w=init?init.slice():[0,0,0];
+ function J(w){var s=0;P.forEach(function(p){var z=w[0]*p.x[0]+w[1]*p.x[1]+w[2],m=p.y*z;s+=m>0?Math.log(1+Math.exp(-m)):-m+Math.log(1+Math.exp(m));});return s/n+lam/2*(w[0]*w[0]+w[1]*w[1]);}
+ for(var it=0;it<100;it++){
+  var g=[lam*w[0],lam*w[1],0],H=[[lam,0,0],[0,lam,0],[0,0,1e-9]];
+  P.forEach(function(p){var xv=[p.x[0],p.x[1],1],z=w[0]*xv[0]+w[1]*xv[1]+w[2],s=1/(1+Math.exp(p.y*z)),q=s*(1-s);
+   for(var a=0;a<3;a++){g[a]+=-p.y*s*xv[a]/n;for(var b=0;b<3;b++)H[a][b]+=q*xv[a]*xv[b]/n;}});
+  var d=solve3(H,g),t=1,j0=J(w);
+  while(t>1e-6){var w2=[w[0]-t*d[0],w[1]-t*d[1],w[2]-t*d[2]];if(J(w2)<=j0-1e-4*t*(g[0]*d[0]+g[1]*d[1]+g[2]*d[2])){w=w2;break;}t/=2;}
+  if(Math.abs(d[0])+Math.abs(d[1])+Math.abs(d[2])<1e-10*(1+Math.hypot(w[0],w[1])))break;
+ }
+ return w;
+}
+function solve3(A,b){var M=A.map(function(r,i){return r.concat([b[i]]);});
+ for(var c=0;c<3;c++){var p=c;for(var r=c+1;r<3;r++)if(Math.abs(M[r][c])>Math.abs(M[p][c]))p=r;var t=M[c];M[c]=M[p];M[p]=t;
+  for(var r2=0;r2<3;r2++)if(r2!==c){var f=M[r2][c]/M[c][c];for(var k=c;k<4;k++)M[r2][k]-=f*M[c][k];}}
+ return [M[0][3]/M[0][0],M[1][3]/M[1][1],M[2][3]/M[2][2]];}
+function ang(v){return Math.atan2(v[1],v[0])*180/Math.PI;}
+function draw5(){
+ var mob=mobile(),lg=+document.getElementById('lam5').value,lam=Math.pow(10,lg);
+ document.getElementById('lam5v').textContent=lam<0.01?lam.toExponential(0).replace('e-','×10⁻'):lam.toFixed(lam<1?3:1);
+ // the angle curve over λ, computed once per dataset, warm-started from large λ down
+ if(!D5.curve){D5.curve=[];var w=null;for(var e=1;e>=-5.0001;e-=0.1){w=logreg5(Math.pow(10,e),w);D5.curve.push({e:e,w:w.slice()});}D5.curve.reverse();}
+ var near=D5.curve.reduce(function(a,c){return Math.abs(c.e-lg)<Math.abs(a.e-lg)?c:a;});
+ var w=logreg5(lam,near.w),s='';
+ var dm=[D5.mp[0]-D5.mm[0],D5.mp[1]-D5.mm[1]],aMM=ang(D5.mm_.u),aMD=ang(dm),aW=ang(w);
+ // left: the data
+ var X0=30,Y0=20,S=mob?360:360,R=3.2,px=function(v){return X0+(v+R)/(2*R)*S;},py=function(v){return Y0+S-(v+R)/(2*R)*S;};
+ s+='<defs><clipPath id="c5"><rect x="'+X0+'" y="'+Y0+'" width="'+S+'" height="'+S+'"/></clipPath></defs>';
+ s+='<rect x="'+X0+'" y="'+Y0+'" width="'+S+'" height="'+S+'" fill="var(--surface)" opacity="0.6" stroke="var(--border)"/>';
+ function bline(u,c,col,wd,dash){ // the line u·x = c
+  var t=[-u[1],u[0]],o=[u[0]*c,u[1]*c];return L(px(o[0]-9*t[0]),py(o[1]-9*t[1]),px(o[0]+9*t[0]),py(o[1]+9*t[1]),col,wd,dash);}
+ s+='<g clip-path="url(#c5)">';
+ var nw=Math.hypot(w[0],w[1]),um=[dm[0]/Math.hypot(dm[0],dm[1]),dm[1]/Math.hypot(dm[0],dm[1])];
+ s+=bline(D5.mm_.u,D5.mm_.c,'var(--violet-ink)',1.8,'7 5');
+ s+=bline(um,0,GREEN,1.8,'3 4');
+ s+=bline([w[0]/nw,w[1]/nw],-w[2]/nw,'var(--text-primary)',2.6);
+ D5.P.forEach(function(p){s+='<circle cx="'+px(p.x[0]).toFixed(1)+'" cy="'+py(p.x[1]).toFixed(1)+'" r="4" fill="'+(p.y>0?WARM:BLUE)+'" stroke="'+(p.y>0?'var(--warm-ink)':'var(--blue-ink)')+'" stroke-width="0.8" opacity="0.85"/>';});
+ [[D5.mp,'var(--warm-ink)'],[D5.mm,'var(--blue-ink)']].forEach(function(q){var x=px(q[0][0]),y=py(q[0][1]);s+=L(x-7,y-7,x+7,y+7,q[1],3)+L(x-7,y+7,x+7,y-7,q[1],3);});
+ s+=arrow(px(D5.mm[0]),py(D5.mm[1]),px(D5.mp[0]),py(D5.mp[1]),GREEN,1.6);
+ s+='</g>';
+ s+=T(X0+S/2,Y0-6,'the data, and three boundaries','ts','middle');
+ var ly=Y0+S+18;
+ s+=T(X0,ly,'<tspan style="fill:var(--text-primary)">&#9644;</tspan> logistic regression at this &lambda;   <tspan style="fill:var(--violet-ink)">&#8211; &#8211;</tspan> max margin   <tspan style="fill:var(--green)">&middot;&middot;&middot;</tspan> nearest mean   &times; class means','tn','start');
+ // right: angle of w against λ
+ var RX=mob?40:470,RY=mob?Y0+S+60:20,RW=mob?360:400,RH=mob?220:330;
+ var lo=Math.min(aMM,aMD)-12,hi=Math.max(aMM,aMD)+12;
+ var qx=function(e){return RX+(e+5)/6*RW;},qy=function(a){return RY+RH-(a-lo)/(hi-lo)*RH;};
+ s+='<rect x="'+RX+'" y="'+RY+'" width="'+RW+'" height="'+RH+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
+ s+=L(RX,qy(aMM),RX+RW,qy(aMM),'var(--violet-ink)',1.6,'7 5')+T(RX+6,qy(aMM)+(aMM>aMD?-6:14),'max margin '+aMM.toFixed(0)+'°','tn','start','var(--violet-ink)');
+ s+=L(RX,qy(aMD),RX+RW,qy(aMD),GREEN,1.6,'3 4')+T(RX+RW-6,qy(aMD)+(aMD>aMM?-6:14),'mean difference '+aMD.toFixed(0)+'°','tn','end','var(--green-ink)');
+ s+=path(D5.curve.map(function(c){return [qx(c.e),qy(ang(c.w))];}),'var(--text-primary)',2.4);
+ s+=L(qx(lg),RY,qx(lg),RY+RH,'var(--text-secondary)',1,'4 3')+'<circle cx="'+qx(lg).toFixed(1)+'" cy="'+qy(aW).toFixed(1)+'" r="5" fill="var(--text-primary)"/>';
+ [-5,-4,-3,-2,-1,0,1].forEach(function(e){s+=T(qx(e),RY+RH+15,'10<tspan dy="-6" style="font-size:10px">'+String(e).replace('-','−')+'</tspan>','tn','middle');});
+ s+=T(RX+RW/2,RY+RH+34,'weight decay &lambda; (log scale)','tn','middle');
+ s+=T(RX+RW/2,RY-6,'direction of w (angle in degrees)','ts','middle');
+ document.getElementById('f5').setAttribute('viewBox',mob?'0 0 440 '+(RY+RH+50):'0 0 900 400');
+ document.getElementById('g5').innerHTML=s;
+ var acc=D5.P.filter(function(p){return p.y*(w[0]*p.x[0]+w[1]*p.x[1]+w[2])>0;}).length/D5.P.length;
+ var toMM=Math.abs(aW-aMM),toMD=Math.abs(aW-aMD);
+ document.getElementById('rd5').innerHTML='&lambda; = '+document.getElementById('lam5v').textContent+': w points at <b>'+aW.toFixed(0)+'°</b>, '+toMM.toFixed(0)+'° from max margin and '+toMD.toFixed(0)+'° from the mean difference; &#8214;w&#8214; = '+nw.toFixed(2)+', training accuracy '+(100*acc).toFixed(0)+'%. '+
+  (toMM<4?'Little decay: w is large and only the closest points matter, so it has found the max-margin direction.':
+   toMD<4?'Strong decay: w is tiny, every point pulls equally, and it has become the nearest-mean classifier, even though that misclassifies some training points.':
+   'In between: the direction is sliding from one to the other.');
 }
 
 function caption(){
@@ -335,15 +517,15 @@ function caption(){
  '<div style="margin-top:4px"><b>Why corners.</b> Minimizing the loss plus a penalty is the same as minimizing the loss within some budget. The answer is where the smallest contour touches the budget&rsquo;s edge. '+
  'A ball is smooth, so the touching point can be anywhere on it and both weights stay non-zero. A diamond has corners on the axes, and a tilted contour touches a corner far more often than an edge: that is where L1&rsquo;s zeros, and its use for choosing a few features, come from.</div>'+
  '<div style="margin-top:4px"><b>Why smooth.</b> A curve that passes through twelve noisy points with twelve coefficients needs large coefficients that nearly cancel; between the points nothing restrains them. Charging for &#8214;w&#8214;&sup2; rules those out. '+
- 'Too little penalty overfits, too much underfits: the same U as the <a href="../quiz0/capacity.html">capacity</a> demo, with &lambda; as the dial instead of the degree.</div>'+
- '<div style="margin-top:4px"><b>Why AdamW.</b> Adam divides each gradient by the square root of that weight&rsquo;s running mean squared gradient. With the penalty in the loss, a weight with big gradients has its decay divided by a big number, and a weight with tiny gradients has its decay divided by a tiny one, which turns it into a full-size step toward 0. '+
- 'Loshchilov and Hutter (2019) proposed applying the decay after Adam&rsquo;s update instead, the same shrink for every weight; that is AdamW, and it is the default in most modern training.</div>';
+ 'Too little penalty overfits, too much underfits: the same U as the <a href="../quiz0/capacity.html">capacity</a> demo, with &lambda; as the dial instead of the degree.</div>';
 }
+katex.render('\\ell(m)=\\log(1+e^{-m})=\\log 2-\\tfrac{m}{2}+\\tfrac{m^2}{8}-\\cdots',document.getElementById('e5a'),{throwOnError:false,displayMode:true});
+katex.render('\\min_w\\;\\log 2-\\tfrac12\\,\\overline{y_i\\,w\\!\\cdot\\!x_i}+\\tfrac{\\lambda}{2}\\lVert w\\rVert^2\\quad\\Longrightarrow\\quad w=\\frac{1}{2\\lambda}\\,\\overline{y_i\\,x_i}=\\frac{\\mu_+-\\mu_-}{4\\lambda}',document.getElementById('e5b'),{throwOnError:false,displayMode:true});
 katex.render('\\mathcal{L}(\\theta) = \\mathcal{L}_\\text{objective}(\\theta) + \\tfrac{\\lambda}{2\\nu}\\lVert\\theta\\rVert^2',document.getElementById('t1'),{throwOnError:false});
 katex.render('\\nabla\\mathcal{L}_\\text{objective} + \\tfrac{\\lambda}{\\nu}\\theta',document.getElementById('t2'),{throwOnError:false});
 katex.render('\\theta \\;\\leftarrow\\; \\theta - \\nu\\left(\\nabla\\mathcal{L}_\\text{objective} + \\tfrac{\\lambda}{\\nu}\\theta\\right) \\;=\\; \\underbrace{(1-\\lambda)\\,\\theta}_{\\text{shrink}} \\;-\\; \\nu\\,\\nabla\\mathcal{L}_\\text{objective}(\\theta)',document.getElementById('e1'),{throwOnError:false,displayMode:true});
-window.addEventListener('resize',function(){draw1();draw2();draw3();draw4();});
-sample3();P1=runs1();setLam1();K1=N1;draw1();draw2();draw3();draw4();caption();
+window.addEventListener('resize',function(){draw1();draw2();draw3();draw4();draw5();});
+sample3();P1=runs1();setLam1();K1=N1;run4();sample5();draw1();draw2();draw3();draw4();draw5();caption();
 </script>
 </body>
 </html>
