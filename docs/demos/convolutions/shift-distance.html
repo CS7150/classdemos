@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shift breaks pixel distance</title>
+<meta name="description" content="A digit, the same digit shifted a few pixels, and a different digit: as tensors, the shifted copy is soon farther from the original than the other digit is.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 16px;max-width:1100px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+.quiz{margin:0}
+svg{max-height:60vh;touch-action:none}
+.row{gap:7px}
+button,select{height:30px;font-size:13px;padding:0 9px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:28px}
+input[type=range]{flex:0 1 140px;min-width:90px}
+label.cb{font-size:13px}
+.rd{font-size:14px;line-height:1.5;min-height:3em}
+.cap{font-size:12.5px;line-height:1.55;padding-top:4px}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Convolution demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Shift breaks pixel distance<span>: as tensors, a moved digit is a different digit</span></h1>
+<p class="quiz">Which is closer to A: B, the same digit moved a few pixels, or C, a different digit? To your eye, B. To a tensor, often C. <b>Drag B</b> to shift it.</p>
+
+<svg id="fig" viewBox="0 0 1040 330" role="img">
+<title>A digit, a shifted copy, and a different digit, with their pixel distances</title>
+<desc>Three pixel grids: digit A; the shifted copy B drawn over A, with pixels only A has in orange and pixels only B has in blue; and a different digit C drawn over A the same way. On the right, the distance from A to its shifted copy plotted against the shift, rising quickly, with horizontal lines at the distance from A to each other digit.</desc>
+<g id="stage"></g>
+</svg>
+
+<div class="row">
+<span class="klab">A is a</span>
+<select id="da" onchange="setA()"></select>
+<span class="klab">C is a</span>
+<select id="dc" onchange="draw()"></select>
+<span class="klab" style="margin-left:8px">shift B across</span>
+<input type="range" id="sx" min="-6" max="6" step="1" value="2" oninput="DX=+this.value;draw()">
+<span class="knum" id="sxv"></span>
+<span class="klab">down</span>
+<input type="range" id="sy" min="-6" max="6" step="1" value="0" oninput="DY=+this.value;draw()">
+<span class="knum" id="syv"></span>
+<button onclick="setShift(0,0)">No shift</button>
+<label class="cb"><input type="checkbox" id="blur" onchange="draw()">compare after blurring</label>
+</div>
+<div class="rd" id="readout"></div>
+<div class="cap" id="caption"></div>
+
+<script>
+var N=20,CS=8,PW=N*CS,A=3,DX=2,DY=0;
+var WARM='var(--warm)',BLUE='var(--blue)',PINK='var(--pink)',GREEN='var(--green)',INK='var(--text-primary)';
+var IMG=[];
+
+// Each digit is drawn once in the system font at 20x20 and centred by its centre
+// of mass, so "no shift" means the same place for every digit.
+function render(d){
+ var c=document.createElement('canvas');c.width=c.height=N;var x=c.getContext('2d');
+ x.fillStyle='#000';x.font='bold 17px Helvetica, Arial, sans-serif';x.textAlign='center';x.textBaseline='middle';
+ x.fillText(String(d),N/2,N/2+1);
+ var p=x.getImageData(0,0,N,N).data,a=new Float64Array(N*N),m=0,sx=0,sy=0,s=0,i;
+ for(i=0;i<N*N;i++){a[i]=p[4*i+3]/255;m=Math.max(m,a[i]);}
+ for(i=0;i<N*N;i++){a[i]/=m||1;s+=a[i];sx+=a[i]*(i%N);sy+=a[i]*Math.floor(i/N);}
+ return shift(a,Math.round((N-1)/2-sx/s),Math.round((N-1)/2-sy/s));
+}
+function shift(a,dx,dy){var o=new Float64Array(N*N);
+ for(var y=0;y<N;y++)for(var x=0;x<N;x++){var u=x-dx,v=y-dy;
+  if(u>=0&&u<N&&v>=0&&v<N)o[y*N+x]=a[v*N+u];}return o;}
+// a small gaussian blur (sigma 1), zero outside the frame
+var GK=[0.054,0.242,0.399,0.242,0.054];
+function blur(a){var t=new Float64Array(N*N),o=new Float64Array(N*N),x,y,k;
+ for(y=0;y<N;y++)for(x=0;x<N;x++){var s=0;for(k=-2;k<=2;k++)if(x+k>=0&&x+k<N)s+=GK[k+2]*a[y*N+x+k];t[y*N+x]=s;}
+ for(y=0;y<N;y++)for(x=0;x<N;x++){var s2=0;for(k=-2;k<=2;k++)if(y+k>=0&&y+k<N)s2+=GK[k+2]*t[(y+k)*N+x];o[y*N+x]=s2;}
+ return o;}
+function an(k){return (k===8?'an ':'a ')+k;}
+function dist(a,b){var s=0;for(var i=0;i<N*N;i++){var e=a[i]-b[i];s+=e*e;}return Math.sqrt(s);}
+function see(a){return document.getElementById('blur').checked?blur(a):a;}
+
+/* ---------- drawing ---------- */
+function T(x,y,s,cls,anc,fill){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'"'+
+ (anc?' text-anchor="'+anc+'"':'')+(fill?' style="fill:'+fill+'"':'')+'>'+s+'</text>';}
+// A panel: one image in ink, or an image over A with what only A has in orange,
+// what only it has in blue, and what they share in ink.
+function panel(x0,y0,img,over,title){
+ var s='<rect x="'+x0+'" y="'+y0+'" width="'+PW+'" height="'+PW+'" fill="var(--surface)" stroke="var(--border)"/>',i;
+ for(i=0;i<N*N;i++){var x=x0+(i%N)*CS,y=y0+Math.floor(i/N)*CS,b=img[i],a=over?over[i]:0;
+  function cell(op,col){if(op>0.03)s+='<rect x="'+x+'" y="'+y+'" width="'+CS+'" height="'+CS+'" fill="'+col+'" opacity="'+Math.min(1,op).toFixed(2)+'"/>';}
+  if(over){cell(Math.min(a,b),INK);cell(a-b,WARM);cell(b-a,BLUE);}else cell(b,INK);}
+ for(i=1;i<N;i++){s+='<line x1="'+(x0+i*CS)+'" y1="'+y0+'" x2="'+(x0+i*CS)+'" y2="'+(y0+PW)+'" stroke="var(--border)" stroke-width="0.4" opacity="0.6"/>'+
+  '<line x1="'+x0+'" y1="'+(y0+i*CS)+'" x2="'+(x0+PW)+'" y2="'+(y0+i*CS)+'" stroke="var(--border)" stroke-width="0.4" opacity="0.6"/>';}
+ return s+T(x0+PW/2,y0-10,title,'ts','middle');
+}
+function bar(x0,y,d,dmax,col,label){var w=PW*Math.min(1,d/dmax);
+ return '<rect x="'+x0+'" y="'+y+'" width="'+PW+'" height="9" fill="var(--surface-1)"/>'+
+  '<rect x="'+x0+'" y="'+y+'" width="'+w.toFixed(1)+'" height="9" fill="'+col+'"/>'+
+  T(x0,y+26,label,'tn','start');}
+function mobile(){return !!(window.matchMedia&&window.matchMedia('(max-width:820px)').matches);}
+
+function draw(){
+ document.getElementById('sxv').textContent=DX;document.getElementById('syv').textContent=DY;
+ var C=+document.getElementById('dc').value,a0=IMG[A],b0=shift(a0,DX,DY),c0=IMG[C];
+ var a=see(a0),b=see(b0),c=see(c0),dAB=dist(a,b),dAC=dist(a,c),k,i;
+ var others=[];for(k=0;k<10;k++)if(k!==A)others.push({k:k,d:dist(a,see(IMG[k]))});
+ var curve=[];for(i=-6;i<=6;i++)curve.push(dist(a,see(shift(a0,i,DY))));
+ var dmax=1.08*Math.max.apply(null,curve.concat(others.map(function(o){return o.d;})));
+ // left: the three panels
+ var L='',PX=[20,200,380],PY=40;
+ L+=panel(PX[0],PY,a,null,'A');
+ L+=panel(PX[1],PY,b,a,'B = A shifted ('+DX+', '+DY+'), over A');
+ L+=panel(PX[2],PY,c,a,'C = '+an(C)+', over A');
+ L+='<rect id="grabB" x="'+PX[1]+'" y="'+PY+'" width="'+PW+'" height="'+PW+'" fill="transparent" style="cursor:grab"/>';
+ L+=bar(PX[1],PY+PW+14,dAB,dmax,BLUE,'‖A − B‖ = '+dAB.toFixed(2));
+ L+=bar(PX[2],PY+PW+14,dAC,dmax,PINK,'‖A − C‖ = '+dAC.toFixed(2));
+ L+=T(PX[0],PY+PW+22,'<tspan style="fill:var(--warm)">■</tspan> only in A','tn','start');
+ L+=T(PX[0],PY+PW+40,'<tspan style="fill:var(--blue)">■</tspan> only in B or C','tn','start');
+ L+=T(PX[0],PY+PW+58,'<tspan style="fill:var(--text-primary)">■</tspan> in both','tn','start');
+ // right: distance against shift
+ var R='',X0=620,X1=1010,Y0=40,Y1=260;
+ function px(i){return X0+(i+6)/12*(X1-X0);}function py(d){return Y1-d/dmax*(Y1-Y0);}
+ R+='<rect x="'+X0+'" y="'+Y0+'" width="'+(X1-X0)+'" height="'+(Y1-Y0)+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
+ R+=T((X0+X1)/2,Y0-10,'distance from A, as B shifts across','ts','middle');
+ for(i=-6;i<=6;i+=2)R+=T(px(i),Y1+16,String(i).replace('-','−'),'tn','middle');
+ R+=T((X0+X1)/2,Y1+34,'horizontal shift of B, pixels (vertical shift '+DY+')','tn','middle');
+ // other digits as flat lines; labels nudged apart so they never overlap
+ others.sort(function(p,q){return p.d-q.d;});
+ var near=others[0],ly=[];
+ others.forEach(function(o){var y=py(o.d),isC=o.k===C;
+  R+='<line x1="'+X0+'" y1="'+y.toFixed(1)+'" x2="'+X1+'" y2="'+y.toFixed(1)+'" stroke="'+(isC?PINK:'var(--text-muted)')+'" stroke-width="'+(isC?1.8:0.8)+'" opacity="'+(isC?1:0.45)+'"'+(isC?'':' stroke-dasharray="3 3"')+
+   '><title>‖A − '+o.k+'‖ = '+o.d.toFixed(2)+'</title></line>';
+  if(isC||o===near)ly.push({y:y,s:(isC?'C, '+an(o.k)+(o===near?', the nearest':''):'nearest, '+an(o.k)),c:isC?'var(--pink-ink)':''});});
+ ly.sort(function(p,q){return q.y-p.y;});
+ for(i=1;i<ly.length;i++)if(ly[i].y>ly[i-1].y-14)ly[i].y=ly[i-1].y-14;
+ ly.forEach(function(l){R+=T(X0+6,l.y-4,l.s,'tn','start',l.c);});
+ R+=T(X1,Y1+50,'dashed: the distance from A to each other digit','tn','end');
+ var p='';for(i=0;i<13;i++)p+=(i?'L':'M')+px(i-6).toFixed(1)+' '+py(curve[i]).toFixed(1)+' ';
+ R+='<path d="'+p+'" fill="none" stroke="'+BLUE+'" stroke-width="2.6"/>';
+ for(i=0;i<13;i++)R+='<circle cx="'+px(i-6).toFixed(1)+'" cy="'+py(curve[i]).toFixed(1)+'" r="2.4" fill="'+BLUE+'"/>';
+ R+='<circle cx="'+px(DX).toFixed(1)+'" cy="'+py(dAB).toFixed(1)+'" r="6" fill="'+BLUE+'" stroke="var(--bg)" stroke-width="1.5"/>';
+ R+=T(px(0)+8,py(0)-4,'A itself','tn','start');
+ // assemble, stacked on a phone
+ var svg=document.getElementById('fig'),mob=mobile();
+ svg.setAttribute('viewBox',mob?'0 0 560 660':'0 0 1040 330');
+ document.getElementById('stage').innerHTML=mob?L+'<g transform="translate(-580,330)">'+R+'</g>':L+R;
+ // readout: which is closer, and what a nearest-template classifier would say about B
+ var best=0,bd=1e9;for(k=0;k<10;k++){var d=dist(b,see(IMG[k]));if(d<bd){bd=d;best=k;}}
+ var h='‖A − B‖ = <b>'+dAB.toFixed(2)+'</b>, ‖A − C‖ = <b>'+dAC.toFixed(2)+'</b>: ';
+ h+=DX===0&&DY===0?'B is A exactly.':dAB>dAC?'<b>the shifted '+A+' is farther from A than '+an(C).replace(/^an? /,'the ')+' is.</b>':'B is still closer to A than C is.';
+ h+=' Matched against the ten unshifted digits, B is nearest <b style="color:'+(best===A?'var(--green-ink)':'var(--pink-ink)')+'">'+an(best)+'</b>'+
+  (best===A?'.':': a pixel-space nearest-neighbour classifier would get it wrong.');
+ var first=null;for(i=1;i<=6&&first===null;i++)if(dist(a,see(shift(a0,i,0)))>near.d)first=i;
+ document.getElementById('readout').innerHTML=h;
+ caption(first,near);
+}
+function caption(first,near){
+ var h='<b>Why.</b> Distance between tensors compares pixel <i>i</i> of one with pixel <i>i</i> of the other, and nothing else: '+
+  '‖A − B‖&sup2; = &Sigma;<sub>i</sub> (A<sub>i</sub> &minus; B<sub>i</sub>)&sup2;. Move a stroke two pixels and almost every pixel it lit is now dark, '+
+  'and a new set is lit instead: the orange and blue are both counted in full. Once the shifted strokes stop overlapping the originals, '+
+  'the distance stops growing, because there is nothing left to lose. A different digit, drawn in the same place, shares many of the same pixels.';
+ h+=' Here '+an(A)+' moved '+(first?'<b>'+first+' pixel'+(first>1?'s':'')+'</b> sideways is already farther from itself than the nearest other digit ('+an(near.k)+') is':
+  'stays closer to itself than to any other digit even at six pixels, which is rare; try another digit')+'.';
+ h+='<div style="margin-top:4px"><b>Blurring only postpones it.</b> Blurring first spreads each stroke out so shifted copies overlap for a little longer, '+
+  'but the curve still climbs. The fix has to be structural: compare the images with an operation that treats every position alike. '+
+  'That is a <a href="orientation.html">convolution</a>, and, with pooling on top, a comparison that no longer cares where the digit is.</div>';
+ document.getElementById('caption').innerHTML=h;
+}
+
+/* ---------- controls ---------- */
+function setShift(x,y){DX=Math.max(-6,Math.min(6,x));DY=Math.max(-6,Math.min(6,y));
+ document.getElementById('sx').value=DX;document.getElementById('sy').value=DY;draw();}
+function setA(){A=+document.getElementById('da').value;draw();}
+// Drag B: every CS figure pixels of travel is one pixel of shift.  The handlers sit
+// on the svg, which outlives the redraws, so the capture survives them.
+(function(){var svg=document.getElementById('fig'),drag=null;
+ svg.addEventListener('pointerdown',function(e){if(!e.target||e.target.id!=='grabB')return;
+  drag={x:e.clientX,y:e.clientY,dx:DX,dy:DY,k:svg.viewBox.baseVal.width/svg.getBoundingClientRect().width};
+  svg.setPointerCapture(e.pointerId);svg.style.cursor='grabbing';e.preventDefault();});
+ svg.addEventListener('pointermove',function(e){if(!drag)return;
+  var nx=drag.dx+Math.round((e.clientX-drag.x)*drag.k/CS),ny=drag.dy+Math.round((e.clientY-drag.y)*drag.k/CS);
+  if(nx!==DX||ny!==DY)setShift(nx,ny);});
+ var up=function(){drag=null;svg.style.cursor='';};
+ svg.addEventListener('pointerup',up);svg.addEventListener('pointercancel',up);})();
+document.addEventListener('keydown',function(e){if(e.target.tagName==='SELECT'||e.target.tagName==='INPUT')return;
+ var m={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];
+ if(m){e.preventDefault();setShift(DX+m[0],DY+m[1]);}});
+window.addEventListener('resize',draw);
+(function(){var o='';for(var k=0;k<10;k++){IMG.push(render(k));o+='<option>'+k+'</option>';}
+ document.getElementById('da').innerHTML=o;document.getElementById('dc').innerHTML=o;
+ document.getElementById('da').value='3';document.getElementById('dc').value='8';draw();})();
+</script>
+</body>
+</html>

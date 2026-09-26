@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Convolutions, explained</title>
+<meta name="description" content="Interactive explainers for LeCun et al. 1989: why pixel distance fails under shifts, and how an oriented detector copied to every position becomes a convolution.">
+<style>
+:root{--bg:#faf9f5;--surface:#ffffff;--surface-1:#f1efe8;--text-primary:#26251f;--text-secondary:#5f5e5a;--text-muted:#888780;
+ --border:#d3d1c7;--border-strong:#b4b2a9;--accent:#185FA5;--accent-warm:#BA7517;--accent-green:#0F6E56;}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#1a1a18;--surface:#232320;--surface-1:#2c2c2a;
+ --text-primary:#eceae2;--text-secondary:#b4b2a9;--text-muted:#888780;--border:#3a3a36;--border-strong:#5f5e5a;
+ --accent:#79b1ec;--accent-warm:#d9a24d;--accent-green:#4fbb99;}}
+:root[data-theme="dark"]{--bg:#1a1a18;--surface:#232320;--surface-1:#2c2c2a;--text-primary:#eceae2;--text-secondary:#b4b2a9;
+ --text-muted:#888780;--border:#3a3a36;--border-strong:#5f5e5a;--accent:#79b1ec;--accent-warm:#d9a24d;--accent-green:#4fbb99;}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--text-primary);line-height:1.6;
+ font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
+.page{max-width:900px;margin:0 auto;padding:0 20px 72px}
+header{padding-block:44px 24px;border-bottom:1px solid var(--border)}
+.nav{font-size:14px;margin:0 0 18px}
+.nav a{color:var(--text-muted);text-decoration:none}
+.nav a:hover{color:var(--text-secondary);text-decoration:underline}
+.eyebrow{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);margin:0 0 10px}
+h1{font-size:32px;font-weight:600;letter-spacing:-.015em;margin:0 0 12px}
+header p{margin:0 0 10px;font-size:17px;color:var(--text-secondary);max-width:64ch}
+a{color:var(--accent)}
+ol.qs{list-style:none;counter-reset:q;margin:26px 0 0;padding:0}
+ol.qs li{counter-increment:q;border-bottom:1px solid var(--border);padding:20px 0 20px 52px;position:relative}
+ol.qs li:before{content:counter(q);position:absolute;left:0;top:19px;width:34px;height:34px;border-radius:50%;
+ display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500;
+ background:var(--surface-1);color:var(--text-secondary);border:1px solid var(--border)}
+ol.qs li.done:before{background:var(--surface);border-color:var(--accent);color:var(--accent)}
+.qtag{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-warm)}
+h2{font-size:20px;font-weight:600;margin:5px 0 6px;letter-spacing:-.01em}
+h2 a{text-decoration:none}
+h2 a:hover{text-decoration:underline}
+.what{margin:0;font-size:15.5px;color:var(--text-secondary)}
+.go{display:inline-block;margin-top:9px;font-size:15px}
+footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--border);font-size:14.5px;color:var(--text-muted)}
+footer a{color:var(--text-secondary)}
+@media (max-width:640px){h1{font-size:26px}ol.qs li{padding-left:44px}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <div class="nav"><a href="../../">&larr; CS7150 class demos</a></div>
+  <p class="eyebrow">Northeastern University &middot; CS 7150 &middot; Fall 2026</p>
+  <h1>Convolutions, explained</h1>
+  <p>Interactive pieces for the convolution lecture and <a href="http://yann.lecun.com/exdb/publis/pdf/lecun-89e.pdf">LeCun et al. 1989</a>:
+     first, why comparing images pixel by pixel fails as soon as something moves; then the oriented
+     detector Hubel and Wiesel found in the cat's visual cortex, rebuilt as a small grid of weights, and why
+     you need a copy of it at every position.</p>
+</header>
+
+<ol class="qs">
+
+<li class="done">
+  <div class="qtag">The problem</div>
+  <h2><a href="shift-distance.html">Shift breaks pixel distance</a></h2>
+  <p class="what">A digit, the same digit moved a few pixels, and a different digit. Drag the copy and
+     watch its distance from the original climb past the distance to other digits, often after a
+     single pixel, until a nearest-neighbour classifier on pixels calls it something else. Blurring
+     first only postpones it.</p>
+  <a class="go" href="shift-distance.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">Hubel and Wiesel</div>
+  <h2><a href="orientation.html">Orientation tuning</a></h2>
+  <p class="what">Turn a bar of light in front of one detector, the lecture&rsquo;s &minus;&frac12; +1 &minus;&frac12;
+     edge-finder rotated, and trace its tuning curve while it crackles. Move the bar off centre and it
+     goes silent, which is why the same detector has to be copied to every position; a bank of eight
+     angles reads out the orientation.</p>
+  <a class="go" href="orientation.html">Open the explainer &rarr;</a>
+</li>
+</ol>
+
+<footer>
+  Builds on the <a href="../quiz0/matvec.html">matrix &times; vector</a> demo. &middot;
+  <a href="https://github.com/CS7150/classdemos">Repository</a>
+</footer>
+
+</div>
+</body>
+</html>

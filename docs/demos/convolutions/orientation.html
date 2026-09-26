@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Orientation tuning</title>
+<meta name="description" content="A bar of light turned in front of one oriented detector, the slide's −.5 +1 −.5 kernel rotated, reproduces Hubel and Wiesel's orientation tuning curve; a bank of eight detectors reads out the angle.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 16px;max-width:1100px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+.quiz{margin:0}
+svg{max-height:64vh;touch-action:none}
+.row{gap:7px}
+button{height:30px;font-size:13px;padding:0 9px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:38px}
+input[type=range]{flex:0 1 160px;min-width:90px}
+label.cb{font-size:13px}
+.rd{font-size:14px;line-height:1.5;min-height:1.5em}
+.cap{font-size:12.5px;line-height:1.55;padding-top:4px}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Convolution demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Orientation tuning<span>: one oriented detector, and a bank of them</span></h1>
+<p class="quiz">Hubel and Wiesel shone a bar of light on a cat's retina and turned it, listening to one cell in the visual cortex crackle. Here the cell is a small grid of weights. <b>Drag the bar</b> to turn it, or press Sweep.</p>
+
+<svg id="fig" viewBox="0 0 1040 470" role="img">
+<title>A bar of light, one oriented detector, and its tuning curve</title>
+<desc>Left, a grid of pixels with a bright bar through it at an adjustable angle and a dashed circle marking the detector's receptive field, above a strip of recent spikes. Middle, the detector's weights: a positive stripe flanked by negative stripes at its preferred angle. Right, the detector's response against the bar's angle, peaking at the preferred angle and silent beyond about 40 degrees away. Below, eight detectors at angles 22.5 degrees apart, each with a bar showing how strongly it responds to the current bar.</desc>
+<g id="stage"></g>
+<g id="spikes"></g>
+</svg>
+
+<div class="row">
+<span class="klab">bar angle</span>
+<input type="range" id="th" min="0" max="180" step="1" value="60" oninput="TH=+this.value;draw()">
+<span class="knum" id="thv"></span>
+<span class="klab">bar position</span>
+<input type="range" id="off" min="-6" max="6" step="0.5" value="0" oninput="OFF=+this.value;curve();draw()">
+<span class="knum" id="offv"></span>
+<button class="main" id="sw" onclick="sweep()">Sweep</button>
+<label class="cb"><input type="checkbox" id="snd" onchange="sound(this.checked)">crackle</label>
+</div>
+<div class="rd" id="readout"></div>
+<div class="cap" id="caption"></div>
+
+<script>
+var M=21,C0=10,CS=9,KR=4,KS=2*KR+1,TH=60,OFF=0,PHI=45,CUR=[],RATE=40;
+var ORANGE='var(--orange)',BLUE='var(--blue)',PINK='var(--pink)',GREEN='var(--green)',INK='var(--text-primary)';
+var rad=Math.PI/180;
+
+// The bar: a stripe about 1.4 pixels wide through the frame at angle th (counter-
+// clockwise from horizontal), moved sideways by off; supersampled so it is smooth
+// at every angle.
+function barImg(th,off){var o=new Float64Array(M*M),s=Math.sin(th*rad),c=Math.cos(th*rad),x,y,i,j;
+ for(y=0;y<M;y++)for(x=0;x<M;x++){var n=0;
+  for(i=0;i<3;i++)for(j=0;j<3;j++){var X=x-C0+(i-1)/3,Y=y-C0+(j-1)/3;if(Math.abs(X*s+Y*c-off)<0.7)n++;}
+  o[y*M+x]=n/9;}return o;}
+// The detector: the slide's column of −.5 +1 −.5, turned to angle phi and cut to
+// a disk so no direction is favoured by the corners; shifted to sum to zero, so
+// even light gives nothing.
+var KCACHE={};
+function kernel(phi){if(KCACHE[phi])return KCACHE[phi];
+ var k=new Float64Array(KS*KS),m=new Float64Array(KS*KS),s=Math.sin(phi*rad),c=Math.cos(phi*rad),u,v,i,j,sum=0,cnt=0;
+ for(v=-KR;v<=KR;v++)for(u=-KR;u<=KR;u++){var a=0,w=0;
+  for(i=0;i<4;i++)for(j=0;j<4;j++){var U=u+(i-1.5)/4,V=v+(j-1.5)/4;if(U*U+V*V>(KR+0.5)*(KR+0.5))continue;
+   w++;var d=Math.abs(U*s+V*c);a+=d<0.75?1:d<2.25?-0.5:0;}
+  var id=(v+KR)*KS+u+KR;if(w){k[id]=a/16;m[id]=w/16;sum+=k[id];cnt+=m[id];}}
+ for(i=0;i<KS*KS;i++)k[i]-=sum/cnt*m[i];
+ // on a pixel grid the best-aligned bar is not always exactly at phi, so scale by
+ // the best response to any centred bar
+ k.peak=0;for(var t=0;t<180;t+=1)k.peak=Math.max(k.peak,resp0(k,barImg(t,0)));return KCACHE[phi]=k;}
+function resp0(k,img){var s=0;for(var v=-KR;v<=KR;v++)for(var u=-KR;u<=KR;u++)s+=k[(v+KR)*KS+u+KR]*img[(C0+v)*M+C0+u];return s;}
+// response scaled so the preferred bar, centred, gives 1
+function resp(phi,th,off){var k=kernel(phi);return resp0(k,barImg(th,off))/k.peak;}
+function curve(){CUR=[];for(var t=0;t<=180;t+=2)CUR.push(resp(PHI,t,OFF));}
+function relu(v){return Math.max(0,v);}
+
+/* ---------- drawing ---------- */
+function T(x,y,s,cls,anc,fill){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'"'+
+ (anc?' text-anchor="'+anc+'"':'')+(fill?' style="fill:'+fill+'"':'')+'>'+s+'</text>';}
+function grid(x0,y0,n,cs){var s='';for(var i=1;i<n;i++)
+ s+='<line x1="'+(x0+i*cs)+'" y1="'+y0+'" x2="'+(x0+i*cs)+'" y2="'+(y0+n*cs)+'" stroke="var(--border)" stroke-width="0.4" opacity="0.6"/>'+
+  '<line x1="'+x0+'" y1="'+(y0+i*cs)+'" x2="'+(x0+n*cs)+'" y2="'+(y0+i*cs)+'" stroke="var(--border)" stroke-width="0.4" opacity="0.6"/>';return s;}
+// weights: positive orange, negative blue, strength as opacity
+function kdraw(k,x0,y0,cs,sel){var s='<rect x="'+x0+'" y="'+y0+'" width="'+KS*cs+'" height="'+KS*cs+'" fill="var(--surface)" stroke="'+(sel?'var(--text-primary)':'var(--border)')+'" stroke-width="'+(sel?2:1)+'"/>';
+ for(var i=0;i<KS*KS;i++){var v=k[i];if(Math.abs(v)<0.03)continue;
+  s+='<rect x="'+(x0+(i%KS)*cs)+'" y="'+(y0+Math.floor(i/KS)*cs)+'" width="'+cs+'" height="'+cs+'" fill="'+(v>0?ORANGE:BLUE)+'" opacity="'+Math.min(1,Math.abs(v)).toFixed(2)+'"/>';}
+ return s+(cs>8?grid(x0,y0,KS,cs):'');}
+function mobile(){return !!(window.matchMedia&&window.matchMedia('(max-width:820px)').matches);}
+var LAY;
+function layout(){return mobile()?
+ {vb:'0 0 560 940',st:[20,40],sp:[20,262],k:[330,90],pl:[60,380,530,560],bk:[20,680,4,135]}:
+ {vb:'0 0 1040 450',st:[20,40],sp:[20,262],k:[330,90],pl:[520,40,1010,230],bk:[20,350,8,127]};}
+function draw(){
+ LAY=layout();
+ document.getElementById('thv').textContent=TH+'°';document.getElementById('offv').textContent=OFF;
+ var s='',img=barImg(TH,OFF),i,r=resp(PHI,TH,OFF),x0=LAY.st[0],y0=LAY.st[1],P=M*CS;
+ // the stimulus, and the detector's receptive field on it
+ s+='<rect id="stim" x="'+x0+'" y="'+y0+'" width="'+P+'" height="'+P+'" fill="var(--surface)" stroke="var(--border)" style="cursor:grab"/>';
+ for(i=0;i<M*M;i++)if(img[i]>0.03)s+='<rect x="'+(x0+(i%M)*CS)+'" y="'+(y0+Math.floor(i/M)*CS)+'" width="'+CS+'" height="'+CS+'" fill="'+INK+'" opacity="'+img[i].toFixed(2)+'" pointer-events="none"/>';
+ s+='<g pointer-events="none">'+grid(x0,y0,M,CS)+'</g>';
+ s+='<circle cx="'+(x0+(C0+0.5)*CS)+'" cy="'+(y0+(C0+0.5)*CS)+'" r="'+((KR+0.5)*CS)+'" fill="none" stroke="'+(r>0?PINK:'var(--text-muted)')+'" stroke-width="'+(1+2*relu(r)).toFixed(1)+'" stroke-dasharray="5 4" pointer-events="none"/>';
+ s+=T(x0+P/2,y0-10,'the bar, at '+TH+'°','ts','middle');
+ s+=T(LAY.sp[0],LAY.sp[1]-6,'spikes, last 3 seconds','tn','start');
+ s+=T(x0+P+8,y0+(C0+0.5)*CS-(KR+0.5)*CS-4,'dashed: where','tn','start')+T(x0+P+8,y0+(C0+0.5)*CS-(KR+0.5)*CS+12,'it looks','tn','start');
+ // the detector
+ var kx=LAY.k[0],ky=LAY.k[1];
+ s+=kdraw(kernel(PHI),kx,ky,14,false);
+ s+=T(kx+KS*7,ky-26,'the detector\'s weights','ts','middle');
+ s+=T(kx+KS*7,ky-10,'prefers '+PHI+'°','tn','middle');
+ s+=T(kx,ky+KS*14+18,'<tspan style="fill:var(--orange)">■</tspan> +   <tspan style="fill:var(--blue)">■</tspan> −','tn','start');
+ s+=T(kx,ky+KS*14+36,'response = Σ weight × pixel','tn','start');
+ s+=T(kx,ky+KS*14+54,'= <tspan style="font-weight:600;fill:var(--text-primary)">'+r.toFixed(2)+'</tspan>'+(r<=0?'  (silent)':''),'tn','start');
+ // the tuning curve
+ var X0=LAY.pl[0],Y0=LAY.pl[1],X1=LAY.pl[2],Y1=LAY.pl[3],lo=-0.7,hi=1.1;
+ function px(t){return X0+t/180*(X1-X0);}function py(v){return Y1-(v-lo)/(hi-lo)*(Y1-Y0);}
+ s+='<rect x="'+X0+'" y="'+Y0+'" width="'+(X1-X0)+'" height="'+(Y1-Y0)+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
+ s+='<rect x="'+X0+'" y="'+py(0)+'" width="'+(X1-X0)+'" height="'+(Y1-py(0))+'" fill="var(--text-muted)" opacity="0.07"/>';
+ s+=T(X1-6,Y1-8,'below zero the cell is silent','tn','end');
+ s+='<line x1="'+X0+'" y1="'+py(0)+'" x2="'+X1+'" y2="'+py(0)+'" stroke="var(--border-strong)"/>';
+ [0,1].forEach(function(v){s+=T(X0-6,py(v)+4,String(v),'tn','end');});
+ for(var t=0;t<=180;t+=45)s+=T(px(t),Y1+16,t+'°','tn','middle');
+ s+=T((X0+X1)/2,Y1+34,'angle of the bar','tn','middle');
+ s+=T((X0+X1)/2,Y0-10,'response against angle: the tuning curve','ts','middle');
+ s+='<line x1="'+px(PHI)+'" y1="'+Y0+'" x2="'+px(PHI)+'" y2="'+Y1+'" stroke="var(--text-secondary)" stroke-width="1" stroke-dasharray="4 3"/>';
+ s+=T(px(PHI)+5,Y0+14,'preferred','tn','start');
+ var raw='',on='';for(i=0;i<CUR.length;i++){raw+=(i?'L':'M')+px(2*i).toFixed(1)+' '+py(CUR[i]).toFixed(1)+' ';on+=(i?'L':'M')+px(2*i).toFixed(1)+' '+py(relu(CUR[i])).toFixed(1)+' ';}
+ s+='<path d="'+raw+'" fill="none" stroke="var(--text-muted)" stroke-width="1.2" stroke-dasharray="4 3"/>';
+ s+='<path d="'+on+'" fill="none" stroke="'+PINK+'" stroke-width="2.6"/>';
+ s+='<circle cx="'+px(TH).toFixed(1)+'" cy="'+py(relu(r)).toFixed(1)+'" r="6" fill="'+PINK+'" stroke="var(--bg)" stroke-width="1.5"/>';
+ s+=T(X0+6,Y1-8,'<tspan style="fill:var(--pink)">━</tspan> firing   <tspan style="fill:var(--text-muted)">╌</tspan> weighted sum','tn','start');
+ // the bank
+ var bx=LAY.bk[0],by=LAY.bk[1],per=LAY.bk[2],step=LAY.bk[3],best=0,bv=-1,rs=[];
+ for(i=0;i<8;i++){rs.push(relu(resp(i*22.5,TH,OFF)));if(rs[i]>bv){bv=rs[i];best=i;}}
+ if(per<8)s+=T(bx,by-32,'a bank of eight detectors, 22.5° apart:','ts','start')+T(bx,by-14,'the one that fires most says the angle (click one)','ts','start');
+ else s+=T(bx,by-14,'a bank of eight detectors, 22.5° apart: which one fires most says the angle (click one to study it)','ts','start');
+ for(i=0;i<8;i++){var cx=bx+(i%per)*step,cy=by+Math.floor(i/per)*150,ph=i*22.5,sel=Math.abs(ph-PHI)<0.01;
+  s+='<g class="bank" data-phi="'+ph+'" style="cursor:pointer">'+kdraw(kernel(ph),cx,cy,6,sel)+
+   '<rect x="'+cx+'" y="'+cy+'" width="'+(KS*6+50)+'" height="'+(KS*6+64)+'" fill="transparent"/></g>';
+  var bh=50*Math.min(1,rs[i]);
+  s+='<rect x="'+(cx+KS*6+12)+'" y="'+(cy+KS*6-50)+'" width="14" height="50" fill="var(--surface-1)"/>';
+  s+='<rect x="'+(cx+KS*6+12)+'" y="'+(cy+KS*6-bh).toFixed(1)+'" width="14" height="'+bh.toFixed(1)+'" fill="'+(i===best&&bv>0?PINK:'var(--text-muted)')+'"/>';
+  s+=T(cx+KS*3,cy+KS*6+16,ph+'°','tn','middle',i===best&&bv>0?'var(--pink-ink)':'');}
+ var svg=document.getElementById('fig');svg.setAttribute('viewBox',LAY.vb);
+ document.getElementById('stage').innerHTML=s;
+ var hz=RATE*relu(r);
+ document.getElementById('readout').innerHTML='Bar at <b>'+TH+'°</b>, '+(OFF?'moved '+Math.abs(OFF)+' px off centre, ':'')+'detector prefers <b>'+PHI+'°</b>: '+
+  'weighted sum <b class="num">'+r.toFixed(2)+'</b>, so it fires about <b class="num">'+Math.round(hz)+'</b> spikes a second'+
+  (r<=0?' &mdash; nothing.':'.')+' The bank&rsquo;s strongest detector is the <b>'+(bv>0?best*22.5+'°':'none')+'</b> one.';
+}
+function caption(){
+ document.getElementById('caption').innerHTML=
+ '<b>The detector</b> is the slide&rsquo;s vertical edge-finder, a column of +1 between columns of &minus;&frac12;, turned to its preferred angle and cut to a disk. '+
+ 'Its response is one number, the sum of weight &times; pixel over the disk, and a cell cannot fire a negative rate, so anything below zero is silence. '+
+ 'When the bar lies along the +1 stripe, every lit pixel is weighted +1. Turn the bar and it leaves the stripe: a bar crossing it picks up +1 from the stripe and &minus;&frac12; from each flank, which cancel, so the sum drops to about zero, dipping just below it on the way. '+
+ 'The longer the stripe, the sooner a turned bar leaves it, so a bigger receptive field gives a sharper tuning curve.'+
+ '<div style="margin-top:4px"><b>Move the bar sideways</b> and the cell goes quiet at every angle: it only sees its own patch. '+
+ 'To see a bar anywhere, you need a copy of the same detector at every position. That is a <b>convolution</b>, and it is what Hubel and Wiesel found tiled across the cortex. '+
+ 'Many angles at every position make the bank: in a network, eight detectors are eight output channels of one layer.</div>';
+}
+
+/* ---------- interaction ---------- */
+function setTH(t){TH=Math.round(((t%180)+180)%180);document.getElementById('th').value=TH;draw();}
+var sw=null;
+function sweep(){if(sw){cancelAnimationFrame(sw.raf);sw=null;document.getElementById('sw').textContent='Sweep';return;}
+ sw={t0:performance.now(),th0:TH};document.getElementById('sw').textContent='Stop';
+ (function f(now){if(!sw)return;var u=(now-sw.t0)/8000;setTH(sw.th0+180*u);
+  if(u>=1){sw=null;document.getElementById('sw').textContent='Sweep';return;}sw.raf=requestAnimationFrame(f);})(sw.t0);}
+(function(){var svg=document.getElementById('fig'),on=false;
+ function aim(e){var r=document.getElementById('stim').getBoundingClientRect(),dx=e.clientX-(r.left+r.width/2),dy=e.clientY-(r.top+r.height/2);
+  if(dx*dx+dy*dy>9)setTH(Math.atan2(-dy,dx)/rad);}
+ svg.addEventListener('pointerdown',function(e){var b=e.target.closest&&e.target.closest('.bank');
+  if(b){PHI=+b.dataset.phi;curve();draw();return;}
+  if(e.target.id!=='stim')return;on=true;svg.setPointerCapture(e.pointerId);aim(e);e.preventDefault();});
+ svg.addEventListener('pointermove',function(e){if(on)aim(e);});
+ var up=function(){on=false;};svg.addEventListener('pointerup',up);svg.addEventListener('pointercancel',up);})();
+
+// Spikes: a Poisson train at the current rate, drawn as ticks scrolling left, and
+// optionally clicked through the speaker as in the original recordings.
+var SP=[],last=performance.now(),actx=null;
+function sound(on){if(on&&!actx){try{actx=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}}
+ if(actx)(on?actx.resume():actx.suspend());}
+function click(){if(!actx||actx.state!=='running')return;
+ var n=Math.round(actx.sampleRate*0.004),b=actx.createBuffer(1,n,actx.sampleRate),d=b.getChannelData(0);
+ for(var i=0;i<n;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/(n/5));
+ var src=actx.createBufferSource(),g=actx.createGain();g.gain.value=0.5;src.buffer=b;src.connect(g);g.connect(actx.destination);src.start();}
+function tick(now){var dt=Math.min(0.1,(now-last)/1000);last=now;
+ var hz=RATE*relu(resp(PHI,TH,OFF));
+ if(Math.random()<hz*dt){SP.push(now);if(document.getElementById('snd').checked)click();}
+ while(SP.length&&now-SP[0]>3000)SP.shift();
+ var x0=LAY.sp[0],y0=LAY.sp[1],W=M*CS,s='<rect x="'+x0+'" y="'+y0+'" width="'+W+'" height="26" fill="var(--surface)" stroke="var(--border)"/>';
+ for(var i=0;i<SP.length;i++){var x=x0+W-(now-SP[i])/3000*W;s+='<line x1="'+x.toFixed(1)+'" y1="'+(y0+4)+'" x2="'+x.toFixed(1)+'" y2="'+(y0+22)+'" stroke="'+PINK+'" stroke-width="1.6"/>';}
+ document.getElementById('spikes').innerHTML=s;
+ requestAnimationFrame(tick);}
+window.addEventListener('resize',draw);
+document.addEventListener('keydown',function(e){if(e.target.tagName==='INPUT')return;
+ if(e.key==='ArrowLeft'){e.preventDefault();setTH(TH+2);}else if(e.key==='ArrowRight'){e.preventDefault();setTH(TH-2);}
+ else if(e.key===' '){e.preventDefault();sweep();}});
+curve();caption();draw();requestAnimationFrame(tick);
+</script>
+</body>
+</html>
