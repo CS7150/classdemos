@@ -91,9 +91,9 @@ table.ly td.eq{color:var(--text-primary)}
 <span class="klab">preset</span>
 <div class="seg" id="seg3">
 <button data-p="slide" class="on">the slide&rsquo;s stack</button>
+<button data-p="lenet">LeNet 1989</button>
 <button data-p="alex">AlexNet</button>
 <button data-p="vgg">VGG-16</button>
-<button data-p="lenet">LeNet 1989</button>
 <button data-p="deep">too deep</button>
 </div>
 <label class="cb"><input type="checkbox" id="same" onchange="sameChanged()">same padding everywhere</label>
@@ -298,6 +298,20 @@ function draw3(){
  // translucent, over that.  For one box inside another this order is exact: the
  // filter hides the block's far edges wherever it is in front of them, and the
  // block's near faces veil the filter.
+ // One piece of a cut filter: its faces filled without outlines, then only the edges
+ // that belong in the picture: the filter's own outer edges, and for the piece inside
+ // the block, its whole outline, which is where the padding begins.  So the gutter in
+ // the padding reads as one L, not quadrants.
+ function pieceSvg(b,x0,x1,y0,y1,z0,z1,col,shade,keep,inside,K){var o='',ed='',seen={};
+  function onBoxEdge(p,q){var n=0;for(var a=0;a<3;a++){if(p[a]!==q[a])continue;if(p[a]===K[2*a]||p[a]===K[2*a+1])n++;}return n>=2;}
+  boxFaces(x0,x1,y0,y1,z0,z1).forEach(function(f){if(dot(f.n,C.V)<=1e-6||!keep(f))return;
+   var pts=f.p.map(function(p){var q=P2(at(b,p));return q[0].toFixed(1)+','+q[1].toFixed(1);});
+   o+='<polygon points="'+pts.join(' ')+'" fill="'+mix(col,shade[f.k])+'" stroke="'+mix(col,shade[f.k])+'" stroke-width="0.6"/>';
+   for(var k=0;k<4;k++){var p=f.p[k],q=f.p[(k+1)%4],id=[p,q].map(String).sort().join('|');
+    if(seen[id]||!(inside||onBoxEdge(p,q)))continue;seen[id]=1;
+    ed+='<line x1="'+pts[k].split(',')[0]+'" y1="'+pts[k].split(',')[1]+'" x2="'+pts[(k+1)%4].split(',')[0]+'" y2="'+pts[(k+1)%4].split(',')[1]+
+     '" stroke="color-mix(in oklab, '+col+' 70%, var(--text-primary))" stroke-linecap="round"/>';}});
+  return o+ed;}
  function faces(b,x0,x1,y0,y1,z0,z1,col,shade,front,fop,keep){var o='';
   boxFaces(x0,x1,y0,y1,z0,z1).forEach(function(f){if((dot(f.n,C.V)>1e-6)!==front||(keep&&!keep(f)))return;
    o+='<polygon points="'+f.p.map(function(p){var q=P2(at(b,p));return q[0].toFixed(1)+','+q[1].toFixed(1);}).join(' ')+
@@ -334,7 +348,7 @@ function draw3(){
        YS=[[ky0,Math.min(ky1,b.y0),-1],[Math.max(ky0,b.y0),Math.min(ky1,b.y1),0],[Math.max(ky0,b.y1),ky1,1]];
    XS.forEach(function(X){if(X[1]-X[0]<1e-9)return;YS.forEach(function(Y){if(Y[1]-Y[0]<1e-9)return;
     var outer=function(f){var n=f.n;return n[2]!==0||(n[0]>0&&X[1]===kx1)||(n[0]<0&&X[0]===kx0)||(n[1]>0&&Y[1]===ky1)||(n[1]<0&&Y[0]===ky0);};
-    var piece=gOpen+faces(b,X[0],X[1],Y[0],Y[1],kz0,kz1,kcol,ksh,true,1,outer)+'</g>';
+    var piece=gOpen+pieceSvg(b,X[0],X[1],Y[0],Y[1],kz0,kz1,kcol,ksh,outer,!X[2]&&!Y[2],[kx0,kx1,ky0,ky1,kz0,kz1])+'</g>';
     if(!X[2]&&!Y[2]){s+=piece;return;}
     var near=(X[2]&&dot([X[2],0,0],C.V)>1e-6)||(Y[2]&&dot([0,Y[2],0],C.V)>1e-6);
     if(near)post+=piece;else pre+=piece;});});
