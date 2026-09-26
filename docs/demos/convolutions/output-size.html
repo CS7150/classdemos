@@ -302,6 +302,11 @@ function draw3(){
  // that belong in the picture: the filter's own outer edges, and for the piece inside
  // the block, its whole outline, which is where the padding begins.  So the gutter in
  // the padding reads as one L, not quadrants.
+ function hull(P){P=P.slice().sort(function(a,b){return a[0]-b[0]||a[1]-b[1];});
+  function cr(o,a,b){return (a[0]-o[0])*(b[1]-o[1])-(a[1]-o[1])*(b[0]-o[0]);}
+  var lo=[],up=[],i;for(i=0;i<P.length;i++){while(lo.length>1&&cr(lo[lo.length-2],lo[lo.length-1],P[i])<=0)lo.pop();lo.push(P[i]);}
+  for(i=P.length-1;i>=0;i--){while(up.length>1&&cr(up[up.length-2],up[up.length-1],P[i])<=0)up.pop();up.push(P[i]);}
+  return lo.slice(0,-1).concat(up.slice(0,-1));}
  function pieceSvg(b,x0,x1,y0,y1,z0,z1,col,shade,keep,inside,K){var o='',ed='',seen={};
   function onBoxEdge(p,q){var n=0;for(var a=0;a<3;a++){if(p[a]!==q[a])continue;if(p[a]===K[2*a]||p[a]===K[2*a+1])n++;}return n>=2;}
   boxFaces(x0,x1,y0,y1,z0,z1).forEach(function(f){if(dot(f.n,C.V)<=1e-6||!keep(f))return;
@@ -326,7 +331,7 @@ function draw3(){
  function lineCol(l){return l&&l.pool?VIOLET:PINK;}
  function cellAt(nb){var ps=POS[nb.i-1],x=nb.x0+ps[1],y=nb.y1-ps[0],col=lineCol(LAYERS[nb.i-1]);
   return {poly:poly([[x,y,0],[x+1,y,0],[x+1,y-1,0],[x,y-1,0]].map(function(p){return at(nb,p);}),col,col,1),c:P2(at(nb,[x+0.5,y-0.5,0])),col:col};}
- AXES={};
+ AXES={};var HITS=[];
  order.forEach(function(b){
   var bcol=b.i===0?GREEN:BLUE,nb=blocks.filter(function(c){return c.i===b.i+1;})[0],l=LAYERS[b.i];
   var pre='',post='',start=s.length;   // filter pieces behind the whole block, and in front of it
@@ -342,6 +347,9 @@ function draw3(){
    // the piece inside goes between the block's faces; a piece outside goes after the
    // whole block if it is on the viewer's side of a plane it crosses, else before it.
    // Only the filter's own outer faces are drawn, so the cuts leave no seams inside.
+   if(!fails){var cs=[];[kx0,kx1].forEach(function(X){[ky0,ky1].forEach(function(Y){[kz0,kz1].forEach(function(Z){cs.push(P2(at(b,[X,Y,Z])));});});});
+    HITS.push('<g class="filt" data-i="'+b.i+'" style="cursor:grab"><polygon points="'+hull(cs).map(function(q){return q[0].toFixed(1)+','+q[1].toFixed(1);}).join(' ')+
+     '" fill="transparent" stroke="transparent" stroke-width="36" stroke-linejoin="round" pointer-events="all"/></g>');}
    var gOpen='<g class="filt" data-i="'+b.i+'" style="cursor:'+(fails?'default':'grab')+'"'+(fails?' opacity="0.75"':'')+(b.i===activeLayer()?' stroke-width="2.4"':'')+'>';
    var kcol=fails?RED:l.pool?VIOLET:ORANGE,ksh=fails?{front:40,top:28,side:34}:{front:62,top:44,side:52};
    var XS=[[kx0,Math.min(kx1,b.x0),-1],[Math.max(kx0,b.x0),Math.min(kx1,b.x1),0],[Math.max(kx0,b.x1),kx1,1]],
@@ -363,6 +371,9 @@ function draw3(){
   s=s.slice(0,start)+pre+s.slice(start)+post;
   if(cell&&frontOn)s+=cell.poly+'<circle cx="'+cell.c[0].toFixed(1)+'" cy="'+cell.c[1].toFixed(1)+'" r="3.2" fill="'+cell.col+'"/>';
  });
+ // Small filters are hard to hit, so each draggable one gets an invisible grab area on
+ // top of everything: the outline of its box on screen, widened by a thick stroke.
+ s+=HITS.join('');
  // labels: each block's size under it; on a desktop, each layer's recipe above the gap
  var lab='';
  // a block the same shape as the one before it is not labelled again
@@ -445,15 +456,23 @@ function chain(j){var sz=sizes(),k,a;
  for(k=j+1;k<LAYERS.length;k++){if(!ok(k)||!ok(k-1))break;var L2=LAYERS[k],P2_=pOf(L2),n=sz[k+1].H;
   for(a=0;a<2;a++){var c=POS[k-1][a],lo=Math.ceil((c+P2_-L2.K+1)/L2.S),hi=Math.floor((c+P2_)/L2.S);
    POS[k][a]=Math.max(0,Math.min(n-1,Math.max(lo,Math.min(hi,POS[k][a]))));}}}
+// Grab areas of neighbouring small filters overlap; the pointer takes the filter whose
+// centre is nearest among all those under it.
+function pickFilter(e){var best=-1,bd=1e9,seen={};
+ (document.elementsFromPoint?document.elementsFromPoint(e.clientX,e.clientY):[e.target]).forEach(function(el){
+  var g=el.closest&&el.closest('#fig3 .filt');if(!g)return;var i=+g.dataset.i;if(seen[i])return;seen[i]=1;
+  var h=document.querySelector('#fig3 .filt[data-i="'+i+'"] polygon[fill="transparent"]');if(!h)return;
+  var r=h.getBoundingClientRect(),d=Math.hypot(e.clientX-(r.left+r.width/2),e.clientY-(r.top+r.height/2));if(d<bd){bd=d;best=i;}});
+ return best;}
 // drag a filter to move it window by window; drag anywhere else to turn the view
 (function(){var svg=document.getElementById('fig3'),lastp=null,fd=null;
- svg.addEventListener('pointerdown',function(e){var g=e.target.closest&&e.target.closest('.filt');
+ svg.addEventListener('pointerdown',function(e){var pi=pickFilter(e);
   svg.setPointerCapture(e.pointerId);e.preventDefault();
-  if(g){ACT=+g.dataset.i;draw3();}
-  if(g&&LAYERS[+g.dataset.i]&&AXES[+g.dataset.i]&&sizes()[+g.dataset.i+1]&&!sizes()[+g.dataset.i+1].bad){var i=+g.dataset.i;fd={i:i,x:e.clientX,y:e.clientY,p:POS[i].slice(),k:svg.viewBox.baseVal.width/svg.getBoundingClientRect().width};return;}
+  if(pi>=0){ACT=pi;draw3();}
+  if(pi>=0&&LAYERS[pi]&&AXES[pi]&&sizes()[pi+1]&&!sizes()[pi+1].bad){var i=pi;fd={i:i,x:e.clientX,y:e.clientY,p:POS[i].slice(),k:svg.viewBox.baseVal.width/svg.getBoundingClientRect().width};return;}
   lastp=[e.clientX,e.clientY];});
  svg.addEventListener('pointermove',function(e){
-  if(!fd&&!lastp){var hg=e.target.closest&&e.target.closest('.filt'),h=hg?+hg.dataset.i:-1;if(h!==HOV){HOV=h;draw3();}}
+  if(!fd&&!lastp){var h=pickFilter(e);if(h!==HOV){HOV=h;draw3();}}
   if(fd){// solve screen motion = a * (one column) + b * (one row), in figure units
    var A=AXES[fd.i],dx=(e.clientX-fd.x)*fd.k,dy=(e.clientY-fd.y)*fd.k,det=A.ex[0]*A.ey[1]-A.ex[1]*A.ey[0];if(Math.abs(det)<1e-9)return;
    var a=(dx*A.ey[1]-dy*A.ey[0])/det,b=(A.ex[0]*dy-A.ex[1]*dx)/det,S=LAYERS[fd.i].S;
