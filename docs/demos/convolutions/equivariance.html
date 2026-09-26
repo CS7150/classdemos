@@ -24,7 +24,7 @@ input[type=range]{flex:0 1 120px;min-width:80px}
 <body>
 <div class="nav"><a href="./">&larr; Convolution demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
 <h1>Equivariance and invariance<span>: shift then convolve, or convolve then shift</span></h1>
-<p class="quiz">Two paths from the same digit: shift it and then convolve, or convolve and then shift the result. Do they meet? <b>Drag the shifted digit</b>, change the channel, then try stride 2.</p>
+<p class="quiz">Two paths from the same digit: shift it and then convolve, or convolve and then shift the result. Do they meet? <b>Drag the shifted digit, or the shifted conv output</b>: both move the same shift. Change the channel, then try stride 2.</p>
 
 <svg id="fig" viewBox="0 0 1040 400" role="img">
 <title>A commutative square of shift and convolution, with pooled channel values</title>
@@ -132,7 +132,7 @@ function draw(){
  s+=panel(c0[2],r[0],top,'div',vmax,'conv(shift x)'+(ST===2?', stride 2':''));
  s+=panel(c0[0],r[1],X,'ink',1,'x');
  s+=panel(c0[1],r[1],cx,'div',vmax,'conv x'+(ST===2?', stride 2':''));
- s+=panel(c0[2],r[1],bottom,'div',vmax,'shift(conv x) by '+osh);
+ s+=panel(c0[2],r[1],bottom,'div',vmax,'shift(conv x) by '+osh,'grab2');
  s+=arrow(c0[0]+P+4,r[0]+P/2,c0[1]-4,r[0]+P/2,'shift',sh);
  s+=arrow(c0[1]+P+4,r[0]+P/2,c0[2]-4,r[0]+P/2,'conv');
  s+=arrow(c0[0]+P+4,r[1]+P/2,c0[1]-4,r[1]+P/2,'conv');
@@ -200,13 +200,17 @@ function seg(id,fn){document.getElementById(id).addEventListener('click',functio
 seg('chSeg',function(b){CH=+b.dataset.c;});
 seg('stSeg',function(b){ST=+b.dataset.s;});
 seg('plSeg',function(b){POOL=b.dataset.p;});
-// Drag the shifted digit: each input pixel of travel is one pixel of shift.
+// Drag either shifted panel to set the shift.
 (function(){var svg=document.getElementById('fig'),drag=null;
- svg.addEventListener('pointerdown',function(e){if(!e.target||e.target.id!=='grab')return;
-  drag={x:e.clientX,y:e.clientY,dx:DX,dy:DY,k:svg.viewBox.baseVal.width/svg.getBoundingClientRect().width};
+ // Either shifted panel can be dragged, since both paths use the same shift.  On the
+ // conv output a drag of one of its cells is one cell of output, which at stride 2 is
+ // two pixels of input.
+ svg.addEventListener('pointerdown',function(e){var id=e.target&&e.target.id;if(id!=='grab'&&id!=='grab2')return;
+  var outN=N/ST,cell=id==='grab'?P/N:P/outN,mul=id==='grab'?1:ST;
+  drag={x:e.clientX,y:e.clientY,dx:DX,dy:DY,k:svg.viewBox.baseVal.width/svg.getBoundingClientRect().width,cell:cell,mul:mul};
   svg.setPointerCapture(e.pointerId);svg.style.cursor='grabbing';e.preventDefault();});
  svg.addEventListener('pointermove',function(e){if(!drag)return;
-  var nx=drag.dx+Math.round((e.clientX-drag.x)*drag.k/(P/N)),ny=drag.dy+Math.round((e.clientY-drag.y)*drag.k/(P/N));
+  var nx=drag.dx+drag.mul*Math.round((e.clientX-drag.x)*drag.k/drag.cell),ny=drag.dy+drag.mul*Math.round((e.clientY-drag.y)*drag.k/drag.cell);
   if(nx!==DX||ny!==DY)setShift(nx,ny);});
  var up=function(){drag=null;svg.style.cursor='';};
  svg.addEventListener('pointerup',up);svg.addEventListener('pointercancel',up);})();
