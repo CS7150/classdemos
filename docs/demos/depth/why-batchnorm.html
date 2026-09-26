@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Why BatchNorm helps</title>
+<meta name="description" content="Two copies of one small sigmoid network trained side by side, with and without batch normalization: what happens to a hidden unit's input distribution, how wide the range of workable learning rates is, and why a batch-normalized layer does not care how big its weights are.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 16px;max-width:1100px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+h2{font-size:15.5px;font-weight:600;margin:10px 0 0}
+h2 span{font-weight:400;color:var(--text-secondary)}
+.quiz{margin:0}
+.panels{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.panels.two{grid-template-columns:2fr 1fr}
+.panels svg{width:100%;height:auto;max-height:none;background:var(--surface);border:1px solid var(--border);border-radius:8px}
+.row{gap:7px}
+button,select{height:30px;font-size:13px;padding:0 9px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:44px}
+input[type=range]{flex:0 1 200px;min-width:110px}
+label.cb{font-size:13px}
+.rd{font-size:14px;line-height:1.5;min-height:1.5em}
+.cap{font-size:12.5px;line-height:1.55;padding-top:4px}
+@media (max-width:820px){.panels,.panels.two{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Training deep networks demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Why BatchNorm helps<span>: two copies of one network, one normalized</span></h1>
+<p class="quiz">The same sigmoid network, three hidden layers of 16, trained side by side on two spirals with the same minibatches: once plain, once with a BatchNorm before every sigmoid (Ioffe &amp; Szegedy 2015). It starts training on its own; then try a learning rate of 0.1 or 10.</p>
+
+<h2>1. One hidden unit&rsquo;s input to its sigmoid, over training <span>(median and 15&ndash;85% band over the training set, as in Ioffe &amp; Szegedy&rsquo;s Fig.&nbsp;1)</span></h2>
+<div class="panels">
+ <svg id="pA" viewBox="0 0 340 230" role="img"><title>Without BatchNorm</title><desc>The 15th, 50th and 85th percentiles of one last-layer unit's input to its sigmoid, over the whole training set, plotted against training steps, for the plain network.</desc></svg>
+ <svg id="pB" viewBox="0 0 340 230" role="img"><title>With BatchNorm</title><desc>The same percentiles for the same unit of the batch-normalized network.</desc></svg>
+ <svg id="pL" viewBox="0 0 340 230" role="img"><title>Training loss</title><desc>Training loss of both networks against steps, on a log scale.</desc></svg>
+</div>
+<div class="row">
+ <button class="main" id="go" onclick="toggle()">Train</button>
+ <button onclick="reset()">Reset</button>
+ <span class="klab">learning rate</span>
+ <input type="range" id="lr" min="-2" max="2" step="0.25" value="0" oninput="setLR()">
+ <span class="knum" id="lrv"></span>
+ <span class="klab">unit</span>
+ <select id="unit" onchange="draw()"></select>
+ <label class="cb"><input type="checkbox" id="wd" onchange="reset()">weight decay 0.001</label>
+</div>
+<div class="rd" id="rdA"></div>
+
+<h2>2. The range of learning rates that work</h2>
+<div class="panels two">
+ <svg id="pS" viewBox="0 0 690 230" role="img"><title>Learning-rate sweep</title><desc>Training loss after 800 steps against learning rate on a log axis, for the plain and the batch-normalized network; the batch-normalized curve is low across a much wider range.</desc></svg>
+ <div class="rd" id="rdS" style="align-self:center"></div>
+</div>
+
+<h2>3. A normalized layer does not care how big its weights are</h2>
+<div class="panels">
+ <svg id="pC" viewBox="0 0 340 230" role="img"><title>Loss against weight scale</title><desc>Training loss when the second layer's weights are multiplied by a factor from a quarter to four: flat for the batch-normalized network, changing for the plain one.</desc></svg>
+ <svg id="pG" viewBox="0 0 340 230" role="img"><title>Gradient against weight scale</title><desc>The size of the gradient on the second layer's weights against the same factor, on log-log axes: for the batch-normalized network a line of slope minus one.</desc></svg>
+ <svg id="pN" viewBox="0 0 340 230" role="img"><title>Weight norm over training</title><desc>The norm of the batch-normalized network's second-layer weights against training steps.</desc></svg>
+</div>
+<div class="rd" id="rdC"></div>
+<div class="cap" id="caption"></div>
+
+<script>
+/* ---------- data: two interleaved spirals ---------- */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function randn(r){var u=0,v=0;while(!u)u=r();while(!v)v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+var DX=[],DY=[];
+(function(){var r=mulberry32(3);for(var i=0;i<400;i++){var c=i%2,t=0.25+2.6*r(),a=t*2.2+c*Math.PI;
+ DX.push([t*Math.cos(a)+0.08*randn(r),t*Math.sin(a)+0.08*randn(r)]);DY.push(c);}})();
+
+/* ---------- a small sigmoid MLP, with or without BatchNorm ---------- */
+// Layers 2-16-16-16-1.  With BatchNorm, each hidden layer computes
+// sigmoid(gamma * (z - mean) / std + beta) with the mean and std over the batch,
+// and drops its bias, which beta replaces, as in Ioffe & Szegedy.
+var SIZES=[2,16,16,16,1],EPS=1e-5;
+function sig(x){return 1/(1+Math.exp(-x));}
+function makeNet(bn,seed){var r=mulberry32(seed),L=[];
+ for(var l=0;l<SIZES.length-1;l++){var ni=SIZES[l],no=SIZES[l+1],W=[],s=Math.sqrt(1/ni);
+  for(var o=0;o<no;o++){var row=new Float64Array(ni);for(var i=0;i<ni;i++)row[i]=randn(r)*s;W.push(row);}
+  L.push({W:W,b:new Float64Array(no),g:new Float64Array(no).fill(1),be:new Float64Array(no),last:l===SIZES.length-2});}
+ return {L:L,bn:bn,dead:false};}
+function forward(net,Xb){var N=Xb.length,h=Xb,cache=[];
+ for(var l=0;l<net.L.length;l++){var P=net.L[l],no=P.W.length,z=[];
+  for(var n=0;n<N;n++){var zz=new Float64Array(no),hn=h[n];for(var o=0;o<no;o++){var s=P.b[o],w=P.W[o];for(var i=0;i<w.length;i++)s+=w[i]*hn[i];zz[o]=s;}z.push(zz);}
+  var c={hin:h,z:z};if(P.last){cache.push(c);h=z;break;}
+  var pre=z;
+  if(net.bn){var mu=new Float64Array(no),vr=new Float64Array(no),xh=[],y=[],o,n;
+   for(o=0;o<no;o++){var m=0;for(n=0;n<N;n++)m+=z[n][o];m/=N;var v=0;for(n=0;n<N;n++){var d=z[n][o]-m;v+=d*d;}mu[o]=m;vr[o]=v/N;}
+   for(n=0;n<N;n++){var a=new Float64Array(no),b=new Float64Array(no);
+    for(o=0;o<no;o++){a[o]=(z[n][o]-mu[o])/Math.sqrt(vr[o]+EPS);b[o]=P.g[o]*a[o]+P.be[o];}xh.push(a);y.push(b);}
+   c.vr=vr;c.xh=xh;pre=y;}
+  c.pre=pre;c.a=pre.map(function(p){var a=new Float64Array(no);for(var o=0;o<no;o++)a[o]=sig(p[o]);return a;});
+  cache.push(c);h=c.a;}
+ return {logit:h.map(function(v){return v[0];}),cache:cache};}
+// binary cross-entropy on the logit, written so it never overflows
+function lossOf(logit,Y){var s=0;for(var n=0;n<logit.length;n++){var z=logit[n];s+=Math.max(z,0)-z*Y[n]+Math.log(1+Math.exp(-Math.abs(z)));}return s/logit.length;}
+function backward(net,f,Y){var N=Y.length,C=f.cache,G=[];
+ var dh=f.logit.map(function(z,n){return Float64Array.of((sig(z)-Y[n])/N);});
+ for(var l=net.L.length-1;l>=0;l--){var P=net.L[l],c=C[l],no=P.W.length,ni=P.W[0].length,dz,n,o;
+  var g={W:P.W.map(function(){return new Float64Array(ni);}),b:new Float64Array(no),g:new Float64Array(no),be:new Float64Array(no)};
+  if(P.last)dz=dh;else{
+   var dp=dh.map(function(d,n){var r=new Float64Array(no);for(var o=0;o<no;o++){var a=c.a[n][o];r[o]=d[o]*a*(1-a);}return r;});
+   if(net.bn){dz=[];for(n=0;n<N;n++)dz.push(new Float64Array(no));
+    // the batch-norm backward pass: every example's gradient feels the whole batch
+    for(o=0;o<no;o++){var sd=Math.sqrt(c.vr[o]+EPS),s1=0,s2=0;
+     for(n=0;n<N;n++){var dx=dp[n][o]*P.g[o];g.g[o]+=dp[n][o]*c.xh[n][o];g.be[o]+=dp[n][o];s1+=dx;s2+=dx*c.xh[n][o];}
+     for(n=0;n<N;n++)dz[n][o]=(N*dp[n][o]*P.g[o]-s1-c.xh[n][o]*s2)/(N*sd);}}
+   else dz=dp;}
+  var dhin=[];for(n=0;n<N;n++){var d=new Float64Array(ni),hn=c.hin[n],zn=dz[n];
+   for(o=0;o<no;o++){var zo=zn[o];if(!zo)continue;g.b[o]+=zo;var w=P.W[o],gw=g.W[o];for(var i=0;i<ni;i++){gw[i]+=zo*hn[i];d[i]+=zo*w[i];}}dhin.push(d);}
+  G[l]=g;dh=dhin;}
+ return G;}
+function step(net,G,lr,wd){for(var l=0;l<net.L.length;l++){var P=net.L[l],g=G[l],hid=net.bn&&!P.last;
+ for(var o=0;o<P.W.length;o++){var w=P.W[o],gw=g.W[o];for(var i=0;i<w.length;i++)w[i]=w[i]*(1-lr*wd)-lr*gw[i];
+  if(hid){P.g[o]-=lr*g.g[o];P.be[o]-=lr*g.be[o];}else P.b[o]-=lr*g.b[o];}}}
+function trainSteps(net,lr,wd,idxs){for(var k=0;k<idxs.length;k++){if(net.dead)return;var ix=idxs[k];
+ var f=forward(net,ix.map(function(i){return DX[i];}));
+ if(!isFinite(f.logit[0])){net.dead=true;return;}
+ step(net,backward(net,f,ix.map(function(i){return DY[i];})),lr,wd);}}
+function wnorm(net,l){var s=0;net.L[l].W.forEach(function(w){for(var i=0;i<w.length;i++)s+=w[i]*w[i];});return Math.sqrt(s);}
+
+/* ---------- the live run ---------- */
+var MAXT=3000,B=32,PER=10;   // steps, batch size, steps between snapshots
+var NET,T,HIST,RNG,run=false,raf=null;
+function LR(){return Math.pow(10,+document.getElementById('lr').value);}
+function WD(){return document.getElementById('wd').checked?1e-3:0;}
+function fmtLR(v){return v>=1?String(+v.toPrecision(2)):v.toPrecision(2);}
+function pct(a,q){return a[Math.round(q*(a.length-1))];}
+// percentiles of every last-layer unit's sigmoid input over the whole training set, plus the loss
+function snapshot(){var s={t:T};['p','b'].forEach(function(k){var net=NET[k];
+ if(net.dead){s[k]=null;return;}
+ var f=forward(net,DX),c=f.cache[2],u=[];
+ for(var o=0;o<16;o++){var v=c.pre.map(function(p){return p[o];}).sort(function(a,b){return a-b;});u.push([pct(v,.15),pct(v,.5),pct(v,.85)]);}
+ var L=lossOf(f.logit,DY);if(!isFinite(L)){net.dead=true;s[k]=null;return;}
+ s[k]={u:u,loss:L,wn:wnorm(net,1)};});HIST.push(s);}
+function reset(){if(run)toggle();NET={p:makeNet(false,1),b:makeNet(true,1)};T=0;HIST=[];RNG=mulberry32(99);snapshot();scaleCurves();draw();}
+function toggle(){run=!run;document.getElementById('go').textContent=run?'Pause':(T>=MAXT?'Train again':'Train');
+ if(run){if(T>=MAXT){reset();run=true;document.getElementById('go').textContent='Pause';}raf=requestAnimationFrame(tick);}else if(raf){cancelAnimationFrame(raf);raf=null;}}
+function tick(){if(!run)return;
+ // both networks see exactly the same minibatches
+ var idxs=[];for(var k=0;k<PER;k++){var ix=[];for(var j=0;j<B;j++)ix.push(Math.floor(RNG()*DX.length));idxs.push(ix);}
+ trainSteps(NET.p,LR(),WD(),idxs);trainSteps(NET.b,LR(),WD(),idxs);T+=PER;snapshot();
+ if(T%100===0)scaleCurves();
+ if(T>=MAXT){run=false;document.getElementById('go').textContent='Train again';scaleCurves();}
+ draw();if(run)raf=requestAnimationFrame(tick);}
+function setLR(){document.getElementById('lrv').textContent=fmtLR(LR());reset();drawSweep();}
+
+/* ---------- part 3: scale the second layer's weights by a ---------- */
+var SC=[];for(var e=-2;e<=2.0001;e+=0.125)SC.push(Math.pow(2,e));
+var SCALE={p:null,b:null};
+function scaleCurves(){['p','b'].forEach(function(k){var net=NET[k];if(net.dead){SCALE[k]=null;return;}
+ var P=net.L[1],save=P.W.map(function(w){return Float64Array.from(w);}),out=[];
+ SC.forEach(function(a){P.W.forEach(function(w,o){for(var i=0;i<w.length;i++)w[i]=save[o][i]*a;});
+  var f=forward(net,DX),G=backward(net,f,DY),gn=0,dot=0;
+  G[1].W.forEach(function(g,o){for(var i=0;i<g.length;i++){gn+=g[i]*g[i];dot+=g[i]*P.W[o][i];}});
+  out.push({a:a,L:lossOf(f.logit,DY),g:Math.sqrt(gn),dot:dot});});
+ P.W=save;SCALE[k]=out;});}
+
+/* ---------- part 2: the learning-rate sweep, run a little at a time ---------- */
+var SLR=[];for(var e2=-2;e2<=2.0001;e2+=0.25)SLR.push(Math.pow(10,e2));
+var SWEEP={p:[],b:[]},SQ=[],sweeping=false;
+function startSweep(){SWEEP={p:SLR.map(function(){return [];}),b:SLR.map(function(){return [];})};SQ=[];
+ SLR.forEach(function(lr,i){[1,2].forEach(function(seed){SQ.push({k:'p',i:i,seed:seed});SQ.push({k:'b',i:i,seed:seed});});});
+ sweeping=true;setTimeout(sweepStep,30);}
+function sweepStep(){var job=SQ.shift();if(!job){sweeping=false;drawSweep();return;}
+ var net=makeNet(job.k==='b',job.seed),r=mulberry32(job.seed*7+1),idxs=[];
+ for(var k=0;k<800;k++){var ix=[];for(var j=0;j<B;j++)ix.push(Math.floor(r()*DX.length));idxs.push(ix);}
+ trainSteps(net,SLR[job.i],0,idxs);
+ var L=net.dead?Infinity:lossOf(forward(net,DX).logit,DY);SWEEP[job.k][job.i].push(isFinite(L)?L:Infinity);
+ drawSweep();setTimeout(sweepStep,0);}
+
+/* ---------- drawing ---------- */
+var BLUE='var(--blue)',ORANGE='var(--orange)',PINK='var(--pink)',GREEN='var(--green)',INK='var(--text-primary)';
+function T_(x,y,s,cls,anc,fill){return '<text class="'+(cls||'tn')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'"'+(anc?' text-anchor="'+anc+'"':'')+(fill?' style="fill:'+fill+'"':'')+'>'+s+'</text>';}
+function f2(v){if(v===0)return '0';var a=Math.abs(v);return (a>=100?v.toFixed(0):a>=10?v.toFixed(1):a>=1?v.toFixed(2):a>=0.01?v.toFixed(3):v.toExponential(1)).replace('-','&minus;');}
+// a plot frame: x and y map data to the box, with log axes when asked
+function frame(W,H,xr,yr,o){o=o||{};var X0=48,X1=W-22,Y0=30,Y1=H-34;
+ var lx=o.logx,ly=o.logy,tx=function(v){return lx?Math.log10(v):v;},ty=function(v){return ly?Math.log10(v):v;};
+ var fx=function(v){return X0+(tx(v)-tx(xr[0]))/(tx(xr[1])-tx(xr[0]))*(X1-X0);},fy=function(v){return Y1-(ty(v)-ty(yr[0]))/(ty(yr[1])-ty(yr[0]))*(Y1-Y0);};
+ var s='<rect x="'+X0+'" y="'+Y0+'" width="'+(X1-X0)+'" height="'+(Y1-Y0)+'" fill="none" stroke="var(--border)"/>';
+ (o.xt||[]).forEach(function(v){var x=fx(v);s+='<line x1="'+x+'" y1="'+Y1+'" x2="'+x+'" y2="'+(Y1+4)+'" stroke="var(--border-strong)"/>'+T_(x,Y1+16,o.xl?o.xl(v):String(v),'tn','middle');});
+ (o.yt||[]).forEach(function(v){var y=fy(v);s+='<line x1="'+X0+'" y1="'+y+'" x2="'+X1+'" y2="'+y+'" stroke="var(--border)" stroke-width="0.5"/>'+T_(X0-5,y+4,o.yl?o.yl(v):String(+v.toFixed(3)).replace('-','&minus;'),'tn','end');});
+ if(o.title)s+=T_(X0,18,o.title,'ts','start');
+ if(o.xlab)s+=T_((X0+X1)/2,H-4,o.xlab,'tn','middle');
+ return {s:s,fx:fx,fy:fy,X0:X0,X1:X1,Y0:Y0,Y1:Y1};}
+function path(F,pts,col,w,dash){if(!pts.length)return '';var d='';pts.forEach(function(p,i){d+=(i?'L':'M')+F.fx(p[0]).toFixed(1)+' '+F.fy(p[1]).toFixed(1)+' ';});
+ return '<path d="'+d+'" fill="none" stroke="'+col+'" stroke-width="'+(w||2)+'"'+(dash?' stroke-dasharray="'+dash+'"':'')+' stroke-linejoin="round"/>';}
+function niceTicks(lo,hi,n){var st=Math.pow(10,Math.floor(Math.log10((hi-lo)/n))),m=[1,2,5,10].filter(function(k){return (hi-lo)/(st*k)<=n;})[0]*st,t=[];
+ for(var v=Math.ceil(lo/m)*m;v<=hi+1e-9;v+=m)t.push(+v.toFixed(10));return t;}
+// one network's unit, as 15-85% band and median line, on its own vertical scale
+function bandPanel(id,k,col,title){var u=+document.getElementById('unit').value,pts=HIST.filter(function(h){return h[k];}).map(function(h){return [h.t,h[k].u[u]];});
+ var lo=Infinity,hi=-Infinity;pts.forEach(function(p){lo=Math.min(lo,p[1][0]);hi=Math.max(hi,p[1][2]);});
+ if(!isFinite(lo)){lo=-1;hi=1;}var pad=Math.max(0.05,(hi-lo)*0.12);lo-=pad;hi+=pad;
+ var F=frame(340,230,[0,MAXT],[lo,hi],{xt:[0,1000,2000,3000],yt:niceTicks(lo,hi,4),title:title,xlab:'training step'}),s=F.s;
+ if(pts.length>1){var up='',dn='';pts.forEach(function(p,i){up+=(i?'L':'M')+F.fx(p[0]).toFixed(1)+' '+F.fy(p[1][2]).toFixed(1)+' ';});
+  for(var i=pts.length-1;i>=0;i--)dn+='L'+F.fx(pts[i][0]).toFixed(1)+' '+F.fy(pts[i][1][0]).toFixed(1)+' ';
+  s+='<path d="'+up+dn+'Z" fill="'+col+'" fill-opacity="0.22" stroke="none"/>';
+  s+=path(F,pts.map(function(p){return [p[0],p[1][2]];}),col,1,'3 2')+path(F,pts.map(function(p){return [p[0],p[1][0]];}),col,1,'3 2')+path(F,pts.map(function(p){return [p[0],p[1][1]];}),col,2.2);}
+ if(NET[k].dead)s+=T_(F.X1-6,F.Y0+16,'diverged','ts','end','var(--red)');
+ document.getElementById(id).innerHTML=s;}
+function drift(k){var u=+document.getElementById('unit').value,h0=HIST[0][k],hs=HIST.filter(function(h){return h[k];}),h1=hs[hs.length-1][k];
+ if(!h0||!h1)return null;var w=h0.u[u][2]-h0.u[u][0];return Math.abs(h1.u[u][1]-h0.u[u][1])/Math.max(w,1e-9);}
+function lossPanel(){var ps=HIST.filter(function(h){return h.p;}).map(function(h){return [Math.max(h.t,1),h.p.loss];}),
+ bs=HIST.filter(function(h){return h.b;}).map(function(h){return [Math.max(h.t,1),h.b.loss];});
+ var F=frame(340,230,[0,MAXT],[0.001,1],{logy:true,xt:[0,1000,2000,3000],yt:[0.001,0.01,0.1,1],yl:String,title:'training loss',xlab:'training step'}),s=F.s;
+ function cl(p){return [p[0],Math.max(0.001,Math.min(1,p[1]))];}
+ s+=path(F,ps.map(cl),ORANGE,2.2)+path(F,bs.map(cl),BLUE,2.2);
+ s+=T_(F.X1-6,F.Y0+14,'<tspan style="fill:var(--orange)">&#9644;</tspan> plain   <tspan style="fill:var(--blue)">&#9644;</tspan> BatchNorm','tn','end');
+ document.getElementById('pL').innerHTML=s;}
+function mobile(){return !!(window.matchMedia&&window.matchMedia('(max-width:820px)').matches);}
+// the sweep is drawn narrower on a phone, where it stands alone in the column
+function drawSweep(){var SW=mobile()?340:690;document.getElementById('pS').setAttribute('viewBox','0 0 '+SW+' 230');var F=frame(SW,230,[0.01,100],[0.01,1],{logx:true,logy:true,xt:[0.01,0.1,1,10,100],xl:String,yt:[0.01,0.1,1],yl:String,
+ title:SW<400?'loss after 800 steps, 2 seeds':'training loss after 800 steps (mean of 2 seeds), against learning rate',xlab:'learning rate'}),s=F.s;
+ s+='<rect x="'+F.X0+'" y="'+F.fy(0.15)+'" width="'+(F.X1-F.X0)+'" height="'+(F.Y1-F.fy(0.15))+'" fill="var(--green)" opacity="0.07"/>';
+ s+=T_(F.X0+6,F.Y1-(SW<400?24:8),'shaded: loss below 0.15','tn','start','var(--green-ink)');
+ var ranges={};
+ ['p','b'].forEach(function(k){var pts=[],ok=[];SLR.forEach(function(lr,i){var v=SWEEP[k][i];if(!v||v.length<2)return;
+   var m=v.reduce(function(a,b){return a+b;},0)/v.length;pts.push([lr,isFinite(m)?Math.max(0.01,Math.min(1,m)):1,isFinite(m)?m:Infinity]);if(m<0.15)ok.push(lr);});
+  var col=k==='p'?ORANGE:BLUE;s+=path(F,pts,col,2.2);
+  pts.forEach(function(p){s+='<circle cx="'+F.fx(p[0]).toFixed(1)+'" cy="'+F.fy(p[1]).toFixed(1)+'" r="3" fill="'+(isFinite(p[2])?col:'var(--bg)')+'" stroke="'+col+'" stroke-width="1.5"/>';});
+  ranges[k]=ok.length?[ok[0],ok[ok.length-1]]:null;});
+ var lx=F.fx(LR());s+='<line x1="'+lx+'" y1="'+F.Y0+'" x2="'+lx+'" y2="'+F.Y1+'" stroke="var(--text-secondary)" stroke-dasharray="4 3"/>'+T_(lx+4,F.Y0+12,'the live run','tn','start');
+ s+=T_(F.X1-6,F.Y1-8,'<tspan style="fill:var(--orange)">&#9644;</tspan> plain   <tspan style="fill:var(--blue)">&#9644;</tspan> BatchNorm'+(SW<400?'':'   (hollow: diverged)'),'tn','end');
+ document.getElementById('pS').innerHTML=s;
+ var done=SQ.length===0&&!sweeping,h;
+ if(!done)h='Sweeping: '+(SLR.length*4-SQ.length)+' of '+(SLR.length*4)+' training runs done&hellip;';
+ else{function rg(r){return r?fmtLR(r[0])+' to '+fmtLR(r[1])+(r[1]/r[0]>1.01?' (a factor of '+Math.round(r[1]/r[0])+')':''):'nowhere';}
+  h='Loss below 0.15 after 800 steps: <b style="color:var(--orange-ink)">plain</b> at learning rates '+rg(ranges.p)+'; <b style="color:var(--blue-ink)">BatchNorm</b> at '+rg(ranges.b)+'. '+
+   'Too small and the plain net barely moves in 800 steps; too big and it stops learning, or blows up. Normalizing every layer keeps each sigmoid&rsquo;s input in range whatever the step did to the weights.';}
+ document.getElementById('rdS').innerHTML=h;}
+function scalePanels(){var b=SCALE.b,p=SCALE.p;
+ var ls=[];[b,p].forEach(function(c){if(c)c.forEach(function(q){ls.push(q.L);});});var lo=Math.min.apply(null,ls),hi=Math.max.apply(null,ls),pad=Math.max(0.02,(hi-lo)*0.15);
+ var F=frame(340,230,[0.25,4],[Math.max(0,lo-pad),hi+pad],{logx:true,xt:[0.25,0.5,1,2,4],xl:String,yt:niceTicks(Math.max(0,lo-pad),hi+pad,4),title:'loss, second layer&rsquo;s W scaled by a',xlab:'scale a'}),s=F.s;
+ if(p)s+=path(F,p.map(function(q){return [q.a,q.L];}),ORANGE,2.2);if(b)s+=path(F,b.map(function(q){return [q.a,q.L];}),BLUE,2.2);
+ s+=T_(F.X1-6,F.Y0+14,'<tspan style="fill:var(--orange)">&#9644;</tspan> plain   <tspan style="fill:var(--blue)">&#9644;</tspan> BatchNorm','tn','end');
+ document.getElementById('pC').innerHTML=s;
+ var gs=[];[b,p].forEach(function(c){if(c)c.forEach(function(q){if(q.g>0)gs.push(q.g);});});
+ var glo=Math.pow(10,Math.floor(Math.log10(Math.min.apply(null,gs)))),ghi=Math.pow(10,Math.ceil(Math.log10(Math.max.apply(null,gs))));
+ var yt=[];for(var v=glo;v<=ghi*1.001;v*=10)yt.push(v);
+ F=frame(340,230,[0.25,4],[glo,ghi],{logx:true,logy:true,xt:[0.25,0.5,1,2,4],xl:String,yt:yt,yl:function(v){return v>=1?String(v):v.toExponential(0);},title:'size of the gradient on that W',xlab:'scale a'});s=F.s;
+ if(p)s+=path(F,p.map(function(q){return [q.a,q.g];}),ORANGE,2.2);
+ if(b){s+=path(F,b.map(function(q){return [q.a,q.g];}),BLUE,2.2);var g1=b.filter(function(q){return Math.abs(q.a-1)<1e-9;})[0].g;
+  s+=path(F,[[0.25,g1*4],[4,g1/4]],INK,1,'2 3')+T_(F.fx(2.6),F.fy(g1/2.2)-6,'&prop; 1/a','tn','start');}
+ document.getElementById('pG').innerHTML=s;
+ var pts=HIST.filter(function(h){return h.b;}).map(function(h){return [h.t,h.b.wn];}),wmax=Math.max.apply(null,pts.map(function(q){return q[1];}).concat([1]));
+ F=frame(340,230,[0,MAXT],[0,wmax*1.15],{xt:[0,1000,2000,3000],yt:niceTicks(0,wmax*1.15,4),title:'&Vert;W&Vert; of that layer, BatchNorm net',xlab:'training step'});s=F.s;
+ s+=path(F,pts,BLUE,2.2);s+=T_(F.X1-6,F.Y1-8,WD()?'with weight decay':'no weight decay','tn','end');
+ document.getElementById('pN').innerHTML=s;}
+function draw(){bandPanel('pA','p',ORANGE,'without BatchNorm');bandPanel('pB','b',BLUE,'with BatchNorm');lossPanel();scalePanels();readout();}
+function readout(){var dp=drift('p'),db=drift('b'),last=HIST[HIST.length-1],u=+document.getElementById('unit').value+1;
+ var h='Step '+T+'. ';
+ if(T===0)h+='Press <b>Train</b>. Both networks start from the same weights and see the same minibatches.';
+ else{h+='Unit '+u+'&rsquo;s median has moved '+(dp==null?'&mdash; (diverged)':'<b style="color:var(--orange-ink)">'+f2(dp)+'</b>')+' widths of its starting 15&ndash;85% band without BatchNorm, and '+
+  (db==null?'&mdash;':'<b style="color:var(--blue-ink)">'+f2(db)+'</b>')+' with it. Loss: plain '+(last.p?f2(last.p.loss):'diverged')+', BatchNorm '+(last.b?f2(last.b.loss):'diverged')+'.';}
+ document.getElementById('rdA').innerHTML=h;
+ var b=SCALE.b,c='';
+ if(b){var L=b.map(function(q){return q.L;}),g1=b.filter(function(q){return Math.abs(q.a-1)<1e-9;})[0],g4=b[b.length-1],pn=last.b?last.b.wn:0,p0=HIST[0].b.wn;
+  c='BatchNorm net: from a = &frac14; to 4 the loss stays within '+f2(Math.max.apply(null,L)-Math.min.apply(null,L))+' of '+f2(L[0])+', and the gradient at a = 4 is '+f2(g1.g/g4.g)+' times smaller than at a = 1. '+
+   'The gradient is also perpendicular to W (W&middot;&nabla;W = '+g1.dot.toExponential(0).replace(/-/g,'&minus;')+'), so a step can only turn W and lengthen it: &Vert;W&Vert; has gone from '+f2(p0)+' to '+f2(pn)+
+   ', which shrinks the effective step, lr/&Vert;W&Vert;&sup2;, by a factor of '+f2(Math.pow(pn/p0,2))+'.';}
+ document.getElementById('rdC').innerHTML=c;}
+function caption(){document.getElementById('caption').innerHTML=
+ '<b>1. Steady inputs.</b> Every layer&rsquo;s input is the previous layer&rsquo;s output, and training moves it; Ioffe &amp; Szegedy called this <i>internal covariate shift</i> and designed BatchNorm to stop it. '+
+ 'Without BatchNorm the unit&rsquo;s input wanders from a few to dozens of times its own width, depending on the unit (try others); with it, the batch mean and spread are removed and put back only as the learned &beta; and &gamma;, which move slowly, so the band hardly shifts. '+
+ 'The two panels have their own vertical scales, so compare each band with its own width.'+
+ '<div style="margin-top:4px"><b>2. More learning rates work.</b> A weight update that would push a plain unit into its flat tails is undone at the next forward pass, because the layer is renormalized. So a BatchNorm network trains across a far wider range of rates, including much larger ones, which is much of how Ioffe &amp; Szegedy trained their network in far fewer steps. At any one well-chosen rate the plain net can still do as well, or better: the gain is in not having to find that rate.</div>'+
+ '<div style="margin-top:4px"><b>3. Scale does not matter, but it changes the step.</b> BN(aWx) = BN(Wx) for any a &gt; 0, since the mean and standard deviation both scale by a. So the loss is flat along the length of W, the gradient is perpendicular to W, and it shrinks like 1/&Vert;W&Vert;. '+
+ 'Plain SGD then only ever lengthens W, and the angle it turns per step falls like lr/&Vert;W&Vert;&sup2;: training slows itself down. Weight decay pulls &Vert;W&Vert; back, which on a normalized layer does not limit what the network can express at all; it keeps the effective learning rate up (van Laarhoven 2017). Tick <b>weight decay</b> and watch &Vert;W&Vert; stop growing.</div>'+
+ '<div style="margin-top:4px"><b>What nobody asked, but everybody should see.</b> Whether internal covariate shift is really why BatchNorm works is disputed. Santurkar et al. (2018) added noise after each BatchNorm layer, deliberately shifting its output distribution every step, and training was barely hurt; they argue instead that BatchNorm makes the loss and its gradient change more smoothly, so larger steps are safe. '+
+ 'There is a third effect too: the mean and spread come from a random minibatch, so every example&rsquo;s output is jittered by its batch-mates, a noise that regularizes like the ones in <a href="../objectives/">losses and regularization</a>. '+
+ 'Homework 2.1 asks you to add <code>BatchNorm1d</code> to a narrow network (Task 3.13) and combine it with residual blocks (Task 3.17): these are the effects to look for.</div>';}
+(function(){var s='';for(var o=0;o<16;o++)s+='<option value="'+o+'">'+(o+1)+'</option>';document.getElementById('unit').innerHTML=s;
+ document.getElementById('lrv').textContent=fmtLR(LR());caption();reset();drawSweep();setTimeout(startSweep,300);
+ // start the side-by-side run straight away, so the first plots are never empty
+ setTimeout(function(){if(!run)toggle();},100);})();
+window.addEventListener('resize',drawSweep);
+window.addEventListener('keydown',function(e){if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;if(e.key===' '){e.preventDefault();toggle();}});
+</script>
+</body>
+</html>

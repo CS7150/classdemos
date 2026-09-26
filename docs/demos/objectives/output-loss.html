@@ -67,7 +67,7 @@ button{height:30px;font-size:13px;padding:0 9px}
 <div class="eq" id="e5"></div>
 <p>With cross-entropy, the derivative of the log divides it right back out:</p>
 <div class="eq" id="e6"></div>
-<p>So when the output is <b>confidently wrong</b> (say y = 1 but z is very negative, so p &asymp; 0), squared error's gradient is (p &minus; 1)&middot;p(1 &minus; p) &asymp; &minus;p &asymp; 0: the unit is saturated, and the loss is at its largest exactly where the push to fix it vanishes. Cross-entropy's gradient is p &minus; 1 &asymp; &minus;1, the strongest push it ever gives. This is the same <a href="tanh-saturation.html">saturation</a> as in the hidden layers, now at the output, and it is why Glorot &amp; Bengio found that the quadratic cost's error surface has much flatter plateaus. Softmax with cross-entropy has the same cancellation: the gradient at the logits is exactly softmax(z) &minus; y.</p>
+<p>So when the output is <b>confidently wrong</b> (say y = 1 but z is very negative, so p &asymp; 0), squared error's gradient is (p &minus; 1)&middot;p(1 &minus; p) &asymp; &minus;p &asymp; 0: the unit is saturated, and the loss is at its largest exactly where the push to fix it vanishes. Cross-entropy's gradient is p &minus; 1 &asymp; &minus;1, the strongest push it ever gives. This is the same <a href="../initialization/tanh-saturation.html">saturation</a> as in the hidden layers, now at the output, and it is why Glorot &amp; Bengio found that the quadratic cost's error surface has much flatter plateaus. Softmax with cross-entropy has the same cancellation: the gradient at the logits is exactly softmax(z) &minus; y.</p>
 </div>
 
 <script>

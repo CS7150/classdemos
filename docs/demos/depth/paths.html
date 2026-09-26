@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A ResNet is an ensemble of paths</title>
+<meta name="description" content="Unroll n residual blocks and they become 2^n paths of every length from 0 to n. Most paths are medium length, but most of the gradient flows through the short ones, and deleting one block from a residual stack barely changes it, while a plain stack falls apart.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 16px;max-width:1100px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+h2{font-size:15.5px;font-weight:600;margin:10px 0 0;border-top:1px solid var(--border);padding-top:10px}
+h2 span{font-weight:400;color:var(--text-secondary)}
+.quiz{margin:0}
+svg{max-height:58vh;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.row{gap:7px}
+button{height:30px;font-size:13px;padding:0 9px}
+.seg button{height:28px;font-size:12px;padding:0 8px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:34px}
+input[type=range]{flex:0 1 170px;min-width:90px}
+.rd{font-size:14px;line-height:1.5;min-height:1.5em}
+.cap{font-size:12.5px;line-height:1.55;padding-top:4px}
+@media (max-width:820px){svg{max-height:none}}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Training deep networks demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>A ResNet is an ensemble of paths<span>: 2<sup>n</sup> routes through n blocks, and the short ones do the work</span></h1>
+<p class="quiz">Every residual block offers the signal two routes: through the block, or around it on the shortcut. Stack n blocks and there are 2<sup>n</sup> ways through (Veit, Wilber and Belongie 2016). <b>Click a block</b> to see which paths use it; <b>click a path</b> to trace it.</p>
+
+<svg id="fig1" viewBox="0 0 1000 390" role="img">
+<title>Residual blocks unrolled into paths</title>
+<desc>Left, a residual stack: a horizontal line from x to y with each block F drawn on a detour above it, so each stage can be crossed on the line or through the block. Right, every path through the stack listed by length, each row marking which blocks it passes through.</desc>
+<g id="stage1"></g>
+</svg>
+<div class="row">
+<span class="klab">blocks</span>
+<div class="seg" id="nSeg"><button data-n="2">2</button><button data-n="3" class="on">3</button><button data-n="4">4</button></div>
+<button onclick="SELB=-1;SELP=-1;draw1()">Clear</button>
+</div>
+<div class="rd" id="rd1"></div>
+
+<h2>How long are the paths?<span> most are medium length; the gradient prefers short ones</span></h2>
+<svg id="fig2" viewBox="0 0 1000 330" role="img">
+<title>Path lengths, and the gradient they carry</title>
+<desc>Left, a histogram over path length: gray bars for the share of paths of each length, a binomial peaked at half the depth, and pink bars for the share of gradient each length carries, shifted toward short paths when the blocks are weak. Right, measured gradient size along every path of a random linear residual net, against path length, on a log scale, with the line s to the k.</desc>
+<g id="stage2"></g>
+</svg>
+<div class="row">
+<span class="klab">blocks n</span>
+<input type="range" id="nn" min="1" max="54" step="1" value="54" oninput="NN=+this.value;draw2()">
+<span class="knum" id="nnv"></span>
+<span class="klab">block strength s</span>
+<input type="range" id="ss" min="0.05" max="1.5" step="0.01" value="0.25" oninput="S=+this.value;remeasure();draw2();draw3()">
+<span class="knum" id="ssv"></span>
+</div>
+<div class="rd" id="rd2"></div>
+
+<h2>Delete a block<span> a residual stack loses one block&rsquo;s share; a plain stack loses its only path</span></h2>
+<svg id="fig3" viewBox="0 0 1000 300" role="img">
+<title>Output change when blocks are deleted, residual against plain</title>
+<desc>Left, for each of twelve blocks, how much the output changes when that one block is deleted: short blue bars for the residual net, tall orange bars for the plain net. Right, the output change as more and more blocks are deleted at random: the residual curve rises gradually, the plain one jumps at the first deletion.</desc>
+<g id="stage3"></g>
+</svg>
+<div class="row">
+<button onclick="makeNets();draw3()">New random nets</button>
+<span class="klab">block strength s is the slider above</span>
+</div>
+<div class="rd" id="rd3"></div>
+<div class="cap" id="caption"></div>
+
+<script>
+var BLUE='var(--blue)',PINK='var(--pink)',WARM='var(--orange)',GREEN='var(--green)',INK='var(--text-primary)',MUT='var(--text-muted)';
+var N1=3,SELB=-1,SELP=-1,NN=54,S=0.25,SUB='₀₁₂₃₄₅₆₇₈₉';
+function sub(i){return String(i).split('').map(function(c){return SUB[+c];}).join('');}
+function mobile(){return !!(window.matchMedia&&window.matchMedia('(max-width:820px)').matches);}
+function T(x,y,s,cls,anc,fill,extra){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'"'+
+ (anc?' text-anchor="'+anc+'"':'')+(fill?' style="fill:'+fill+'"':'')+(extra||'')+'>'+s+'</text>';}
+function bits(m){var c=0;while(m){c+=m&1;m>>=1;}return c;}
+function binom(n,k){var r=1;for(var i=1;i<=k;i++)r=r*(n-k+i)/i;return r;}
+function term(m,n){if(!m)return 'x';var s='';for(var i=n;i>=1;i--)if(m>>(i-1)&1)s+='F'+sub(i);return s+'x';}
+
+/* ---------- 1. the unrolled diagram ---------- */
+function draw1(){
+ var mob=mobile(),s='',n=N1,i,k;
+ var L=mob?{vb:'0 0 560 720',dx:30,dw:500,ly:250,by:120,px:40,py:372}:{vb:'0 0 1000 390',dx:40,dw:470,ly:250,by:120,px:560,py:44};
+ document.getElementById('fig1').setAttribute('viewBox',L.vb);
+ var X0=L.dx+20,X1=L.dx+L.dw-20,st=(X1-X0)/n,bw=Math.min(78,st*0.55),bh=44,y0=L.ly,yb=L.by;
+ function node(i){return X0+i*st;}
+ s+=T((X0+X1)/2,y0-196,'a stack of '+n+' residual blocks','ts','middle');
+ // routes: each stage is the shortcut on the line, or the detour through the block
+ for(i=1;i<=n;i++){var xa=node(i-1),xb=node(i),xm=(xa+xb)/2,onP=SELP>=0&&(SELP>>(i-1)&1),offP=SELP>=0&&!(SELP>>(i-1)&1);
+  var bc=SELB===i?PINK:onP?PINK:BLUE;
+  s+='<line x1="'+xa+'" y1="'+y0+'" x2="'+xb+'" y2="'+y0+'" stroke="'+(offP?PINK:'var(--border-strong)')+'" stroke-width="'+(offP?4:2)+'" stroke-linecap="round"/>';
+  s+='<path d="M'+xa+' '+y0+' Q'+xa+' '+(yb+bh/2)+' '+(xm-bw/2)+' '+(yb+bh/2)+'" fill="none" stroke="'+(onP?PINK:'var(--border-strong)')+'" stroke-width="'+(onP?4:2)+'"/>';
+  s+='<path d="M'+(xm+bw/2)+' '+(yb+bh/2)+' Q'+xb+' '+(yb+bh/2)+' '+xb+' '+y0+'" fill="none" stroke="'+(onP?PINK:'var(--border-strong)')+'" stroke-width="'+(onP?4:2)+'"/>';
+  s+='<g class="blk" data-b="'+i+'" style="cursor:pointer"><rect x="'+(xm-bw/2)+'" y="'+yb+'" width="'+bw+'" height="'+bh+'" rx="7" fill="color-mix(in oklab, '+bc+' '+(SELB===i||onP?30:14)+'%, var(--surface))" stroke="'+bc+'" stroke-width="'+(SELB===i?3:1.6)+'"/>'+
+   T(xm,yb+bh/2+6,'F'+sub(i),'ts','middle',SELB===i?'var(--pink-ink)':'var(--blue-ink)')+'</g>';
+  s+=T(xm,y0+20,'shortcut','tn','middle');}
+ for(i=0;i<=n;i++)s+='<circle cx="'+node(i)+'" cy="'+y0+'" r="5" fill="var(--text-primary)"/>';
+ s+=T(node(0)-10,y0+5,'x','ts','end')+T(node(n)+10,y0+5,'y','ts','start');
+ s+=T((X0+X1)/2,y0+52,'at each stage: through F, or around it','tn','middle');
+ // the path list, grouped by length
+ var rows=[];for(k=0;k<=n;k++){rows.push({h:k});for(var m=0;m<(1<<n);m++)if(bits(m)===k)rows.push({m:m});}
+ var rh=mob?15.5:(n>3?14.6:18),cw=16,y=L.py;
+ s+=T(L.px,y-20,'all '+(1<<n)+' paths, by length','ts','start');
+ rows.forEach(function(r){
+  if(r.h!==undefined){y+=4;s+=T(L.px,y+10,'length '+r.h+': '+binom(n,r.h)+' path'+(binom(n,r.h)>1?'s':''),'tn','start');y+=rh;return;}
+  var uses=SELB>0&&(r.m>>(SELB-1)&1),sel=r.m===SELP,x=L.px+10;
+  s+='<g class="prow" data-m="'+r.m+'" style="cursor:pointer"><rect x="'+(L.px)+'" y="'+(y-1)+'" width="'+(mob?490:420)+'" height="'+(rh-1)+'" rx="3" fill="'+(sel||uses?'color-mix(in oklab, var(--pink) 16%, var(--surface))':'transparent')+'"/>';
+  for(var b=1;b<=n;b++){var on=r.m>>(b-1)&1;
+   s+='<rect x="'+(x+(b-1)*cw)+'" y="'+(y+1)+'" width="'+(cw-3)+'" height="'+(rh-5)+'" rx="2" fill="'+(on?(b===SELB?PINK:BLUE):'var(--surface)')+'" stroke="'+(on?'none':'var(--border)')+'"/>';}
+  s+=T(x+n*cw+10,y+rh-5,term(r.m,n),'tn','start',sel||uses?'var(--text-primary)':'')+'</g>';
+  y+=rh;});
+ s+=T(L.px+10+n*cw/2,L.py-4,'F'+sub(1)+'&hellip;F'+sub(n),'tn','middle');
+ document.getElementById('stage1').innerHTML=s;
+ var h='(I + F'+sub(n)+')&middot;&middot;&middot;(I + F'+sub(1)+') x multiplies out to <b>'+(1<<n)+'</b> terms, one per path: ';
+ var cnt=[];for(k=0;k<=n;k++)cnt.push(binom(n,k)+' of length '+k);h+=cnt.join(', ')+'.';
+ if(SELB>0)h+=' Block F'+sub(SELB)+' lies on <b>'+(1<<(n-1))+'</b> of them, exactly half; deleting it leaves the other half untouched.';
+ else if(SELP>=0)h+=' This path is <b>'+term(SELP,n)+'</b>, '+bits(SELP)+' block'+(bits(SELP)===1?'':'s')+' long.';
+ document.getElementById('rd1').innerHTML=h;
+}
+document.getElementById('fig1').addEventListener('click',function(e){
+ var b=e.target.closest('.blk'),r=e.target.closest('.prow');
+ if(b){var i=+b.dataset.b;SELB=SELB===i?-1:i;SELP=-1;draw1();}
+ else if(r){var m=+r.dataset.m;SELP=SELP===m?-1:m;SELB=-1;draw1();}});
+document.getElementById('nSeg').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;
+ N1=+b.dataset.n;SELB=-1;SELP=-1;Array.from(this.children).forEach(function(x){x.classList.toggle('on',x===b);});draw1();});
+
+/* ---------- 2. path lengths, and the gradient they carry ---------- */
+// Measured, not modelled: a random linear residual net, y = (I+W_n)...(I+W_1)x, with
+// each W an m x m Gaussian matrix scaled so it multiplies a vector's length by about s.
+// The gradient that reaches x along one path is the product of that path's W's applied
+// to the gradient at y; we take its length for every one of the 2^10 paths.
+var MN=10,MD=32,MEAS=null;
+function randn(){var u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+var WRAW=[];for(var q=0;q<MN;q++){var W=new Float64Array(MD*MD);for(var e=0;e<MD*MD;e++)W[e]=randn()/Math.sqrt(MD);WRAW.push(W);}
+function matTv(W,v,sc){var o=new Float64Array(MD);for(var i=0;i<MD;i++){var a=0;for(var j=0;j<MD;j++)a+=W[j*MD+i]*v[j];o[i]=a*sc;}return o;}
+function remeasure(){var g=new Float64Array(MD),i,sum=[],cnt=[];for(i=0;i<MD;i++)g[i]=randn();var gn=Math.hypot.apply(null,g);
+ for(i=0;i<MD;i++)g[i]/=gn;for(i=0;i<=MN;i++){sum.push(0);cnt.push(0);}
+ for(var m=0;m<(1<<MN);m++){var v=g;for(var b=MN;b>=1;b--)if(m>>(b-1)&1)v=matTv(WRAW[b-1],v,S);
+  var k=bits(m);sum[k]+=Math.log(Math.hypot.apply(null,v));cnt[k]++;}
+ MEAS=sum.map(function(x,k){return Math.exp(x/cnt[k]);});}
+function draw2(){
+ var mob=mobile(),s='',n=NN,k;
+ document.getElementById('nnv').textContent=n;document.getElementById('ssv').textContent=S.toFixed(2);
+ var L=mob?{vb:'0 0 560 640',h:[50,40,530,280],m:[70,380,530,590]}:{vb:'0 0 1000 330',h:[60,40,630,270],m:[720,40,970,270]};
+ document.getElementById('fig2').setAttribute('viewBox',L.vb);
+ // share of paths of each length, and share of gradient: C(n,k) s^k, normalised by (1+s)^n
+ var P=[],G=[],tot=Math.pow(1+S,n),mx=0;
+ for(k=0;k<=n;k++){P.push(binom(n,k)/Math.pow(2,n));G.push(binom(n,k)*Math.pow(S,k)/tot);mx=Math.max(mx,P[k],G[k]);}
+ var X0=L.h[0],Y0=L.h[1],X1=L.h[2],Y1=L.h[3],bw=(X1-X0)/(n+1);
+ function hx(k){return X0+(k+0.5)*bw;}function hy(v){return Y1-v/mx*(Y1-Y0-62);}
+ s+='<rect x="'+X0+'" y="'+Y0+'" width="'+(X1-X0)+'" height="'+(Y1-Y0)+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
+ s+=T((X0+X1)/2,Y0-12,'path lengths through '+n+' block'+(n>1?'s':''),'ts','middle');
+ for(k=0;k<=n;k++){var w=Math.max(1,bw*0.8);
+  s+='<rect x="'+(hx(k)-w/2).toFixed(1)+'" y="'+hy(P[k]).toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+(Y1-hy(P[k])).toFixed(1)+'" fill="var(--text-muted)" opacity="0.35"/>';
+  s+='<rect x="'+(hx(k)-w*0.3).toFixed(1)+'" y="'+hy(G[k]).toFixed(1)+'" width="'+(w*0.6).toFixed(1)+'" height="'+(Y1-hy(G[k])).toFixed(1)+'" fill="'+PINK+'" opacity="0.85"/>';}
+ var tk=n<=12?1:n<=30?5:10;for(k=0;k<=n;k+=tk)s+=T(hx(k),Y1+15,String(k),'tn','middle');
+ s+=T((X0+X1)/2,Y1+32,'path length k: how many blocks the path goes through','tn','middle');
+ s+=T(X1-8,Y0+18,'<tspan style="fill:var(--text-muted)">■</tspan> share of paths   <tspan style="fill:var(--pink)">■</tspan> share of gradient','tn','end');
+ // the middle 90% of the gradient
+ var c=0,lo=0,hi=n;for(k=0;k<=n;k++){c+=G[k];if(c>=0.05){lo=k;break;}}c=0;for(k=0;k<=n;k++){c+=G[k];if(c>=0.95){hi=k;break;}}
+ s+='<line x1="'+hx(lo)+'" y1="'+(Y0+30)+'" x2="'+hx(hi)+'" y2="'+(Y0+30)+'" stroke="'+PINK+'" stroke-width="2"/>'+
+  '<line x1="'+hx(lo)+'" y1="'+(Y0+25)+'" x2="'+hx(lo)+'" y2="'+(Y0+35)+'" stroke="'+PINK+'" stroke-width="2"/><line x1="'+hx(hi)+'" y1="'+(Y0+25)+'" x2="'+hx(hi)+'" y2="'+(Y0+35)+'" stroke="'+PINK+'" stroke-width="2"/>';
+ s+=T((hx(lo)+hx(hi))/2,Y0+48,'90% of the gradient','tn','middle','var(--pink-ink)');
+ // the measured inset: gradient size along each path length, log scale
+ var M0=L.m[0],N0=L.m[1],M1=L.m[2],N1b=L.m[3],lmin=-8,lmax=1;
+ function mx_(k){return M0+k/MN*(M1-M0);}function my(v){var l=Math.log10(Math.max(1e-8,v));return N1b-(l-lmin)/(lmax-lmin)*(N1b-N0);}
+ s+='<rect x="'+M0+'" y="'+N0+'" width="'+(M1-M0)+'" height="'+(N1b-N0)+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
+ s+=T((M0+M1)/2,N0-12,'measured: one path&rsquo;s gradient','ts','middle');
+ [1,1e-2,1e-4,1e-6,1e-8].forEach(function(v){var y=my(v);if(y<N0-1)return;s+='<line x1="'+M0+'" y1="'+y+'" x2="'+M1+'" y2="'+y+'" stroke="var(--border)" stroke-width="0.5"/>'+T(M0-5,y+4,v===1?'1':'10'+'<tspan dy="-5" font-size="10">'+Math.log10(v)+'</tspan>','tn','end');});
+ var ln='';for(k=0;k<=MN;k++)ln+=(k?'L':'M')+mx_(k).toFixed(1)+' '+my(Math.pow(S,k)).toFixed(1)+' ';
+ s+='<path d="'+ln+'" fill="none" stroke="var(--text-muted)" stroke-width="1.3" stroke-dasharray="4 3"/>';
+ for(k=0;k<=MN;k++)s+='<circle cx="'+mx_(k).toFixed(1)+'" cy="'+my(MEAS[k]).toFixed(1)+'" r="4" fill="'+PINK+'"/>';
+ for(k=0;k<=MN;k+=2)s+=T(mx_(k),N1b+15,String(k),'tn','middle');
+ s+=T((M0+M1)/2,N1b+32,'path length (random linear net, '+MN+' blocks)','tn','middle');
+ s+=T(M1-6,N0+16,'<tspan style="fill:var(--pink)">●</tspan> measured   <tspan style="fill:var(--text-muted)">╌</tspan> s<tspan dy="-5" font-size="10">k</tspan>','tn','end');
+ document.getElementById('stage2').innerHTML=s;
+ var mean=n/2,gmean=n*S/(1+S);
+ document.getElementById('rd2').innerHTML='Of the 2<sup>'+n+'</sup> paths, the typical one goes through <b>'+mean.toFixed(1)+'</b> blocks. '+
+  'But each block a path passes through multiplies its gradient by about s = '+S.toFixed(2)+', so a path of length k carries about s<sup>k</sup>, and the gradient-weighted '+
+  'typical length is n&middot;s/(1+s) = <b>'+gmean.toFixed(1)+'</b>: 90% of the gradient comes through paths <b>'+lo+' to '+hi+'</b> blocks long.'+
+  (S>=1?' With s &ge; 1 long paths are no longer weaker, and that is the regime where a deep network&rsquo;s gradient explodes instead.':'');
+}
+
+/* ---------- 3. lesions ---------- */
+// Two random toy nets on 32-dimensional inputs, 12 blocks each, untrained.
+// Residual: y <- y + s*sqrt(2)*A relu(B y).  Plain: y <- sqrt(2)*relu(B y), the He-scaled
+// layer that keeps a random ReLU net's signal the same size.  Deleting a block means
+// skipping it.  We report how far the output moves, relative to its size, on 48 inputs.
+var LB=12,LD=32,NETS=null,XS=null;
+function mat(){var W=new Float64Array(LD*LD);for(var e=0;e<LD*LD;e++)W[e]=randn()/Math.sqrt(LD);return W;}
+function mv(W,v){var o=new Float64Array(LD);for(var i=0;i<LD;i++){var a=0;for(var j=0;j<LD;j++)a+=W[i*LD+j]*v[j];o[i]=a;}return o;}
+function makeNets(){NETS={A:[],B:[],P:[]};for(var i=0;i<LB;i++){NETS.A.push(mat());NETS.B.push(mat());NETS.P.push(mat());}
+ XS=[];for(var t=0;t<48;t++){var x=new Float64Array(LD);for(var j=0;j<LD;j++)x[j]=randn();XS.push(x);}}
+function fwdRes(x,skip){var y=x.slice();for(var i=0;i<LB;i++){if(skip[i])continue;var h=mv(NETS.B[i],y);for(var j=0;j<LD;j++)h[j]=Math.max(0,h[j]);
+ var f=mv(NETS.A[i],h);for(j=0;j<LD;j++)y[j]+=S*Math.SQRT2*f[j];}return y;}
+function fwdPlain(x,skip){var y=x.slice();for(var i=0;i<LB;i++){if(skip[i])continue;var h=mv(NETS.P[i],y);for(var j=0;j<LD;j++)h[j]=Math.SQRT2*Math.max(0,h[j]);y=h;}return y;}
+function change(f,skip){var none=new Array(LB).fill(false),t=0;
+ XS.forEach(function(x){var a=f(x,none),b=f(x,skip),d=0,n=0;for(var j=0;j<LD;j++){d+=(a[j]-b[j])*(a[j]-b[j]);n+=a[j]*a[j];}t+=Math.sqrt(d/n);});return t/XS.length;}
+function draw3(){
+ var mob=mobile(),s='',i,k;
+ var L=mob?{vb:'0 0 560 620',a:[60,40,530,260],b:[60,360,530,560]}:{vb:'0 0 1000 300',a:[60,40,560,240],b:[640,40,970,240]};
+ document.getElementById('fig3').setAttribute('viewBox',L.vb);
+ var R=[],Pl=[];for(i=0;i<LB;i++){var sk=new Array(LB).fill(false);sk[i]=true;R.push(change(fwdRes,sk));Pl.push(change(fwdPlain,sk));}
+ var top=2,X0=L.a[0],Y0=L.a[1],X1=L.a[2],Y1=L.a[3],gw=(X1-X0)/LB;
+ function yv(v){return Y1-Math.min(top,v)/top*(Y1-Y0);}
+ s+='<rect x="'+X0+'" y="'+Y0+'" width="'+(X1-X0)+'" height="'+(Y1-Y0)+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
+ s+=T((X0+X1)/2,Y0-12,'delete one block: how far the output moves','ts','middle');
+ [0,0.5,1,1.5,2].forEach(function(v){s+='<line x1="'+X0+'" y1="'+yv(v)+'" x2="'+X1+'" y2="'+yv(v)+'" stroke="var(--border)" stroke-width="0.5"/>'+T(X0-6,yv(v)+4,v===0?'0':Math.round(v*100)+'%','tn','end');});
+ for(i=0;i<LB;i++){var cx=X0+(i+0.5)*gw,w=gw*0.34;
+  s+='<rect x="'+(cx-w-1).toFixed(1)+'" y="'+yv(R[i]).toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+(Y1-yv(R[i])).toFixed(1)+'" fill="'+BLUE+'"/>';
+  s+='<rect x="'+(cx+1).toFixed(1)+'" y="'+yv(Pl[i]).toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+(Y1-yv(Pl[i])).toFixed(1)+'" fill="'+WARM+'"/>';
+  s+=T(cx,Y1+15,String(i+1),'tn','middle');}
+ s+=T((X0+X1)/2,Y1+32,'which block is deleted','tn','middle');
+ s+=T(X0+8,Y0+16,'<tspan style="fill:var(--blue)">■</tspan> residual   <tspan style="fill:var(--orange)">■</tspan> plain','tn','start');
+ // several deletions at once, averaged over random choices
+ var CR=[0],CP=[0];for(k=1;k<=6;k++){var ar=0,ap=0;for(var t=0;t<8;t++){var sk2=new Array(LB).fill(false),idx=[];for(i=0;i<LB;i++)idx.push(i);
+   for(i=0;i<k;i++){var r=i+Math.floor(Math.random()*(LB-i)),tmp=idx[i];idx[i]=idx[r];idx[r]=tmp;sk2[idx[i]]=true;}
+   ar+=change(fwdRes,sk2);ap+=change(fwdPlain,sk2);}CR.push(ar/8);CP.push(ap/8);}
+ var B0=L.b[0],C0=L.b[1],B1=L.b[2],C1=L.b[3];
+ function bx(k){return B0+k/6*(B1-B0);}function by(v){return C1-Math.min(top,v)/top*(C1-C0);}
+ s+='<rect x="'+B0+'" y="'+C0+'" width="'+(B1-B0)+'" height="'+(C1-C0)+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
+ s+=T((B0+B1)/2,C0-12,'delete several at random','ts','middle');
+ [0,0.5,1,1.5,2].forEach(function(v){s+='<line x1="'+B0+'" y1="'+by(v)+'" x2="'+B1+'" y2="'+by(v)+'" stroke="var(--border)" stroke-width="0.5"/>'+T(B0-6,by(v)+4,v===0?'0':Math.round(v*100)+'%','tn','end');});
+ [[CR,BLUE],[CP,WARM]].forEach(function(c){var p='';for(k=0;k<=6;k++)p+=(k?'L':'M')+bx(k).toFixed(1)+' '+by(c[0][k]).toFixed(1)+' ';
+  s+='<path d="'+p+'" fill="none" stroke="'+c[1]+'" stroke-width="2.4"/>';for(k=0;k<=6;k++)s+='<circle cx="'+bx(k).toFixed(1)+'" cy="'+by(c[0][k]).toFixed(1)+'" r="3.5" fill="'+c[1]+'"/>';});
+ for(k=0;k<=6;k++)s+=T(bx(k),C1+15,String(k),'tn','middle');
+ s+=T((B0+B1)/2,C1+32,'blocks deleted, of '+LB,'tn','middle');
+ document.getElementById('stage3').innerHTML=s;
+ var mr=R.reduce(function(a,b){return a+b;},0)/LB,mp=Pl.reduce(function(a,b){return a+b;},0)/LB;
+ document.getElementById('rd3').innerHTML='Deleting one block moves the residual net&rsquo;s output by <b>'+Math.round(mr*100)+'%</b> of its size on average, and the plain net&rsquo;s by <b>'+Math.round(mp*100)+'%</b>. '+
+  'Removing a residual block only removes the half of the paths that went through it; removing a plain layer removes the only path there was, and every later layer now reads an input it never saw.';
+}
+
+function caption(){
+ document.getElementById('caption').innerHTML=
+ '<b>The unrolled view.</b> For linear blocks the expansion is exact: (I + F<sub>2</sub>)(I + F<sub>1</sub>)x = x + F<sub>1</sub>x + F<sub>2</sub>x + F<sub>2</sub>F<sub>1</sub>x. '+
+ 'With ReLUs inside the blocks the terms no longer separate so neatly, but the picture of 2<sup>n</sup> routes of mixed lengths still holds, and it is how Veit, Wilber and Belongie read a residual network: '+
+ 'not one very deep function, but a collection of many paths of different depths, most of them only moderately deep.'+
+ '<div style="margin-top:4px"><b>Why the gradient favours short paths.</b> A path of length k passes its gradient through k blocks, and when each one scales it by about s &lt; 1, it arrives s<sup>k</sup> as strong. '+
+ 'There are many more medium paths than short ones, C(n, k), but the weight s<sup>k</sup> wins, and the gradient-carrying paths are short. '+
+ 'The right-hand plot measures this rather than assuming it: every one of the 1,024 paths through a random 10-block linear residual net, with the gradient multiplied out along each. '+
+ 'In a trained 110-layer ResNet, Veit and colleagues measured most of the gradient arriving through paths of only about 5 to 17 of its 54 blocks. '+
+ 'The one-number s here is a cartoon of that: real blocks do not all scale the gradient equally.</div>'+
+ '<div style="margin-top:4px"><b>Deleting a block.</b> The nets here are random and untrained, so this measures how much the function changes, not accuracy; the paper&rsquo;s version deleted layers from trained ImageNet models, '+
+ 'where the ResNet&rsquo;s error rose only a little per deleted block while VGG&rsquo;s collapsed. The toy shows the same structural reason: a plain stack is one path, so any cut breaks it. '+
+ '<b>Stochastic depth</b> (Huang et al. 2016) turns this into a regularizer: while training, randomly skip whole residual blocks, so the network learns to work with many of its paths missing, and use all of them at test time.</div>';
+}
+
+window.addEventListener('resize',function(){draw1();draw2();draw3();});
+remeasure();makeNets();caption();draw1();draw2();draw3();
+</script>
+</body>
+</html>

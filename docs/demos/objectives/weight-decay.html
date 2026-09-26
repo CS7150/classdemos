@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weight decay</title>
+<meta name="description" content="Weight decay as a shrink on every step, L2 against L1 as a ball against a diamond (and why L1 zeroes weights), a bumpy fit smoothed by a penalty on its weights, and why L2 inside Adam is not the same as decoupled weight decay.">
+<link rel="stylesheet" href="../demo.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<style>
+body{gap:6px;padding:11px 16px 28px;max-width:1100px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+h2{font-size:16px;font-weight:600;margin:18px 0 0;letter-spacing:-.005em}
+.quiz{margin:0}
+svg{max-height:62vh;touch-action:none}
+.row{gap:7px}
+button{height:30px;font-size:13px;padding:0 9px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:44px}
+input[type=range]{flex:0 1 170px;min-width:90px}
+.rd{font-size:14px;line-height:1.5;min-height:1.5em}
+.cap{font-size:12.5px;line-height:1.55;padding-top:4px}
+.nav{display:flex;align-items:baseline;gap:10px}
+.eq{font-size:15px;overflow-x:auto;overflow-y:hidden}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Losses and regularization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Weight decay<span>: L2 against L1</span></h1>
+<p class="quiz">When parameters get large, a network can learn a bumpy function. The classic fix from regression is to charge for the size of the weights. Four views of what that charge does: to each step, to the answer, to the fitted function, and inside Adam.</p>
+
+<h2>1. Every step shrinks the weights</h2>
+<p class="quiz">Homework 2.1 adds a penalty to the loss, <span id="t1"></span>. Its gradient is <span id="t2"></span>, so a gradient descent step becomes a <b>shrink</b> followed by the usual step. <b>Play</b> both runs from the same start, or drag the start point.</p>
+<div class="eq" id="e1"></div>
+<svg id="f1" viewBox="0 0 900 400" role="img">
+<title>Gradient descent with and without weight decay on a tilted quadratic bowl</title>
+<desc>Left: contours of the loss, its minimum, the origin, and two gradient-descent paths from the same start, one without weight decay heading to the loss minimum and one with weight decay heading to a point pulled toward the origin, with the curve of all such points as the decay grows. At the current step, arrows show the loss's pull and the decay's pull. Right: the loss and the length of the weight vector over the steps for both runs.</desc>
+<g id="g1"></g>
+</svg>
+<div class="row">
+<button class="main" id="play1" onclick="play1()">Play</button>
+<button onclick="step1(1)">Step</button>
+<button onclick="reset1()">Reset</button>
+<span class="klab" style="margin-left:8px">decay &lambda;</span>
+<input type="range" id="lam1" min="0" max="0.15" step="0.005" value="0.04" oninput="setLam1()">
+<span class="knum" id="lam1v"></span>
+<span class="klab">learning rate &nu;</span>
+<input type="range" id="nu1" min="0.02" max="0.3" step="0.01" value="0.1" oninput="setLam1()">
+<span class="knum" id="nu1v"></span>
+</div>
+<div class="rd" id="rd1"></div>
+
+<h2>2. A ball against a diamond: why L1 zeroes weights</h2>
+<p class="quiz">The same penalty can be read as a budget: find the best weights whose size is at most r. Measured by L2 the budget is a ball; measured by L1, |&theta;<sub>1</sub>| + |&theta;<sub>2</sub>|, it is a diamond. <b>Drag the loss&rsquo;s minimum</b> (the cross) in either panel.</p>
+<svg id="f2" viewBox="0 0 900 430" role="img">
+<title>Constrained minima under an L2 ball and an L1 diamond</title>
+<desc>Two panels with the same tilted loss. Left, an L2 ball: the best point inside it is where a loss contour just touches the circle, and both weights are usually non-zero. Right, an L1 diamond: the contour usually touches at a corner, where one weight is exactly zero; the shaded region shows every placement of the loss minimum for which that happens.</desc>
+<g id="g2"></g>
+</svg>
+<div class="row">
+<span class="klab">budget r</span>
+<input type="range" id="r2" min="0.3" max="2.2" step="0.05" value="1" oninput="draw2()">
+<span class="knum" id="r2v"></span>
+<button onclick="C2=[1.9,0.9];draw2()">Reset</button>
+</div>
+<div class="rd" id="rd2"></div>
+
+<h2>3. Large weights, bumpy functions</h2>
+<p class="quiz">Twelve noisy points and a polynomial with twelve coefficients: exactly enough to pass through every point. The penalty &lambda;&middot;&#8214;w&#8214;&sup2; on the coefficients trades fitting the points against keeping them small. <b>Slide &lambda;</b> from nothing to a lot.</p>
+<svg id="f3" viewBox="0 0 900 380" role="img">
+<title>A polynomial fit smoothed by a penalty on its coefficients</title>
+<desc>Left: noisy training points, the true curve, and the fitted curve, which is wildly bumpy when the penalty is tiny and smooth when it is larger. Right: training and test error against the penalty on a log scale, with the training error rising and the test error falling and then rising again.</desc>
+<g id="g3"></g>
+</svg>
+<div class="row">
+<span class="klab">penalty &lambda;</span>
+<input type="range" id="lam3" min="-8" max="1" step="0.05" value="-6" oninput="draw3()" style="flex:1 1 260px">
+<span class="knum" id="lam3v" style="min-width:70px"></span>
+<button onclick="sample3();draw3()">Resample</button>
+</div>
+<div class="rd" id="rd3"></div>
+
+<h2>4. What nobody asked: L2 inside Adam is not weight decay</h2>
+<p class="quiz">For plain gradient descent, adding the penalty to the loss and shrinking the weights are the same thing. Inside Adam they are not, because Adam divides every gradient, including the penalty&rsquo;s, by that weight&rsquo;s recent gradient size. Two weights start at 1. Their loss gradients flip sign every step and average to zero, so only the regularizer moves them: one gets big gradients (&plusmn;10), one tiny ones (&plusmn;0.001).</p>
+<svg id="f4" viewBox="0 0 900 300" role="img">
+<title>Two weights under Adam with L2 in the loss, and under AdamW</title>
+<desc>Weight value against step for four runs. With L2 in the loss, the weight with big gradients barely shrinks while the weight with tiny gradients is driven to zero. With decoupled weight decay (AdamW), both shrink along the same curve.</desc>
+<g id="g4"></g>
+</svg>
+<div class="rd" id="rd4"></div>
+<div class="cap" id="cap"></div>
+
+<script>
+var BLUE='var(--blue)',WARM='var(--warm)',GREEN='var(--green)',PINK='var(--pink)',VIOLET='var(--violet)',INK='var(--text-primary)';
+function T(x,y,s,cls,anc,fill,extra){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'"'+
+ (anc?' text-anchor="'+anc+'"':'')+(fill?' style="fill:'+fill+'"':'')+(extra||'')+'>'+s+'</text>';}
+function L(x1,y1,x2,y2,col,w,dash,op){return '<line x1="'+x1.toFixed(1)+'" y1="'+y1.toFixed(1)+'" x2="'+x2.toFixed(1)+'" y2="'+y2.toFixed(1)+
+ '" stroke="'+col+'" stroke-width="'+(w||1)+'"'+(dash?' stroke-dasharray="'+dash+'"':'')+(op!=null?' opacity="'+op+'"':'')+'/>';}
+function path(pts,col,w,dash,op){if(!pts.length)return '';return '<path d="'+pts.map(function(p,i){return (i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1);}).join(' ')+
+ '" fill="none" stroke="'+col+'" stroke-width="'+(w||1.5)+'"'+(dash?' stroke-dasharray="'+dash+'"':'')+(op!=null?' opacity="'+op+'"':'')+' stroke-linejoin="round"/>';}
+function arrow(x1,y1,x2,y2,col,w){var dx=x2-x1,dy=y2-y1,l=Math.hypot(dx,dy);if(l<2)return '';var ux=dx/l,uy=dy/l,h=Math.min(8,l*0.5);
+ return L(x1,y1,x2,y2,col,w||2.2)+'<path d="M'+x2.toFixed(1)+' '+y2.toFixed(1)+' L'+(x2-h*ux-h*0.5*uy).toFixed(1)+' '+(y2-h*uy+h*0.5*ux).toFixed(1)+
+  ' L'+(x2-h*ux+h*0.5*uy).toFixed(1)+' '+(y2-h*uy-h*0.5*ux).toFixed(1)+' Z" fill="'+col+'"/>';}
+function f2(v){return (Math.abs(v)<5e-4?0:v).toFixed(2).replace(/^-/,'−');}
+function fe(v){return v<0.001?v.toExponential(1).replace('e-','×10⁻').replace(/⁻(\d+)/,function(m,d){return '⁻'+d.split('').map(function(c){return '⁰¹²³⁴⁵⁶⁷⁸⁹'[+c];}).join('');}):v.toFixed(3);}
+function mobile(){return !!(window.matchMedia&&window.matchMedia('(max-width:820px)').matches);}
+
+// A tilted quadratic loss L(θ) = ½ (θ−c)ᵀ A (θ−c), with A symmetric positive definite.
+function quad(a1,a2,ang){var c=Math.cos(ang),s=Math.sin(ang);
+ return {a1:a1,a2:a2,ang:ang,A:[[a1*c*c+a2*s*s,(a1-a2)*c*s],[(a1-a2)*c*s,a1*s*s+a2*c*c]]};}
+function Lq(Q,c,t){var d0=t[0]-c[0],d1=t[1]-c[1],A=Q.A;return 0.5*(A[0][0]*d0*d0+2*A[0][1]*d0*d1+A[1][1]*d1*d1);}
+function grad(Q,c,t){var d0=t[0]-c[0],d1=t[1]-c[1],A=Q.A;return [A[0][0]*d0+A[0][1]*d1,A[0][1]*d0+A[1][1]*d1];}
+// the regularized minimum: (A + μI) θ = A c
+function ridge(Q,c,mu){var A=Q.A,a=A[0][0]+mu,b=A[0][1],d=A[1][1]+mu,det=a*d-b*b,r0=A[0][0]*c[0]+A[0][1]*c[1],r1=A[0][1]*c[0]+A[1][1]*c[1];
+ return [(d*r0-b*r1)/det,(a*r1-b*r0)/det];}
+// the contour of the loss at level ℓ, as a polygon in data coordinates
+function contour(Q,c,lev){var pts=[],r1=Math.sqrt(2*lev/Q.a1),r2=Math.sqrt(2*lev/Q.a2),co=Math.cos(Q.ang),si=Math.sin(Q.ang);
+ for(var k=0;k<=72;k++){var t=k/72*2*Math.PI,u=r1*Math.cos(t),v=r2*Math.sin(t);pts.push([c[0]+co*u-si*v,c[1]+si*u+co*v]);}return pts;}
+
+/* ================= 1. the shrink ================= */
+var Q1=quad(4,0.7,0.5),C1=[1.5,2.2],S1=[3.0,-0.5],N1=160,RUN=null,K1=0,P1=null;
+function lam1(){return +document.getElementById('lam1').value;}
+function nu1(){return +document.getElementById('nu1').value;}
+function runs1(){var lam=lam1(),nu=nu1(),a=[S1.slice()],b=[S1.slice()];
+ for(var k=0;k<N1;k++){var p=a[k],g=grad(Q1,C1,p);a.push([p[0]-nu*g[0],p[1]-nu*g[1]]);
+  var q=b[k],h=grad(Q1,C1,q);b.push([(1-lam)*q[0]-nu*h[0],(1-lam)*q[1]-nu*h[1]]);}
+ return {plain:a,decay:b};}
+function setLam1(){document.getElementById('lam1v').textContent=lam1().toFixed(3);document.getElementById('nu1v').textContent=nu1().toFixed(2);P1=runs1();draw1();}
+function reset1(){pause1();K1=0;draw1();}
+function step1(n){K1=Math.min(N1,K1+n);draw1();}
+function pause1(){if(RUN){clearInterval(RUN);RUN=null;}document.getElementById('play1').textContent='Play';}
+function play1(){if(RUN){pause1();return;}if(K1>=N1)K1=0;document.getElementById('play1').textContent='Pause';
+ RUN=setInterval(function(){K1++;draw1();if(K1>=N1)pause1();},45);}
+var M1;   // the map's data-to-screen transform, kept for dragging
+function draw1(){
+ var mob=mobile(),s='',lam=lam1(),nu=nu1(),mu=lam/nu,star=ridge(Q1,C1,mu);
+ var X0=30,Y0=20,W=mob?400:420,H=W*0.86,lo=[-1,-0.8],hi=[3.4,3.0];
+ function px(v){return X0+(v-lo[0])/(hi[0]-lo[0])*W;}function py(v){return Y0+H-(v-lo[1])/(hi[1]-lo[1])*H;}
+ M1={X0:X0,Y0:Y0,W:W,H:H,lo:lo,hi:hi};
+ s+='<defs><clipPath id="c1"><rect x="'+X0+'" y="'+Y0+'" width="'+W+'" height="'+H+'"/></clipPath></defs>';
+ s+='<rect id="map1" x="'+X0+'" y="'+Y0+'" width="'+W+'" height="'+H+'" fill="var(--surface)" opacity="0.6" stroke="var(--border)" style="cursor:crosshair"/>';
+ s+='<g clip-path="url(#c1)" pointer-events="none">';
+ s+=L(px(lo[0]),py(0),px(hi[0]),py(0),'var(--border-strong)',1)+L(px(0),py(lo[1]),px(0),py(hi[1]),'var(--border-strong)',1);
+ [0.05,0.3,0.8,1.6,2.8,4.4,6.5].forEach(function(l){s+=path(contour(Q1,C1,l).map(function(p){return [px(p[0]),py(p[1])];}),'var(--text-muted)',0.9,null,0.55);});
+ // the regularization path: the minimum as the decay grows from 0 to ∞
+ var rp=[];for(var k=0;k<=80;k++){var m=Math.pow(10,-3+k/80*5);rp.push(ridge(Q1,C1,m));}rp.unshift(C1);rp.push([0,0]);
+ s+=path(rp.map(function(p){return [px(p[0]),py(p[1])];}),WARM,1.2,'3 3',0.8);
+ var pl=P1.plain.slice(0,K1+1),dc=P1.decay.slice(0,K1+1);
+ s+=path(pl.map(function(p){return [px(p[0]),py(p[1])];}),BLUE,2);
+ s+=path(dc.map(function(p){return [px(p[0]),py(p[1])];}),WARM,2.2);
+ // the two pulls at the current point of the decayed run, drawn 3× life size
+ var q=dc[dc.length-1],g=grad(Q1,C1,q),m3=3,sx=-nu*g[0]*m3,sy=-nu*g[1]*m3,dx=-lam*q[0]*m3,dy=-lam*q[1]*m3;
+ if(K1<N1&&(Math.hypot(sx,sy)>0.02)){s+=arrow(px(q[0]),py(q[1]),px(q[0]+sx),py(q[1]+sy),BLUE,2);
+  s+=arrow(px(q[0]),py(q[1]),px(q[0]+dx),py(q[1]+dy),WARM,2);}
+ s+='</g>';
+ s+='<circle cx="'+px(0)+'" cy="'+py(0)+'" r="3.5" fill="'+INK+'"/>'+T(px(0)+6,py(0)+15,'0','tn','start');
+ s+=T(px(C1[0])+9,py(C1[1])-6,'loss minimum','tn','start',BLUE)+'<path d="M'+(px(C1[0])-6)+' '+(py(C1[1])-6)+'l12 12m0 -12l-12 12" stroke="'+BLUE+'" stroke-width="2.4"/>';
+ s+='<circle cx="'+px(star[0]).toFixed(1)+'" cy="'+py(star[1]).toFixed(1)+'" r="6" fill="none" stroke="'+WARM+'" stroke-width="2.4"/>';
+ s+=T(px(star[0])+9,py(star[1])+16,'with decay','tn','start','var(--warm-ink)');
+ s+='<circle cx="'+px(S1[0])+'" cy="'+py(S1[1])+'" r="6" fill="var(--surface)" stroke="'+INK+'" stroke-width="1.6" style="cursor:grab" id="start1"/>';
+ s+=T(px(S1[0])+9,py(S1[1])+4,'start (drag)','tn','start');
+ s+=T(X0+W/2,Y0-6,'the loss&rsquo;s contours; dashed: the answer as &lambda; grows','ts','middle');
+ s+=T(X0+6,Y0+H-8,'<tspan style="fill:var(--blue)">&#9644;</tspan> no decay   <tspan style="fill:var(--warm)">&#9644;</tspan> with decay   arrows 3&times;: &minus;&nu;&nabla;L and &minus;&lambda;&theta;','tn','start');
+ // right: the loss and the size over the steps
+ var RX=mob?40:520,RW=mob?350:320,RY=mob?Y0+H+50:36,RH=mob?120:140;
+ function chart(y0,title,f,fmt,logy){var va=P1.plain.map(f),vb=P1.decay.map(f),mx=Math.max.apply(null,va.concat(vb))*1.05||1,o='';
+  function cx(k){return RX+k/N1*RW;}
+  var cy=logy?function(v){var l=Math.log10(Math.max(1e-3,v)),t=Math.log10(mx);return y0+RH-(l+3)/(t+3)*RH;}:function(v){return y0+RH-v/mx*RH;};
+  o+='<rect x="'+RX+'" y="'+y0+'" width="'+RW+'" height="'+RH+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
+  o+=T(RX,y0-6,title,'ts','start');
+  o+=path(va.slice(0,K1+1).map(function(v,k){return [cx(k),cy(v)];}),BLUE,2)+path(vb.slice(0,K1+1).map(function(v,k){return [cx(k),cy(v)];}),WARM,2.2);
+  o+=T(RX+RW+4,cy(va[K1])+4,fmt(va[K1]),'tn','start','var(--blue-ink)')+T(RX+RW+4,cy(vb[K1])+(Math.abs(cy(vb[K1])-cy(va[K1]))<13?16:4),fmt(vb[K1]),'tn','start','var(--warm-ink)');
+  o+=T(RX,y0+RH+14,'0','tn','start')+T(RX+RW,y0+RH+14,N1+' steps','tn','end');return o;}
+ s+=chart(RY,'the loss L(&theta;), log scale',function(p){return Lq(Q1,C1,p);},function(v){return v<1e-3?'&lt;0.001':v.toFixed(3);},true);
+ s+=chart(RY+RH+62,'the size &#8214;&theta;&#8214;',function(p){return Math.hypot(p[0],p[1]);},function(v){return v.toFixed(2);});
+ var svg=document.getElementById('f1');svg.setAttribute('viewBox',mob?'0 0 470 '+(RY+2*RH+100):'0 0 900 400');
+ document.getElementById('g1').innerHTML=s;
+ var e=P1.decay[N1];
+ document.getElementById('rd1').innerHTML='Step '+K1+'. Without decay the run ends at the loss&rsquo;s minimum, &#8214;&theta;&#8214; = <b>'+Math.hypot(C1[0],C1[1]).toFixed(2)+'</b>. '+
+  (lam>0?'With decay each step first multiplies &theta; by 1 &minus; &lambda; = <b>'+(1-lam).toFixed(3)+'</b>, and the run settles where that shrink balances the loss&rsquo;s pull: (A + (&lambda;/&nu;)I)&theta; = A&theta;<sub>min</sub>, at &#8214;&theta;&#8214; = <b>'+Math.hypot(e[0],e[1]).toFixed(2)+'</b>, at a loss of <b>'+Lq(Q1,C1,e).toFixed(3)+'</b> instead of 0.':
+  'With &lambda; = 0 the two runs are the same.');
+}
+(function(){var svg=document.getElementById('f1'),on=false;
+ function at(e){var r=svg.getBoundingClientRect(),k=svg.viewBox.baseVal.width/r.width,x=(e.clientX-r.left)*k,y=(e.clientY-r.top)*k;
+  return [M1.lo[0]+(x-M1.X0)/M1.W*(M1.hi[0]-M1.lo[0]),M1.lo[1]+(M1.Y0+M1.H-y)/M1.H*(M1.hi[1]-M1.lo[1])];}
+ svg.addEventListener('pointerdown',function(e){if(!e.target||(e.target.id!=='start1'&&e.target.id!=='map1'))return;on=true;svg.setPointerCapture(e.pointerId);e.preventDefault();
+  S1=at(e);P1=runs1();K1=N1;pause1();draw1();});
+ svg.addEventListener('pointermove',function(e){if(!on)return;var p=at(e);S1=[Math.max(-0.9,Math.min(3.3,p[0])),Math.max(-0.7,Math.min(2.9,p[1]))];P1=runs1();draw1();});
+ var up=function(){on=false;};svg.addEventListener('pointerup',up);svg.addEventListener('pointercancel',up);})();
+
+/* ================= 2. ball and diamond ================= */
+var Q2=quad(3,0.9,0.35),C2=[1.9,0.9],M2=[];
+function solveL2(c,r){if(Math.hypot(c[0],c[1])<=r)return c.slice();var lo=0,hi=1;
+ while(Math.hypot.apply(null,ridge(Q2,c,hi))>r)hi*=2;
+ for(var i=0;i<60;i++){var m=(lo+hi)/2,t=ridge(Q2,c,m);if(Math.hypot(t[0],t[1])>r)lo=m;else hi=m;}return ridge(Q2,c,hi);}
+// the best point of the diamond: inside if the minimum is, else on one of its four edges
+function solveL1(c,r){if(Math.abs(c[0])+Math.abs(c[1])<=r)return c.slice();
+ var V=[[r,0],[0,r],[-r,0],[0,-r]],best=null,bl=1e18,A=Q2.A;
+ for(var i=0;i<4;i++){var P=V[i],Qp=V[(i+1)%4],d=[Qp[0]-P[0],Qp[1]-P[1]],e=[c[0]-P[0],c[1]-P[1]];
+  var Ad=[A[0][0]*d[0]+A[0][1]*d[1],A[0][1]*d[0]+A[1][1]*d[1]],t=(Ad[0]*e[0]+Ad[1]*e[1])/(Ad[0]*d[0]+Ad[1]*d[1]);
+  t=Math.max(0,Math.min(1,t));var p=[P[0]+t*d[0],P[1]+t*d[1]];if(t===0)p=P.slice();if(t===1)p=Qp.slice();
+  var l=Lq(Q2,c,p);if(l<bl){bl=l;best=p;}}
+ return best;}
+function draw2(){
+ var mob=mobile(),r=+document.getElementById('r2').value,s='',R=2.6;
+ document.getElementById('r2v').textContent=r.toFixed(2);
+ var PW=mob?360:400,G=mob?0:40;M2=[];
+ function panel(k,x0,y0,kind){var sol=kind==='L2'?solveL2(C2,r):solveL1(C2,r),o='',W=PW,H=PW;
+  function px(v){return x0+(v+R)/(2*R)*W;}function py(v){return y0+H-(v+R)/(2*R)*H;}
+  M2.push({x0:x0,y0:y0,W:W,H:H});
+  o+='<defs><clipPath id="c2'+k+'"><rect x="'+x0+'" y="'+y0+'" width="'+W+'" height="'+H+'"/></clipPath></defs>';
+  o+='<rect class="map2" data-k="'+k+'" x="'+x0+'" y="'+y0+'" width="'+W+'" height="'+H+'" fill="var(--surface)" opacity="0.6" stroke="var(--border)" style="cursor:crosshair"/>';
+  o+='<g clip-path="url(#c2'+k+')" pointer-events="none">';
+  // where the minimum can sit so that the diamond's answer has a zero weight
+  if(kind==='L1'){var n=46,cs=W/n;for(var i=0;i<n;i++)for(var j=0;j<n;j++){var cx=-R+(i+0.5)/n*2*R,cy=-R+(j+0.5)/n*2*R,t=solveL1([cx,cy],r);
+   if(Math.abs(cx)+Math.abs(cy)>r&&(t[0]===0||t[1]===0))o+='<rect x="'+(x0+i*cs).toFixed(1)+'" y="'+(y0+H-(j+1)*cs).toFixed(1)+'" width="'+(cs+0.3).toFixed(1)+'" height="'+(cs+0.3).toFixed(1)+'" fill="'+PINK+'" opacity="0.13"/>';}}
+  o+=L(px(-R),py(0),px(R),py(0),'var(--border-strong)',1)+L(px(0),py(-R),px(0),py(R),'var(--border-strong)',1);
+  if(kind==='L2')o+='<circle cx="'+px(0)+'" cy="'+py(0)+'" r="'+(r/(2*R)*W).toFixed(1)+'" fill="'+GREEN+'" fill-opacity="0.15" stroke="'+GREEN+'" stroke-width="2"/>';
+  else o+='<polygon points="'+[[r,0],[0,r],[-r,0],[0,-r]].map(function(p){return px(p[0]).toFixed(1)+','+py(p[1]).toFixed(1);}).join(' ')+'" fill="'+GREEN+'" fill-opacity="0.15" stroke="'+GREEN+'" stroke-width="2"/>';
+  [0.1,0.5,1.2,2.4,4].forEach(function(l){o+=path(contour(Q2,C2,l).map(function(p){return [px(p[0]),py(p[1])];}),'var(--text-muted)',0.9,null,0.5);});
+  // the contour that just touches the budget
+  var lv=Lq(Q2,C2,sol);if(lv>1e-9)o+=path(contour(Q2,C2,lv).map(function(p){return [px(p[0]),py(p[1])];}),BLUE,1.8);
+  o+='</g>';
+  o+='<path d="M'+(px(C2[0])-6)+' '+(py(C2[1])-6)+'l12 12m0 -12l-12 12" stroke="'+BLUE+'" stroke-width="2.4" style="cursor:grab" pointer-events="none"/>';
+  var zero=(sol[0]===0||sol[1]===0)&&Math.abs(C2[0])+Math.abs(C2[1])>r&&kind==='L1';
+  o+='<circle cx="'+px(sol[0]).toFixed(1)+'" cy="'+py(sol[1]).toFixed(1)+'" r="6.5" fill="'+(zero?PINK:WARM)+'" stroke="var(--bg)" stroke-width="1.5"/>';
+  o+=T(x0+W/2,y0-8,kind==='L2'?'L2: &#8214;&theta;&#8214;&#8322; &le; r, a ball':'L1: |&theta;&#8321;| + |&theta;&#8322;| &le; r, a diamond','ts','middle');
+  o+=T(x0+8,y0+18,'&theta; = ('+f2(sol[0])+', '+f2(sol[1])+')'+(zero?'  one weight is exactly 0':''),'tn','start',zero?'var(--pink-ink)':'');
+  if(kind==='L1')o+=T(x0+8,y0+H-8,'shaded: minimum here &rArr; a zero weight','tn','start','var(--pink-ink)');
+  return {o:o,sol:sol};}
+ var a=panel(0,20,30,'L2'),b=panel(1,mob?20:20+PW+G+40,mob?30+PW+60:30,'L1');
+ s=a.o+b.o;
+ document.getElementById('f2').setAttribute('viewBox',mob?'0 0 400 '+(30+2*PW+80):'0 0 900 450');
+ document.getElementById('g2').innerHTML=s;
+ var zero=(b.sol[0]===0||b.sol[1]===0)&&Math.abs(C2[0])+Math.abs(C2[1])>r,inside=Math.hypot(C2[0],C2[1])<=r;
+ document.getElementById('rd2').innerHTML=inside?'The loss&rsquo;s minimum is inside both budgets, so neither constraint binds.':
+  'The ball&rsquo;s answer ('+f2(a.sol[0])+', '+f2(a.sol[1])+') shrinks both weights. The diamond&rsquo;s answer ('+f2(b.sol[0])+', '+f2(b.sol[1])+') '+
+  (zero?'sits on a <b style="color:var(--pink-ink)">corner, with one weight exactly zero</b>.':'lies on an edge, with both weights non-zero; move the minimum into the shaded region to land on a corner.');
+}
+(function(){var svg=document.getElementById('f2'),on=null;
+ function at(e,k){var r=svg.getBoundingClientRect(),s=svg.viewBox.baseVal.width/r.width,x=(e.clientX-r.left)*s,y=(e.clientY-r.top)*s,m=M2[k],R=2.6;
+  return [Math.max(-R,Math.min(R,-R+(x-m.x0)/m.W*2*R)),Math.max(-R,Math.min(R,-R+(m.y0+m.H-y)/m.H*2*R))];}
+ svg.addEventListener('pointerdown',function(e){var t=e.target;if(!t||!t.classList||!t.classList.contains('map2'))return;on=+t.dataset.k;svg.setPointerCapture(e.pointerId);e.preventDefault();C2=at(e,on);draw2();});
+ svg.addEventListener('pointermove',function(e){if(on===null)return;C2=at(e,on);draw2();});
+ var up=function(){on=null;};svg.addEventListener('pointerup',up);svg.addEventListener('pointercancel',up);})();
+
+/* ================= 3. bumpy fits ================= */
+var DEG=11,NTR=12,SIG=0.25,XT=[],YT=[],XV=[],YV=[];
+function truth(x){return Math.sin(2.6*x)+0.4*x;}
+function gauss(){var u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+function sample3(){XT=[];YT=[];for(var i=0;i<NTR;i++){var x=-1+2*(i+0.15+0.7*Math.random())/NTR;XT.push(x);YT.push(truth(x)+SIG*gauss());}
+ XV=[];YV=[];for(i=0;i<300;i++){var z=-1+2*Math.random();XV.push(z);YV.push(truth(z)+SIG*gauss());}}
+// Chebyshev features: the same polynomials as powers of x, but well conditioned
+function cheb(x){var t=[1,x];for(var k=2;k<=DEG;k++)t.push(2*x*t[k-1]-t[k-2]);return t;}
+function solve(M,b){var n=b.length,A=M.map(function(r,i){return r.concat([b[i]]);}),i,j,k;
+ for(i=0;i<n;i++){var p=i;for(k=i+1;k<n;k++)if(Math.abs(A[k][i])>Math.abs(A[p][i]))p=k;var t=A[i];A[i]=A[p];A[p]=t;
+  for(k=i+1;k<n;k++){var f=A[k][i]/A[i][i];for(j=i;j<=n;j++)A[k][j]-=f*A[i][j];}}
+ var x=new Array(n);for(i=n-1;i>=0;i--){var s=A[i][n];for(j=i+1;j<n;j++)s-=A[i][j]*x[j];x[i]=s/A[i][i];}return x;}
+// ridge: minimize mean (y − Φw)² + λ‖w‖²
+function fit(lam){var n=DEG+1,M=[],b=[],i,j,k;for(j=0;j<n;j++){M.push(new Array(n).fill(0));b.push(0);}
+ for(i=0;i<NTR;i++){var r=cheb(XT[i]);for(j=0;j<n;j++){b[j]+=r[j]*YT[i]/NTR;for(k=0;k<n;k++)M[j][k]+=r[j]*r[k]/NTR;}}
+ for(j=0;j<n;j++)M[j][j]+=lam;return solve(M,b);}
+function ev(w,x){var t=cheb(x),s=0;for(var k=0;k<w.length;k++)s+=w[k]*t[k];return s;}
+function mse(w,X,Y){var s=0;for(var i=0;i<X.length;i++){var e=Y[i]-ev(w,X[i]);s+=e*e;}return s/X.length;}
+function draw3(){
+ var mob=mobile(),lg=+document.getElementById('lam3').value,lam=Math.pow(10,lg),w=fit(lam),s='';
+ var SUP='⁰¹²³⁴⁵⁶⁷⁸⁹',sp=function(n){return (n<0?'⁻':'')+String(Math.abs(n)).split('').map(function(c){return c==='.'?'·':SUP[+c];}).join('');};
+ document.getElementById('lam3v').textContent=lam<0.01?'10'+sp(Math.round(lg*10)/10):lam.toPrecision(2);
+ var X0=40,Y0=24,W=mob?370:420,H=260,yl=-2.4,yh=2.4;
+ function px(v){return X0+(v+1)/2*W;}function py(v){return Y0+H-(Math.max(yl-1,Math.min(yh+1,v))-yl)/(yh-yl)*H;}
+ s+='<defs><clipPath id="c3"><rect x="'+X0+'" y="'+Y0+'" width="'+W+'" height="'+H+'"/></clipPath></defs>';
+ s+='<rect x="'+X0+'" y="'+Y0+'" width="'+W+'" height="'+H+'" fill="var(--surface)" opacity="0.6" stroke="var(--border)"/>';
+ s+='<g clip-path="url(#c3)">'+L(X0,py(0),X0+W,py(0),'var(--border)',1);
+ var tp=[],fp=[];for(var k=0;k<=200;k++){var x=-1+2*k/200;tp.push([px(x),py(truth(x))]);fp.push([px(x),py(ev(w,x))]);}
+ s+=path(tp,GREEN,2,'7 5',0.9)+path(fp,WARM,2.6);
+ for(var i=0;i<NTR;i++)s+='<circle cx="'+px(XT[i]).toFixed(1)+'" cy="'+py(YT[i]).toFixed(1)+'" r="4.5" fill="'+BLUE+'" stroke="var(--blue-ink)"/>';
+ s+='</g>';
+ s+=T(X0+W/2,Y0-8,'the fit, a degree-11 polynomial','ts','middle');
+ s+=T(X0,Y0+H+18,'<tspan style="fill:var(--green)">&#8211; &#8211;</tspan> truth   <tspan style="fill:var(--blue)">&#9679;</tspan> training points   <tspan style="fill:var(--warm)">&#9644;</tspan> fit','tn','start');
+ // right: errors against λ
+ var RX=mob?50:560,RY=mob?Y0+H+70:24,RW=mob?360:320,RH=mob?200:260,G=[];
+ for(var g=-8;g<=1.0001;g+=0.25){var wg=fit(Math.pow(10,g));G.push({g:g,tr:mse(wg,XT,YT),te:mse(wg,XV,YV),nw:Math.hypot.apply(null,wg)});}
+ function qx(v){return RX+(v+8)/9*RW;}function qy(v){var l=Math.log10(Math.max(1e-4,Math.min(100,v)));return RY+RH-(l+4)/6*RH;}
+ s+='<rect x="'+RX+'" y="'+RY+'" width="'+RW+'" height="'+RH+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
+ [1e-4,1e-2,1,100].forEach(function(v){s+=L(RX,qy(v),RX+RW,qy(v),'var(--border)',0.6)+T(RX-5,qy(v)+4,String(v<1?v:v),'tn','end');});
+ s+=L(RX,qy(SIG*SIG),RX+RW,qy(SIG*SIG),'var(--text-muted)',0.8,'2 4')+T(RX+RW-4,qy(SIG*SIG)-5,'noise &sigma;&sup2;','tn','end');
+ [-8,-6,-4,-2,0].forEach(function(v){s+=T(qx(v),RY+RH+15,'10'+'<tspan dy="-6" style="font-size:10px">'+String(v).replace('-','−')+'</tspan>','tn','middle');});
+ s+=T(RX+RW/2,RY+RH+34,'penalty &lambda;','tn','middle');
+ s+='<g clip-path="none">'+path(G.map(function(q){return [qx(q.g),qy(q.te)];}),INK,2.4)+path(G.map(function(q){return [qx(q.g),qy(q.tr)];}),WARM,2.2,'6 4')+'</g>';
+ s+=L(qx(lg),RY,qx(lg),RY+RH,'var(--text-secondary)',1,'4 3');
+ var tr=mse(w,XT,YT),te=mse(w,XV,YV),best=G.reduce(function(a,b){return b.te<a.te?b:a;});
+ s+='<circle cx="'+qx(lg).toFixed(1)+'" cy="'+qy(te).toFixed(1)+'" r="4.5" fill="'+INK+'"/><circle cx="'+qx(lg).toFixed(1)+'" cy="'+qy(tr).toFixed(1)+'" r="4.5" fill="'+WARM+'"/>';
+ s+=T(RX+RW/2,RY-8,'error against the penalty (log scales)','ts','middle');
+ s+=T(RX+8,RY+16,'&#9644; test error','tn','start',INK)+T(RX+8,RY+32,'&#8211; &#8211; training error','tn','start','var(--warm-ink)');
+ document.getElementById('f3').setAttribute('viewBox',mob?'0 0 440 '+(RY+RH+50):'0 0 900 350');
+ document.getElementById('g3').innerHTML=s;
+ document.getElementById('rd3').innerHTML='&lambda; = '+document.getElementById('lam3v').textContent+': training error <b>'+fe(tr)+'</b>, test error <b>'+fe(te)+'</b>, coefficient size &#8214;w&#8214; = <b>'+Math.hypot.apply(null,w).toFixed(1)+'</b>. '+
+  (lg<-4.5?'The fit threads every point by making its coefficients huge and cancelling them against each other, and between the points it swings wildly: <b>large weights, bumpy function</b>.':
+   lg>-0.5?'The penalty now dominates: the coefficients are small, the curve too flat to follow even the truth, and both errors are high.':
+   'A moderate penalty: coefficients small enough that the curve cannot swing between the points. Here the best test error is at &lambda; &asymp; 10<sup>'+best.g.toFixed(1).replace('-','−')+'</sup>.');
+}
+
+/* ================= 4. L2 in Adam vs AdamW ================= */
+function adamRun(g0,decoupled,T,lr,lam){var th=1,m=0,v=0,b1=0.9,b2=0.999,eps=1e-8,h=[th];
+ for(var t=1;t<=T;t++){var g=(t%2?g0:-g0);if(!decoupled)g+=lam*th;
+  m=b1*m+(1-b1)*g;v=b2*v+(1-b2)*g*g;var mh=m/(1-Math.pow(b1,t)),vh=v/(1-Math.pow(b2,t));
+  th-=lr*mh/(Math.sqrt(vh)+eps);if(decoupled)th-=lr*lam*th;h.push(th);}return h;}
+function draw4(){
+ var mob=mobile(),TT=300,lr=0.01,lam=0.1,s='';
+ var R=[{h:adamRun(10,false,TT,lr,lam),c:WARM,d:null,l:'L2 in loss, gradients ±10'},
+        {h:adamRun(0.001,false,TT,lr,lam),c:PINK,d:null,l:'L2 in loss, gradients ±0.001'},
+        {h:adamRun(10,true,TT,lr,lam),c:BLUE,d:'7 4',l:'AdamW, gradients ±10'},
+        {h:adamRun(0.001,true,TT,lr,lam),c:VIOLET,d:'2 4',l:'AdamW, gradients ±0.001'}];
+ var X0=50,Y0=20,W=mob?360:520,H=mob?200:230;
+ function px(k){return X0+k/TT*W;}function py(v){return Y0+H-(Math.max(-0.1,Math.min(1.05,v))+0.05)/1.1*H;}
+ s+='<rect x="'+X0+'" y="'+Y0+'" width="'+W+'" height="'+H+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
+ [0,0.5,1].forEach(function(v){s+=L(X0,py(v),X0+W,py(v),'var(--border)',0.6)+T(X0-6,py(v)+4,String(v),'tn','end');});
+ s+=T(X0,Y0+H+16,'0','tn','start')+T(X0+W,Y0+H+16,TT+' steps','tn','end')+T(X0-6,Y0-6,'weight','tn','start');
+ R.forEach(function(r){s+=path(r.h.map(function(v,k){return [px(k),py(v)];}),r.c,2.2,r.d);});
+ var LX=mob?X0:X0+W+24,LY=mob?Y0+H+40:Y0+30;
+ R.forEach(function(r,i){s+=L(LX,LY+i*22-4,LX+26,LY+i*22-4,r.c,2.4,r.d)+T(LX+32,LY+i*22,r.l+': '+r.h[TT].toFixed(r.h[TT]<0.01?4:2),'tn','start');});
+ s+=T(LX,LY+4*22+10,'lr = 0.01, &lambda; = 0.1, both start at 1','tn','start');
+ document.getElementById('f4').setAttribute('viewBox',mob?'0 0 440 '+(LY+4*22+30):'0 0 900 300');
+ document.getElementById('g4').innerHTML=s;
+ document.getElementById('rd4').innerHTML='With the penalty inside Adam, the weight with big gradients has shrunk only to <b>'+R[0].h[TT].toFixed(2)+'</b>, while the weight with tiny gradients has been driven to <b>'+R[1].h[TT].toFixed(4)+'</b>. '+
+  'With decoupled decay (AdamW) both end at <b>'+R[2].h[TT].toFixed(2)+'</b>, close to (1 &minus; lr&middot;&lambda;)<sup>300</sup> = '+Math.pow(1-lr*lam,TT).toFixed(2)+'.';
+}
+
+function caption(){
+ document.getElementById('cap').innerHTML=
+ '<b>Why the shrink.</b> With homework 2.1&rsquo;s penalty &lambda;/(2&nu;)&middot;&#8214;&theta;&#8214;&sup2;, the gradient gains (&lambda;/&nu;)&theta;, and a step of size &nu; turns that into exactly &lambda;&theta;: each step keeps a fraction 1 &minus; &lambda; of the weights and then takes the ordinary step. '+
+ '(With the more common penalty (&lambda;/2)&#8214;&theta;&#8214;&sup2; the fraction is 1 &minus; &nu;&lambda;; same idea, different bookkeeping.) The run no longer stops at the loss&rsquo;s minimum but where the shrink and the loss&rsquo;s pull cancel. '+
+ 'On a tilted bowl that point is not simply the minimum scaled toward 0: directions the loss is flat in give way first, which is why the dashed path bends.'+
+ '<div style="margin-top:4px"><b>Why corners.</b> Minimizing the loss plus a penalty is the same as minimizing the loss within some budget. The answer is where the smallest contour touches the budget&rsquo;s edge. '+
+ 'A ball is smooth, so the touching point can be anywhere on it and both weights stay non-zero. A diamond has corners on the axes, and a tilted contour touches a corner far more often than an edge: that is where L1&rsquo;s zeros, and its use for choosing a few features, come from.</div>'+
+ '<div style="margin-top:4px"><b>Why smooth.</b> A curve that passes through twelve noisy points with twelve coefficients needs large coefficients that nearly cancel; between the points nothing restrains them. Charging for &#8214;w&#8214;&sup2; rules those out. '+
+ 'Too little penalty overfits, too much underfits: the same U as the <a href="../quiz0/capacity.html">capacity</a> demo, with &lambda; as the dial instead of the degree.</div>'+
+ '<div style="margin-top:4px"><b>Why AdamW.</b> Adam divides each gradient by the square root of that weight&rsquo;s running mean squared gradient. With the penalty in the loss, a weight with big gradients has its decay divided by a big number, and a weight with tiny gradients has its decay divided by a tiny one, which turns it into a full-size step toward 0. '+
+ 'Loshchilov and Hutter (2019) proposed applying the decay after Adam&rsquo;s update instead, the same shrink for every weight; that is AdamW, and it is the default in most modern training.</div>';
+}
+katex.render('\\mathcal{L}(\\theta) = \\mathcal{L}_\\text{objective}(\\theta) + \\tfrac{\\lambda}{2\\nu}\\lVert\\theta\\rVert^2',document.getElementById('t1'),{throwOnError:false});
+katex.render('\\nabla\\mathcal{L}_\\text{objective} + \\tfrac{\\lambda}{\\nu}\\theta',document.getElementById('t2'),{throwOnError:false});
+katex.render('\\theta \\;\\leftarrow\\; \\theta - \\nu\\left(\\nabla\\mathcal{L}_\\text{objective} + \\tfrac{\\lambda}{\\nu}\\theta\\right) \\;=\\; \\underbrace{(1-\\lambda)\\,\\theta}_{\\text{shrink}} \\;-\\; \\nu\\,\\nabla\\mathcal{L}_\\text{objective}(\\theta)',document.getElementById('e1'),{throwOnError:false,displayMode:true});
+window.addEventListener('resize',function(){draw1();draw2();draw3();draw4();});
+sample3();P1=runs1();setLam1();K1=N1;draw1();draw2();draw3();draw4();caption();
+</script>
+</body>
+</html>

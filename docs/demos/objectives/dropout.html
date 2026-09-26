@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dropout</title>
+<meta name="description" content="Dropout three ways: the slide's two-input neuron with every mask enumerated and averaged, the cat-feature example as 32 subnetworks voting, and two small networks training live on 40 noisy points, one with dropout and one without.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 18px;max-width:1100px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+h2{font-size:16px;font-weight:600;margin:14px 0 0;letter-spacing:-.005em}
+h2 span{font-weight:400;color:var(--text-secondary);font-size:14px}
+.quiz{margin:0}
+svg.fig{width:100%;height:auto;max-height:62vh;display:block;touch-action:manipulation}
+.row{gap:7px}
+button,select{height:30px;font-size:13px;padding:0 9px}
+.seg button{height:28px;font-size:12px;padding:0 8px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:34px}
+input[type=range]{flex:0 1 150px;min-width:90px}
+input[type=number]{width:58px;height:28px;font-size:13px;font-family:inherit;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);color:var(--text-primary);padding:0 4px}
+label.cb{font-size:13px}
+.rd{font-size:14px;line-height:1.5;min-height:1.5em}
+.cap{font-size:12.5px;line-height:1.55;padding-top:4px}
+.cell{cursor:pointer}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Losses and regularization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Dropout<span>: train on random pieces of the network, test on all of it</span></h1>
+<p class="quiz">Srivastava et al. 2014: on every training step, set each hidden unit to zero with probability <i>p</i>. How could damaging the network on purpose possibly help? Three views: what it does to one neuron&rsquo;s output, why it forces redundancy, and what it does to a network that is overfitting.</p>
+
+<h2>1. One neuron, every mask<span>: the lecture&rsquo;s example</span></h2>
+<svg class="fig" id="figA" viewBox="0 0 1000 300" role="img">
+<title>A two-input neuron and its four dropout masks</title>
+<desc>A neuron a = w0 x + w1 y. Four cards show the four ways dropout can keep or drop the two inputs, each with its probability and its output. A number line below marks the four outputs, their probability-weighted average, the test-time output, and a running average of sampled masks.</desc>
+<g id="stA"></g>
+</svg>
+<div class="row">
+<span class="klab">x</span><input type="number" id="ax" step="0.5" value="1" oninput="readA()">
+<span class="klab">y</span><input type="number" id="ay" step="0.5" value="2" oninput="readA()">
+<span class="klab">w<sub>0</sub></span><input type="number" id="aw0" step="0.5" value="1.5" oninput="readA()">
+<span class="klab">w<sub>1</sub></span><input type="number" id="aw1" step="0.5" value="1" oninput="readA()">
+<span class="klab" style="margin-left:8px">drop probability p</span>
+<input type="range" id="ap" min="0" max="0.9" step="0.05" value="0.5" oninput="readA()"><span class="knum" id="apv"></span>
+</div>
+<div class="row">
+<button class="main" onclick="sampleA(1)">Sample a mask</button>
+<button onclick="sampleA(1000)">Sample 1000</button>
+<button onclick="resetA()">Clear samples</button>
+<div class="seg" id="modeSeg"><button data-m="classic" class="on">drop at train, scale at test</button><button data-m="inverted">inverted dropout</button></div>
+</div>
+<div class="rd" id="rdA"></div>
+
+<h2>2. Many subnetworks<span>: why dropout forces redundancy</span></h2>
+<svg class="fig" id="figB" viewBox="0 0 1000 300" role="img">
+<title>Five cat features, and the 32 subnetworks dropout can make of them</title>
+<desc>Five feature units (has an ear, has a tail, is furry, has claws, mischievous look) feed a cat score. A grid of 32 cells shows every way of dropping some of the five, each colored by whether the remaining features still say cat.</desc>
+<g id="stB"></g>
+</svg>
+<div class="row">
+<div class="seg" id="wSeg"><button data-w="co" class="on">co-adapted weights</button><button data-w="red">redundant weights</button></div>
+<button class="main" onclick="sampleB()">Sample a mask</button>
+<button id="autoB" onclick="toggleB()">Keep sampling</button>
+</div>
+<div class="rd" id="rdB"></div>
+
+<h2>3. Overfitting, with and without it<span>: two networks training live</span></h2>
+<svg class="fig" id="figC" viewBox="0 0 1000 330" role="img">
+<title>Two networks trained on the same 40 noisy points, one with dropout</title>
+<desc>Left, the decision regions of a network trained without dropout; middle, the same network trained with dropout; both over the same 40 training points. Right, the training and test loss of both against training steps on a log scale.</desc>
+<g id="stC"></g>
+</svg>
+<div class="row">
+<button class="main" id="runC" onclick="toggleC()">Train</button>
+<button onclick="resetC(false)">Restart</button>
+<button onclick="resetC(true)">New data</button>
+<span class="klab">dropout p for the right network</span>
+<div class="seg" id="pSeg"><button data-p="0.2">0.2</button><button data-p="0.5" class="on">0.5</button><button data-p="0.7">0.7</button></div>
+</div>
+<div class="rd" id="rdC"></div>
+<div class="cap" id="caption"></div>
+
+<script>
+var BLUE='var(--blue)',ORANGE='var(--orange)',PINK='var(--pink)',GREEN='var(--green)',VIOLET='var(--violet)',INK='var(--text-primary)',MUTED='var(--text-muted)';
+function T(x,y,s,cls,anc,fill,extra){return '<text class="'+(cls||'ts')+' gl" x="'+(+x).toFixed(1)+'" y="'+(+y).toFixed(1)+'"'+
+ (anc?' text-anchor="'+anc+'"':'')+(fill?' style="fill:'+fill+'"':'')+(extra||'')+'>'+s+'</text>';}
+function mobile(){return !!(window.matchMedia&&window.matchMedia('(max-width:820px)').matches);}
+function f2(v){return (Math.abs(v)<1e-9?0:v).toFixed(2).replace('-','−');}
+function mix(c,pct){return 'color-mix(in oklab, '+c+' '+pct+'%, var(--surface))';}
+
+/* ================= 1. one neuron, every mask ================= */
+var AX=1,AY=2,AW0=1.5,AW1=1,AP=0.5,MODE='classic',SAMP=[],LAST=null;
+function readA(){AX=+document.getElementById('ax').value||0;AY=+document.getElementById('ay').value||0;
+ AW0=+document.getElementById('aw0').value||0;AW1=+document.getElementById('aw1').value||0;AP=+document.getElementById('ap').value;
+ document.getElementById('apv').textContent=AP.toFixed(2);SAMP=[];LAST=null;drawA();}
+// the four masks: which of x, y survive
+var MASKS=[[1,1],[0,1],[1,0],[0,0]];
+function maskProb(m){var k=m[0]+m[1];return Math.pow(1-AP,k)*Math.pow(AP,2-k);}
+// what the neuron puts out during training under a mask; inverted dropout scales the survivors up
+function maskOut(m){var s=AW0*AX*m[0]+AW1*AY*m[1];return MODE==='inverted'&&AP<1?s/(1-AP):s;}
+function testOut(){var s=AW0*AX+AW1*AY;return MODE==='inverted'?s:s*(1-AP);}
+function sampleA(n){for(var i=0;i<n;i++){var m=[Math.random()<AP?0:1,Math.random()<AP?0:1];SAMP.push(maskOut(m));LAST=m;}drawA();}
+function resetA(){SAMP=[];LAST=null;drawA();}
+function drawA(){
+ var mob=mobile(),s='',full=AW0*AX+AW1*AY,E=0,i;
+ MASKS.forEach(function(m){E+=maskProb(m)*maskOut(m);});
+ var L=mob?{vb:'0 0 560 600',nd:[20,40],cards:function(k){return [20+(k%2)*270,250+Math.floor(k/2)*120];},cw:250,ch:104,nl:[40,520,500]}:
+  {vb:'0 0 1000 310',nd:[20,40],cards:function(k){return [372+k*156,30];},cw:146,ch:150,nl:[372,960,236]};
+ document.getElementById('figA').setAttribute('viewBox',L.vb);
+ // the neuron, showing the last sampled mask
+ var m=LAST||[1,1],nx=L.nd[0],ny=L.nd[1];
+ function node(x,y,lab,on){return '<circle cx="'+x+'" cy="'+y+'" r="22" fill="'+(on?'var(--surface)':'var(--surface-1)')+'" stroke="'+(on?INK:MUTED)+'" stroke-width="1.6"'+(on?'':' stroke-dasharray="3 3"')+'/>'+T(x,y+5,lab,'ts','middle',on?INK:MUTED);}
+ var X1=nx+40,Y1=ny+40,Y2=ny+150,X2=nx+240,Y3=ny+95;
+ [[Y1,m[0],'w₀ = '+f2(AW0)],[Y2,m[1],'w₁ = '+f2(AW1)]].forEach(function(e,k){
+  s+='<line x1="'+(X1+22)+'" y1="'+e[0]+'" x2="'+(X2-22)+'" y2="'+Y3+'" stroke="'+(e[1]?ORANGE:MUTED)+'" stroke-width="'+(e[1]?2.4:1)+'"'+(e[1]?'':' stroke-dasharray="4 4"')+'/>';
+  s+=T((X1+X2)/2,(e[0]+Y3)/2+(k?18:-8),e[2],'tn','middle',e[1]?'':MUTED);});
+ s+=node(X1,Y1,'x = '+f2(AX).replace('.00',''),m[0]);s+=node(X1,Y2,'y = '+f2(AY).replace('.00',''),m[1]);
+ s+=node(X2,Y3,'a',1);
+ [[Y1,m[0]],[Y2,m[1]]].forEach(function(e){if(!e[1])s+=T(X1,e[0]-28,'dropped','tn','middle','var(--red)');});
+ var la=LAST?maskOut(LAST):full;
+ s+=T(X2+30,Y3+5,'= '+f2(la),'ts','start',INK);
+ s+=T(nx,ny-14,LAST?'the last mask sampled':'the neuron, nothing dropped','ts','start');
+ // the four cards
+ MASKS.forEach(function(mm,k){var c=L.cards(k),x0=c[0],y0=c[1],pr=maskProb(mm),o=maskOut(mm),hot=LAST&&LAST[0]===mm[0]&&LAST[1]===mm[1];
+  s+='<rect x="'+x0+'" y="'+y0+'" width="'+L.cw+'" height="'+L.ch+'" rx="8" fill="var(--surface)" stroke="'+(hot?INK:'var(--border)')+'" stroke-width="'+(hot?2:1)+'"/>';
+  var dots=(mm[0]?'x':'<tspan style="fill:var(--red)">✕</tspan>')+'  '+(mm[1]?'y':'<tspan style="fill:var(--red)">✕</tspan>');
+  s+=T(x0+12,y0+22,dots,'ts','start');
+  var term=[];if(mm[0])term.push('w₀x');if(mm[1])term.push('w₁y');
+  var expr=MODE==='inverted'&&term.length?(term.length>1?'('+term.join(' + ')+')':term[0])+' / (1−p)':(term.length?term.join(' + '):'0');
+  s+=T(x0+12,y0+44,'a = '+expr,'tn','start');
+  s+=T(x0+12,y0+64,'  = '+f2(o),'tn','start',INK,' font-weight="600"');
+  s+=T(x0+12,y0+(mob?86:90),(mm[0]+mm[1]===2?'(1−p)²':mm[0]+mm[1]===1?'p(1−p)':'p²')+' = '+pr.toFixed(3),'tn','start');
+  var bw=(L.cw-24)*pr;
+  if(!mob)s+='<rect x="'+(x0+12)+'" y="'+(y0+104)+'" width="'+(L.cw-24)+'" height="10" fill="var(--surface-1)"/><rect x="'+(x0+12)+'" y="'+(y0+104)+'" width="'+bw.toFixed(1)+'" height="10" fill="'+VIOLET+'"/>';
+  if(!mob)s+=T(x0+12,y0+136,'contributes '+f2(pr*o),'tn','start');});
+ // number line: the four outputs, their average, the test output, the running sample mean
+ var vals=MASKS.map(maskOut).concat([E,testOut(),full]),lo=Math.min(0,Math.min.apply(null,vals)),hi=Math.max.apply(null,vals)*1.08||1;
+ var x0=L.nl[0],x1=L.nl[1],yl=L.nl[2];function px(v){return x0+(v-lo)/(hi-lo)*(x1-x0);}
+ s+='<line x1="'+x0+'" y1="'+yl+'" x2="'+x1+'" y2="'+yl+'" stroke="var(--border-strong)"/>';
+ MASKS.forEach(function(mm){s+='<circle cx="'+px(maskOut(mm)).toFixed(1)+'" cy="'+yl+'" r="'+(3+10*maskProb(mm)).toFixed(1)+'" fill="'+VIOLET+'" fill-opacity="0.35" stroke="'+VIOLET+'"/>';});
+ s+='<line x1="'+px(E).toFixed(1)+'" y1="'+(yl-22)+'" x2="'+px(E).toFixed(1)+'" y2="'+(yl+22)+'" stroke="'+PINK+'" stroke-width="2.5"/>';
+ s+=T(px(E),yl-28,'average over masks '+f2(E),'tn','middle','var(--pink-ink)');
+ var tv=testOut();
+ s+='<line x1="'+px(tv).toFixed(1)+'" y1="'+(yl-6)+'" x2="'+px(tv).toFixed(1)+'" y2="'+(yl+30)+'" stroke="'+GREEN+'" stroke-width="2.5" stroke-dasharray="4 3"/>';
+ s+=T(px(tv),yl+46,'test time '+f2(tv),'tn','middle','var(--green-ink)');
+ if(SAMP.length){var mean=SAMP.reduce(function(a,b){return a+b;},0)/SAMP.length,xm=px(mean);
+  s+='<path d="M'+xm.toFixed(1)+' '+(yl-9)+' l7 9 l-7 9 l-7 -9 z" fill="'+BLUE+'"/>';
+  s+=T(xm+10,yl-10,'mean of '+SAMP.length+' samples '+f2(mean),'tn','start','var(--blue-ink)');}
+ s+=T(x0,yl+(mob?72:66),'dots: each mask&rsquo;s output, sized by its probability','tn','start');
+ document.getElementById('stA').innerHTML=s;
+ var h;
+ if(MODE==='classic')h='During training the neuron puts out one of four values, and on average <b>'+f2(E)+'</b> = (1 &minus; p)(w₀x + w₁y). At test time nothing is dropped, so it would put out '+f2(full)+
+  (AP>0?', which is '+(1/(1-AP)).toFixed(2)+'&times; too big for the layers above, which only ever saw the average. So at test time <b>multiply by 1 &minus; p</b>: '+f2(full)+' &times; '+(1-AP).toFixed(2)+' = '+f2(tv)+'.':'.');
+ else h='Inverted dropout divides the survivors by 1 &minus; p while training, so the average over masks is <b>'+f2(E)+'</b> = w₀x + w₁y, exactly the undropped output. Test time then needs no change at all: the network is used as it is. This is what <code>nn.Dropout</code> does.';
+ document.getElementById('rdA').innerHTML=h;
+}
+document.getElementById('modeSeg').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;MODE=b.dataset.m;
+ Array.from(this.children).forEach(function(x){x.classList.toggle('on',x===b);});SAMP=[];LAST=null;drawA();});
+
+/* ================= 2. many subnetworks ================= */
+var FEAT=['has an ear','has a tail','is furry','has claws','mischievous look'],WSET='co',BMASK=[1,1,1,1,1],BAUTO=null,BP=0.5,BIAS=-2;
+// Co-adapted: everything rides on the ear detector, the others barely count.
+// Redundant: each feature carries a fair share, so any two of them still say cat.
+var WTS={co:[3.6,0.25,0.25,0.25,0.25],red:[0.8,0.8,0.8,0.8,0.8]};
+function score(m){var w=WTS[WSET],z=BIAS;for(var i=0;i<5;i++)z+=w[i]*m[i]/(1-BP);return z;}
+function sig(z){return 1/(1+Math.exp(-z));}
+function allMasks(){var r=[];for(var k=0;k<32;k++){var m=[];for(var i=0;i<5;i++)m.push(k>>(4-i)&1);r.push(m);}return r;}
+function sampleB(){BMASK=FEAT.map(function(){return Math.random()<BP?0:1;});drawB();}
+function toggleB(){if(BAUTO){clearInterval(BAUTO);BAUTO=null;}else{BAUTO=setInterval(sampleB,700);sampleB();}
+ document.getElementById('autoB').textContent=BAUTO?'Stop':'Keep sampling';}
+function drawB(){
+ var mob=mobile(),s='',w=WTS[WSET],i;
+ var L=mob?{vb:'0 0 560 580',fx:40,fy:62,dy:44,ox:330,oy:150,gx:24,gy:340,cs:[64,52],cols:8}:
+  {vb:'0 0 1000 310',fx:40,fy:64,dy:48,ox:330,oy:160,gx:470,gy:48,cs:[64,56],cols:8};
+ document.getElementById('figB').setAttribute('viewBox',L.vb);
+ s+=T(L.fx-10,22,'one mask: dropped features are cut','ts','start');
+ var z=score(BMASK),pc=sig(z);
+ FEAT.forEach(function(f,k){var y=L.fy+k*L.dy,on=BMASK[k],wt=w[k];
+  s+='<line x1="'+(L.fx+12)+'" y1="'+y+'" x2="'+(L.ox-26)+'" y2="'+L.oy+'" stroke="'+(on?ORANGE:MUTED)+'" stroke-width="'+(on?(0.8+wt*1.1).toFixed(1):1)+'"'+(on?'':' stroke-dasharray="4 4"')+'/>';
+  s+='<circle cx="'+L.fx+'" cy="'+y+'" r="11" fill="'+(on?'var(--surface)':'var(--surface-1)')+'" stroke="'+(on?INK:MUTED)+'"'+(on?'':' stroke-dasharray="3 3"')+'/>';
+  if(!on)s+=T(L.fx,y+5,'✕','tn','middle','var(--red)');
+  s+=T(L.fx+18,y-14,f,'tn','start',on?'':MUTED);
+  s+=T(L.fx+150,y-14,'w = '+wt.toFixed(2),'tn','start',on?'':MUTED);});
+ s+='<circle cx="'+L.ox+'" cy="'+L.oy+'" r="26" fill="'+(pc>0.5?mix(PINK,40):'var(--surface)')+'" stroke="'+INK+'" stroke-width="1.6"/>';
+ s+=T(L.ox,L.oy+5,'cat?','ts','middle');
+ s+=T(L.ox,L.oy+48,'P(cat) = '+pc.toFixed(2),'tn','middle',pc>0.5?'var(--pink-ink)':'');
+ s+=T(L.ox,L.oy+66,pc>0.5?'still says cat':'no longer says cat','tn','middle',pc>0.5?'var(--pink-ink)':'var(--red)');
+ // all 32 subnetworks
+ var M=allMasks(),yes=0,avg=0;
+ s+=T(L.gx,L.gy-18,'all 2⁵ = 32 subnetworks, each a different mask (click one)','ts','start');
+ M.forEach(function(m,k){var cx=L.gx+(k%L.cols)*L.cs[0],cy=L.gy+Math.floor(k/L.cols)*L.cs[1],p=sig(score(m)),kept=m.reduce(function(a,b){return a+b;},0),
+   pr=Math.pow(1-BP,kept)*Math.pow(BP,5-kept),hot=m.join()===BMASK.join();
+  if(p>0.5)yes++;avg+=pr*p;
+  s+='<g class="cell" data-k="'+k+'"><rect x="'+cx+'" y="'+cy+'" width="'+(L.cs[0]-6)+'" height="'+(L.cs[1]-6)+'" rx="5" fill="'+(p>0.5?mix(PINK,20+40*p):'var(--surface-1)')+'" stroke="'+(hot?INK:'var(--border)')+'" stroke-width="'+(hot?2:0.8)+'"/>';
+  for(var i=0;i<5;i++)s+='<circle cx="'+(cx+9+i*10.5)+'" cy="'+(cy+12)+'" r="3.4" fill="'+(m[i]?INK:'none')+'" stroke="'+(m[i]?INK:MUTED)+'" stroke-width="0.9"/>';
+  s+=T(cx+(L.cs[0]-6)/2,cy+L.cs[1]-17,p.toFixed(2),'tn','middle',p>0.5?'var(--pink-ink)':'')+'</g>';});
+ var rows=Math.ceil(32/L.cols),yb=L.gy+rows*L.cs[1]+8;
+ s+=T(L.gx,yb+6,'dots: which of the five features survive, in order; number: P(cat)','tn','start');
+ document.getElementById('stB').innerHTML=s;
+ var full=sig(BIAS+w.reduce(function(a,b){return a+b;},0));
+ document.getElementById('rdB').innerHTML='<b>'+yes+' of 32</b> subnetworks still say cat. Weighted by how likely each mask is at p = 0.5, their average P(cat) is <b>'+avg.toFixed(2)+'</b>; the whole network at test time says '+full.toFixed(2)+'. '+
+  (WSET==='co'?'With co-adapted weights everything rides on the ear detector: drop it, which happens half the time, and the other four cannot make up the difference.':
+   'With redundant weights any two surviving features are enough, so losing the ear, or almost anything, still leaves a cat.');
+}
+document.getElementById('wSeg').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;WSET=b.dataset.w;
+ Array.from(this.children).forEach(function(x){x.classList.toggle('on',x===b);});drawB();});
+document.getElementById('figB').addEventListener('click',function(e){var c=e.target.closest&&e.target.closest('.cell');if(!c)return;BMASK=allMasks()[+c.dataset.k];drawB();});
+
+/* ================= 3. overfitting, with and without it ================= */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function randn(r){var u=0,v=0;while(!u)u=r();while(!v)v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+// Two overlapping Gaussian blobs: the best possible boundary is a straight line, and
+// with only 40 points a big network can wrap itself around every one of them.
+var MU=[[-0.5,-0.3],[0.5,0.3]],SD=0.75,NTR=40,NTE=1000,H=32,LR=0.01,MAXSTEP=3000,PC=0.5;
+function makeData(n,rng){var D=[];for(var i=0;i<n;i++){var y=i%2,c=MU[y];D.push({x:[c[0]+SD*randn(rng),c[1]+SD*randn(rng)],y:y});}return D;}
+// best achievable accuracy: the classes differ along one direction by |mu1 - mu0|
+function Phi(z){var t=1/(1+0.2316419*Math.abs(z)),d=0.3989423*Math.exp(-z*z/2),p=d*t*(0.3193815+t*(-0.3565638+t*(1.781478+t*(-1.821256+t*1.330274))));return z>0?1-p:p;}
+var BAYES=Phi(Math.hypot(MU[1][0]-MU[0][0],MU[1][1]-MU[0][1])/(2*SD));
+var DSEED=3,TR,TE,NETS,stepC=0,runC=false,rafC=null,frame=0;
+function newNet(seed,p){var r=mulberry32(seed),sz=[2,H,H,1],W=[],b=[];
+ for(var l=0;l<3;l++){var s=Math.sqrt(2/sz[l]);W.push([]);b.push([]);for(var o=0;o<sz[l+1];o++){W[l].push(new Float64Array(sz[l]));b[l].push(0);for(var i=0;i<sz[l];i++)W[l][o][i]=randn(r)*s;}}
+ var zl=function(A){return A.map(function(row){return row.map?row.map(function(x){return x.length?new Float64Array(x.length):0;}):0;});};
+ return {W:W,b:b,p:p,mW:zl(W),vW:zl(W),mb:zl(b),vb:zl(b),t:0,rng:mulberry32(seed+77),hist:[]};}
+// forward pass; while training, each hidden unit is dropped with probability p and
+// the survivors are scaled by 1/(1-p) (inverted dropout), so testing needs no change
+function fwd(n,x,train){var a=x,A=[x],K=[];
+ for(var l=0;l<3;l++){var Wl=n.W[l],h=new Float64Array(Wl.length);
+  for(var o=0;o<Wl.length;o++){var s=n.b[l][o],row=Wl[o];for(var i=0;i<a.length;i++)s+=row[i]*a[i];h[o]=s;}
+  if(l<2){var mk=new Float64Array(h.length);for(var o2=0;o2<h.length;o2++){mk[o2]=train&&n.p>0?(n.rng()<n.p?0:1/(1-n.p)):1;h[o2]=h[o2]>0?h[o2]*mk[o2]:0;}K.push(mk);a=h;}
+  else a=[1/(1+Math.exp(-h[0]))];A.push(a);}
+ return {A:A,K:K};}
+function step(n){var gW=n.W.map(function(Wl){return Wl.map(function(r){return new Float64Array(r.length);});}),gb=n.b.map(function(bl){return bl.map(function(){return 0;});});
+ TR.forEach(function(d){var f=fwd(n,d.x,true),A=f.A,dz=[A[3][0]-d.y];
+  for(var l=2;l>=0;l--){var a=A[l];for(var o=0;o<dz.length;o++){gb[l][o]+=dz[o];var g=gW[l][o];for(var i=0;i<a.length;i++)g[i]+=dz[o]*a[i];}
+   if(l>0){var nd=new Float64Array(a.length);for(var i2=0;i2<a.length;i2++){if(A[l][i2]<=0)continue;var s=0;for(var o3=0;o3<dz.length;o3++)s+=n.W[l][o3][i2]*dz[o3];nd[i2]=s*f.K[l-1][i2];}dz=nd;}}});
+ n.t++;var b1=1-Math.pow(0.9,n.t),b2=1-Math.pow(0.999,n.t),N=TR.length;
+ for(var l=0;l<3;l++)for(var o=0;o<n.W[l].length;o++){var row=n.W[l][o],m=n.mW[l][o],v=n.vW[l][o],g=gW[l][o];
+  for(var i=0;i<row.length;i++){var gi=g[i]/N;m[i]=0.9*m[i]+0.1*gi;v[i]=0.999*v[i]+0.001*gi*gi;row[i]-=LR*(m[i]/b1)/(Math.sqrt(v[i]/b2)+1e-8);}
+  var gg=gb[l][o]/N;n.mb[l][o]=0.9*n.mb[l][o]+0.1*gg;n.vb[l][o]=0.999*n.vb[l][o]+0.001*gg*gg;n.b[l][o]-=LR*(n.mb[l][o]/b1)/(Math.sqrt(n.vb[l][o]/b2)+1e-8);}}
+function evalSet(n,D){var L=0,acc=0;D.forEach(function(d){var q=fwd(n,d.x,false).A[3][0];q=Math.min(1-1e-7,Math.max(1e-7,q));L-=d.y?Math.log(q):Math.log(1-q);acc+=(q>0.5)===(d.y===1)?1:0;});return [L/D.length,acc/D.length];}
+function record(){NETS.forEach(function(n){var a=evalSet(n,TR),b=evalSet(n,TE);n.hist.push([stepC,a[0],b[0],b[1]]);});}
+function resetC(newData){if(newData)DSEED++;TR=makeData(NTR,mulberry32(DSEED));TE=makeData(NTE,mulberry32(900+DSEED));
+ // both networks start from the same weights, so dropout is the only difference
+ NETS=[newNet(50+DSEED,0),newNet(50+DSEED,PC)];stepC=0;record();drawC(true);}
+function toggleC(){runC=!runC;if(runC&&stepC>=MAXSTEP){resetC(false);runC=true;}document.getElementById('runC').textContent=runC?'Pause':'Train';if(runC)loopC();}
+function loopC(){if(!runC)return;for(var k=0;k<6&&stepC<MAXSTEP;k++){NETS.forEach(step);stepC++;if(stepC%20===0)record();}
+ frame++;drawC(frame%4===0||stepC>=MAXSTEP);
+ if(stepC>=MAXSTEP){runC=false;document.getElementById('runC').textContent='Train';return;}rafC=requestAnimationFrame(loopC);}
+// decision regions, rendered to a small canvas and smoothed by the browser
+var GN=56,RX=[-2.6,2.6],IMG=[null,null];
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+function hexRGB(h){h=h.replace('#','');if(h.length===3)h=h.split('').map(function(c){return c+c;}).join('');return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];}
+function region(n){var c=document.createElement('canvas');c.width=c.height=GN;var x=c.getContext('2d'),im=x.createImageData(GN,GN),
+  c0=hexRGB(css('--blue')||'#378ADD'),c1=hexRGB(css('--orange')||'#D85A30'),bg=hexRGB(css('--surface')||'#ffffff');
+ for(var j=0;j<GN;j++)for(var i=0;i<GN;i++){var px=RX[0]+(i+0.5)/GN*(RX[1]-RX[0]),py=RX[1]-(j+0.5)/GN*(RX[1]-RX[0]),q=fwd(n,[px,py],false).A[3][0],
+   t=Math.abs(q-0.5)*2*0.55,col=q>0.5?c1:c0,o=(j*GN+i)*4;
+  for(var k=0;k<3;k++)im.data[o+k]=Math.round(bg[k]*(1-t)+col[k]*t);im.data[o+3]=255;}
+ x.putImageData(im,0,0);return c.toDataURL();}
+function drawC(full){
+ var mob=mobile(),s='',k;
+ var L=mob?{vb:'0 0 560 600',pan:[[20,40],[290,40]],ps:250,ch:[60,360,540,540]}:{vb:'0 0 1000 330',pan:[[10,40],[280,40]],ps:250,ch:[610,40,960,290]};
+ document.getElementById('figC').setAttribute('viewBox',L.vb);
+ if(full||!IMG[0])IMG=NETS.map(region);
+ NETS.forEach(function(n,q){var x0=L.pan[q][0],y0=L.pan[q][1],S=L.ps;
+  s+='<image href="'+IMG[q]+'" x="'+x0+'" y="'+y0+'" width="'+S+'" height="'+S+'" preserveAspectRatio="none"/>';
+  s+='<rect x="'+x0+'" y="'+y0+'" width="'+S+'" height="'+S+'" fill="none" stroke="var(--border)"/>';
+  function P(v){return [x0+(v[0]-RX[0])/(RX[1]-RX[0])*S,y0+(RX[1]-v[1])/(RX[1]-RX[0])*S];}
+  // the best boundary: the perpendicular bisector of the two class centres
+  var mid=[(MU[0][0]+MU[1][0])/2,(MU[0][1]+MU[1][1])/2],dir=[-(MU[1][1]-MU[0][1]),MU[1][0]-MU[0][0]],e1=P([mid[0]-4*dir[0],mid[1]-4*dir[1]]),e2=P([mid[0]+4*dir[0],mid[1]+4*dir[1]]);
+  s+='<clipPath id="cp'+q+'"><rect x="'+x0+'" y="'+y0+'" width="'+S+'" height="'+S+'"/></clipPath>';
+  s+='<line x1="'+e1[0].toFixed(1)+'" y1="'+e1[1].toFixed(1)+'" x2="'+e2[0].toFixed(1)+'" y2="'+e2[1].toFixed(1)+'" stroke="'+INK+'" stroke-width="1" stroke-dasharray="5 4" opacity="0.6" clip-path="url(#cp'+q+')"/>';
+  TR.forEach(function(d){var p=P(d.x);s+='<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="4.2" fill="'+(d.y?ORANGE:BLUE)+'" stroke="var(--surface)" stroke-width="1.2"/>';});
+  var h=n.hist[n.hist.length-1];
+  s+=T(x0+S/2,y0-12,q?'with dropout, p = '+n.p:'without dropout','ts','middle',q?'var(--green-ink)':'var(--pink-ink)');
+  s+=T(x0+S/2,y0+S+18,'test accuracy '+(100*h[3]).toFixed(0)+'%','tn','middle');});
+ // loss curves, log scale
+ var X0=L.ch[0],Y0=L.ch[1],X1=L.ch[2],Y1=L.ch[3],lo=-3,hi=1.3;
+ function px(t){return X0+t/MAXSTEP*(X1-X0);}function py(v){var l=Math.log10(Math.max(1e-3,v));return Y1-(l-lo)/(hi-lo)*(Y1-Y0);}
+ s+='<rect x="'+X0+'" y="'+Y0+'" width="'+(X1-X0)+'" height="'+(Y1-Y0)+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
+ [0.001,0.01,0.1,1,10].forEach(function(v){var y=py(v);s+='<line x1="'+X0+'" y1="'+y.toFixed(1)+'" x2="'+X1+'" y2="'+y.toFixed(1)+'" stroke="var(--border)" stroke-width="0.6"/>'+T(X0-5,y+4,String(v),'tn','end');});
+ for(k=0;k<=MAXSTEP;k+=1000)s+=T(px(k),Y1+16,String(k),'tn','middle');
+ s+=T((X0+X1)/2,Y1+34,'training steps','tn','middle');
+ s+=T((X0+X1)/2,Y0-12,'cross-entropy loss, log scale','ts','middle');
+ NETS.forEach(function(n,q){var col=q?GREEN:PINK;[[1,'6 4'],[2,'']].forEach(function(c){var d='';n.hist.forEach(function(h,i){d+=(i?'L':'M')+px(h[0]).toFixed(1)+' '+py(h[c[0]]).toFixed(1)+' ';});
+  s+='<path d="'+d+'" fill="none" stroke="'+col+'" stroke-width="'+(c[1]?1.6:2.4)+'"'+(c[1]?' stroke-dasharray="'+c[1]+'"':'')+'/>';});});
+ s+=T(X0+8,Y0+18,'<tspan style="fill:var(--pink)">━</tspan> no dropout   <tspan style="fill:var(--green)">━</tspan> dropout','tn','start');
+ s+=T(X0+8,Y0+36,'solid: test   dashed: training','tn','start');
+ document.getElementById('stC').innerHTML=s;
+ var a=NETS[0].hist[NETS[0].hist.length-1],b=NETS[1].hist[NETS[1].hist.length-1];
+ document.getElementById('rdC').innerHTML='Step '+stepC+'. Without dropout: training loss <b>'+a[1].toFixed(3)+'</b>, test loss <b>'+a[2].toFixed(2)+'</b>, test accuracy '+(100*a[3]).toFixed(0)+
+  '%. With dropout p = '+NETS[1].p+': training loss <b>'+b[1].toFixed(3)+'</b>, test loss <b>'+b[2].toFixed(2)+'</b>, test accuracy '+(100*b[3]).toFixed(0)+'%. The best any classifier can do here is '+(100*BAYES).toFixed(0)+'%.';
+}
+document.getElementById('pSeg').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;PC=+b.dataset.p;
+ Array.from(this.children).forEach(function(x){x.classList.toggle('on',x===b);});var was=runC;runC=false;resetC(false);if(was){runC=true;document.getElementById('runC').textContent='Pause';loopC();}});
+
+document.getElementById('caption').innerHTML=
+ '<b>Why it helps.</b> Each training step uses a different random subnetwork, so no unit can count on any particular other unit being there. '+
+ 'A feature that only works in partnership with another, like the ear detector that the co-adapted cat classifier leans on, is useless half the time; '+
+ 'the gradient pushes the network toward features that are each useful on their own, which is the <b>co-adaptation</b> story in Srivastava et al. '+
+ 'The other reading is an <b>ensemble</b>: every mask is a separate network, all sharing weights. A layer of n units has 2<sup>n</sup> masks, '+
+ 'so an FC layer of 4,096 units trains an ensemble of 2<sup>4096</sup> &asymp; 10<sup>1233</sup> networks, far more than it ever sees, each updated on about one example. '+
+ 'Testing with every unit on and the right scaling is a cheap approximation to averaging all of them; for a single linear neuron, as in part 1, it is exact.'+
+ '<div style="margin-top:4px"><b>What the live run shows, and what it doesn&rsquo;t.</b> A network of two hidden layers of 32 relu units, trained with Adam (learning rate 0.01, full batch) '+
+ 'on only 40 points from two overlapping blobs, drives its training loss to almost zero by carving little islands around individual points, and its test loss climbs as it grows more confident about them. '+
+ 'The same network, from the same starting weights, trained with dropout keeps a smoother boundary closer to the best one (dashed) and a much lower test loss. '+
+ 'Across a handful of data draws the gap in test loss was large (roughly 3 against 1.2 to 2.7) while the gap in accuracy was a few points, and it varies from draw to draw: press New data. '+
+ 'Dropout does not stop the overfitting; it slows it and caps it. Stopping at the lowest test loss (early stopping) is the other half of the story.</div>'+
+ '<div style="margin-top:4px">Dropout is one case of a general pattern: add noise while training, average it out when testing. '+
+ 'Batch normalization, data augmentation and stochastic depth are others; see <a href="noise.html">training with noise</a>.</div>';
+
+window.addEventListener('resize',function(){drawA();drawB();IMG=[null,null];drawC(true);});
+readA();drawB();resetC(false);
+</script>
+</body>
+</html>

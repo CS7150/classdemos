@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Residual blocks</title>
+<meta name="description" content="ResNet's two building blocks, basic and bottleneck, with live weight and multiply-add counts; the two kinds of shortcut when a block changes shape; and how blocks stack into the stages of ResNet-18, 34 and 50.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 16px;max-width:1100px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+h2{font-size:16px;font-weight:600;margin:14px 0 0}
+.quiz{margin:0}
+svg{max-height:none;touch-action:manipulation}
+.row{gap:7px}
+button,select{height:30px;font-size:13px;padding:0 9px}
+.seg button{height:28px;font-size:12.5px;padding:0 9px}
+.klab{font-size:12.5px}
+.rd{font-size:14px;line-height:1.55}
+.cap{font-size:12.5px;line-height:1.55;padding-top:4px}
+.box{fill:var(--surface);stroke:var(--border-strong)}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Training deep networks demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Residual blocks<span>: basic, bottleneck, and the shortcut</span></h1>
+<p class="quiz">A ResNet is a stack of residual blocks: a few convolutions F, and a shortcut that adds the block&rsquo;s input back, y = F(x) + x. Here are the two kinds of block He et al. use, what each costs, what the shortcut does when a block changes shape, and how the blocks stack up.</p>
+
+<h2>1. Two blocks</h2>
+<svg id="f1" viewBox="0 0 1040 430" role="img">
+<title>A basic block and a bottleneck block, with their costs</title>
+<desc>Left, a basic residual block: two 3 by 3 convolutions with a shortcut around them. Middle, a bottleneck block: a 1 by 1 convolution that narrows the channels, a 3 by 3, and a 1 by 1 that widens them again, with a shortcut around all three. Right, bars comparing the weights and multiply-adds of the two blocks.</desc>
+<g id="s1"></g>
+</svg>
+<div class="row">
+<span class="klab">compare</span>
+<div class="seg" id="cmp"><button data-c="paper" class="on">as in the paper (Fig. 5)</button><button data-c="same">same output width</button></div>
+<span class="klab">basic width</span>
+<select id="wb" onchange="unpreset();draw1()"><option selected>64</option><option>128</option><option>256</option><option>512</option></select>
+<span class="klab">bottleneck: inner width</span>
+<select id="wm" onchange="unpreset();draw1()"><option selected>64</option><option>128</option><option>256</option><option>512</option></select>
+<span class="klab">map size</span>
+<select id="hw" onchange="draw1()"><option>56</option><option>28</option><option>14</option><option>7</option></select>
+</div>
+<div class="rd" id="rd1"></div>
+
+<h2>2. When the shape changes</h2>
+<svg id="f2" viewBox="0 0 1040 270" role="img">
+<title>The two kinds of shortcut when a block halves the resolution and doubles the channels</title>
+<desc>An input of C channels at H by H becomes an output of 2C channels at H/2 by H/2. Option A keeps every other pixel and pads the new channels with zeros, with no weights. Option B applies a 1 by 1 convolution at stride 2, with 2C squared weights.</desc>
+<g id="s2"></g>
+</svg>
+<div class="row">
+<span class="klab">shortcut</span>
+<div class="seg" id="opt"><button data-o="A" class="on">A: subsample and zero-pad</button><button data-o="B">B: 1&times;1 projection</button></div>
+<span class="klab">input channels C</span>
+<select id="c2" onchange="draw2()"><option>64</option><option>128</option><option>256</option></select>
+</div>
+<div class="rd" id="rd2"></div>
+
+<h2>3. Blocks into stages</h2>
+<svg id="f3" viewBox="0 0 1040 250" role="img">
+<title>The stages of a ResNet</title>
+<desc>A row of blocks grouped into four stages after a stem. The first block of each stage after the first halves the resolution and doubles the channels, and its shortcut is a projection. The parameter count of the whole network is shown.</desc>
+<g id="s3"></g>
+</svg>
+<div class="row">
+<span class="klab">network</span>
+<div class="seg" id="net"><button data-n="18" class="on">ResNet-18</button><button data-n="34">ResNet-34</button><button data-n="50">ResNet-50</button></div>
+</div>
+<div class="rd" id="rd3"></div>
+<div class="cap" id="caption"></div>
+
+<script>
+var BLUE='var(--blue)',GREEN='var(--green)',GINK='var(--green-ink)',ORANGE='var(--orange)',PINK='var(--pink)',VIOLET='var(--violet)';
+function T(x,y,s,cls,anc,fill,extra){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'"'+
+ (anc?' text-anchor="'+anc+'"':'')+(fill?' style="fill:'+fill+'"':'')+(extra||'')+'>'+s+'</text>';}
+function n(v){return v.toLocaleString('en-US');}
+function M(v){return v>=1e9?(v/1e9).toFixed(2)+'G':v>=1e6?(v/1e6).toFixed(2)+'M':v>=1e3?(v/1e3).toFixed(1)+'K':String(v);}
+function mobile(){return !!(window.matchMedia&&window.matchMedia('(max-width:820px)').matches);}
+function seg(id,f){var e=document.getElementById(id);e.addEventListener('click',function(ev){var b=ev.target.closest('button');if(!b)return;
+ Array.from(e.children).forEach(function(x){x.classList.toggle('on',x===b);});f(b);});}
+function arrow(x1,y1,x2,y2,col){return '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="'+(col||'var(--text-muted)')+'" stroke-width="1.4" marker-end="url(#ah)"/>';}
+var DEFS='<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M1 1L9 5L1 9" fill="none" stroke="context-stroke" stroke-width="1.6"/></marker></defs>';
+
+/* ---------- 1. the two blocks ---------- */
+// A conv layer's weights are k*k*cin*cout; each is used once per output pixel, so its
+// multiply-adds are weights * H * W (stride 1, padded).  BatchNorm adds 2 per channel.
+function convs(kind,w){return kind==='basic'?[{k:3,i:w,o:w},{k:3,i:w,o:w}]:[{k:1,i:4*w,o:w},{k:3,i:w,o:w},{k:1,i:w,o:4*w}];}
+function wts(c){return c.k*c.k*c.i*c.o;}
+function drawBlock(x0,y0,kind,w,title,col){
+ var cs=convs(kind,w),s='',cin=cs[0].i,cout=cs[cs.length-1].o,bw=240,bh=46,gap=28,y=y0+40,tot=0;
+ s+=T(x0+bw/2,y0+10,title,'ts','middle');
+ s+='<rect x="'+(x0+bw/2-70)+'" y="'+(y0+18)+'" width="140" height="22" rx="11" fill="var(--surface-1)" stroke="var(--border)"/>'+T(x0+bw/2,y0+34,'x: '+cin+' channels','tn','middle','var(--text-primary)');
+ var top=y0+40;
+ cs.forEach(function(c,k){y+=gap-8;var ww=wts(c);tot+=ww;
+  s+=arrow(x0+bw/2,y-gap+8,x0+bw/2,y-2);
+  s+='<rect x="'+x0+'" y="'+y+'" width="'+bw+'" height="'+bh+'" rx="6" fill="color-mix(in oklab, '+col+' '+(c.k===3?26:14)+'%, var(--surface))" stroke="color-mix(in oklab, '+col+' 60%, var(--text-primary))"/>';
+  s+=T(x0+bw/2,y+19,c.k+'&times;'+c.k+' conv, '+c.i+' &rarr; '+c.o,'ts','middle','var(--text-primary)');
+  s+=T(x0+bw/2,y+37,c.k+'&middot;'+c.k+'&middot;'+c.i+'&middot;'+c.o+' = '+n(ww)+' weights','tn','middle');
+  y+=bh;
+  s+=T(x0+bw+8,y-8,k<cs.length-1?'BN, relu':'BN','tn','start');});
+ // the add, and the shortcut around the whole block
+ y+=gap-8;s+=arrow(x0+bw/2,y-gap+8,x0+bw/2,y-2);
+ s+='<circle cx="'+(x0+bw/2)+'" cy="'+(y+12)+'" r="12" fill="var(--surface)" stroke="'+GINK+'" stroke-width="1.6"/>'+T(x0+bw/2,y+17,'+','ts','middle',GINK);
+ var sx=x0-22;
+ s+='<path d="M'+(x0+bw/2-70)+' '+(top-11)+' H'+sx+' V'+(y+12)+' H'+(x0+bw/2-12)+'" fill="none" stroke="'+GINK+'" stroke-width="1.8" marker-end="url(#ah)"/>';
+ s+=T(sx-6,(top+y)/2,'x','ts','end',GINK);
+ s+=arrow(x0+bw/2,y+24,x0+bw/2,y+44);
+ s+=T(x0+bw/2,y+58,'relu(F(x) + x): '+cout+' channels','tn','middle','var(--text-primary)');
+ return {s:s,tot:tot,cin:cin,cout:cout,bottom:y+60};
+}
+var CMP='paper';
+function unpreset(){CMP=null;Array.from(document.getElementById('cmp').children).forEach(function(b){b.classList.remove('on');});}
+function draw1(){
+ var wb=+document.getElementById('wb').value,wm=+document.getElementById('wm').value,H=+document.getElementById('hw').value,mob=mobile();
+ var A=drawBlock(mob?50:60,10,'basic',wb,'basic block (ResNet-18, 34)',BLUE),B=drawBlock(mob?50:430,mob?A.bottom+20:10,'bottleneck',wm,'bottleneck block (ResNet-50, 101, 152)',ORANGE);
+ var s=DEFS+A.s+B.s;
+ // bars: weights and multiply-adds for each block, on a shared scale
+ var bx=mob?40:770,by=mob?B.bottom+40:40,bw=mob?470:250,rows=[['weights',A.tot,B.tot],['multiply-adds at '+H+'&times;'+H,A.tot*H*H,B.tot*H*H]];
+ rows.forEach(function(r,k){var y=by+k*150,mx=Math.max(r[1],r[2]);
+  s+=T(bx,y,r[0],'ts','start');
+  [[r[1],BLUE,'basic'],[r[2],ORANGE,'bottleneck']].forEach(function(q,j){var yy=y+14+j*44,w=bw*q[0]/mx;
+   s+='<rect x="'+bx+'" y="'+yy+'" width="'+w.toFixed(1)+'" height="22" fill="color-mix(in oklab, '+q[1]+' 55%, var(--surface))" stroke="'+q[1]+'"/>';
+   s+=T(bx,yy+38,q[2]+': '+n(q[0])+' ('+M(q[0])+')','tn','start','var(--text-primary)');});});
+ var svg=document.getElementById('f1');svg.setAttribute('viewBox',mob?'0 0 560 '+(by+260):'0 0 1040 '+Math.max(A.bottom,B.bottom,by+300));
+ document.getElementById('s1').innerHTML=s;
+ var r=A.tot/B.tot,h;
+ if(A.cout===B.cout)h='Same output width, '+A.cout+' channels: the bottleneck needs <b>'+(r>=1?r.toFixed(1)+'&times; fewer':(1/r).toFixed(1)+'&times; more')+'</b> weights than two 3&times;3s. ';
+ else h='The basic block is '+A.cout+' wide and the bottleneck '+B.cout+' wide'+(Math.abs(r-1)<0.1?', yet they cost <b>about the same</b>':r>1?'; the basic block costs <b>'+r.toFixed(2)+'&times;</b> as much':'; the bottleneck costs <b>'+(1/r).toFixed(2)+'&times;</b> as much')+': '+n(A.tot)+' against '+n(B.tot)+' weights. ';
+ h+='Multiply-adds are just the weights times the '+H+'&times;'+H+' output positions, so the same ratio holds for time. The 3&times;3, the expensive part, only ever sees the inner width.';
+ document.getElementById('rd1').innerHTML=h;
+}
+seg('cmp',function(b){CMP=b.dataset.c;
+ if(CMP==='paper'){document.getElementById('wb').value='64';document.getElementById('wm').value='64';}
+ else{document.getElementById('wb').value='256';document.getElementById('wm').value='64';}
+ draw1();});
+
+/* ---------- 2. the shortcut when the shape changes ---------- */
+var OPT='A';
+function slab(x,y,w,h,col,op,dash){return '<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+h.toFixed(1)+'" fill="'+col+'" fill-opacity="'+op+'" stroke="var(--border-strong)"'+(dash?' stroke-dasharray="3 2"':'')+'/>';}
+// a tensor drawn as a stack of channel slabs, each an n x n grid seen slightly from the side
+function stack(x,y,nc,cell,g,col,zeros){var s='',dx=7,dy=-5;
+ for(var c=nc-1;c>=0;c--){var z=zeros&&c>=nc/2,xx=x+c*dx,yy=y+c*dy;
+  s+=slab(xx,yy,g*cell,g*cell,z?'var(--surface-1)':col,z?1:0.35,z);
+  if(c===0)for(var i=1;i<g;i++)s+='<line x1="'+(xx+i*cell)+'" y1="'+yy+'" x2="'+(xx+i*cell)+'" y2="'+(yy+g*cell)+'" stroke="var(--border)" stroke-width="0.5"/><line x1="'+xx+'" y1="'+(yy+i*cell)+'" x2="'+(xx+g*cell)+'" y2="'+(yy+i*cell)+'" stroke="var(--border)" stroke-width="0.5"/>';}
+ return s;}
+function draw2(){
+ var C=+document.getElementById('c2').value,s=DEFS,cell=16,g=8,ty=250;
+ s+=stack(40,70,4,cell,g,BLUE);
+ s+=T(100,ty,'block input x: '+C+' &times; H &times; H','ts','middle');
+ s+=arrow(250,140,420,140);s+=T(335,132,'F: two convs,','tn','middle')+T(335,160,'the first at stride 2','tn','middle');
+ s+=stack(430,110,8,cell*0.9,g/2,BLUE);
+ s+=T(500,ty,'F(x): '+2*C+' &times; H/2 &times; H/2','ts','middle');
+ s+='<text x="640" y="152" text-anchor="middle" style="font-size:34px;fill:var(--green-ink)">+</text>';
+ var sx=700;
+ s+=stack(sx,110,8,cell*0.9,g/2,GREEN,OPT==='A');
+ s+=T(sx+70,ty,'shortcut: '+2*C+' &times; H/2 &times; H/2','ts','middle',GINK);
+ s+='<path d="M 110 52 C 260 -10, 640 -10, '+(sx+50)+' 70" fill="none" stroke="'+GINK+'" stroke-width="1.8"'+(OPT==='B'?' stroke-dasharray="5 3"':'')+' marker-end="url(#ah)"/>';
+ if(OPT==='A'){
+  for(var i=0;i<g;i+=2)for(var j=0;j<g;j+=2)s+='<circle cx="'+(40+j*cell+cell/2)+'" cy="'+(70+i*cell+cell/2)+'" r="3.2" fill="'+GINK+'"/>';
+  s+=T(860,120,'A: keep every other pixel','tn','start')+T(860,138,'(the dots), copy the '+C,'tn','start')+T(860,156,'channels, and pad '+C+' more','tn','start')+T(860,174,'with zeros (dashed).','tn','start')+T(860,196,'No weights.','tn','start',GINK);
+ }else{
+  s+=T(860,120,'B: a 1&times;1 convolution','tn','start')+T(860,138,'at stride 2, '+C+' &rarr; '+2*C,'tn','start')+T(860,160,'1&middot;1&middot;'+C+'&middot;'+2*C+' =','tn','start')+T(860,178,n(2*C*C)+' weights','tn','start',GINK)+T(860,196,'plus BatchNorm.','tn','start');}
+ document.getElementById('s2').innerHTML=s;
+ var blockW=9*C*2*C+9*2*C*2*C; // conv1 C->2C at stride 2, conv2 2C->2C
+ document.getElementById('rd2').innerHTML='The first block of a new stage halves the map and doubles the channels, so x no longer has the shape of F(x) and cannot be added as is. '+
+  (OPT==='A'?'<b>Option A</b> makes the shapes match for free: subsample by 2, pad with zeros. The zero channels add nothing, so those channels of the block get no shortcut at all.':
+   '<b>Option B</b> learns the match with a 1&times;1 projection: '+n(2*C*C)+' weights, '+(100*2*C*C/blockW).toFixed(0)+'% on top of the block&rsquo;s own '+n(blockW)+'.')+
+  ' He et al. tried both on ResNet-34, and a third, C, with projections on every shortcut: B was a little better than A, and C only marginally better than B, so they use projections only where the shape changes and identities everywhere else.';
+}
+seg('opt',function(b){OPT=b.dataset.o;draw2();});
+
+/* ---------- 3. stages ---------- */
+var NETS={18:{kind:'basic',n:[2,2,2,2]},34:{kind:'basic',n:[3,4,6,3]},50:{kind:'bottleneck',n:[3,4,6,3]}},NET=18;
+// Parameters counted as torchvision does: conv weights (no biases), BatchNorm's two
+// per channel, projection shortcuts wherever the shape changes, and the final
+// 1000-way fully connected layer.
+function count(net){var d=NETS[net],p=3*64*49+128,cin=64,parts=[p],W=[64,128,256,512];
+ d.n.forEach(function(nb,si){var w=W[si],sp=0;for(var b=0;b<nb;b++){var cout=d.kind==='basic'?w:4*w;
+  sp+=d.kind==='basic'?cin*w*9+2*w+w*w*9+2*w:cin*w+2*w+w*w*9+2*w+w*cout+2*cout;
+  if(cin!==cout||(b===0&&si>0))sp+=cin*cout+2*cout;cin=cout;}parts.push(sp);});
+ var fc=cin*1000+1000;parts.push(fc);return {parts:parts,total:parts.reduce(function(a,b){return a+b;},0),cout:cin};}
+function draw3(){
+ var d=NETS[NET],c=count(NET),s=DEFS,mob=mobile(),x=20,y=130,bw=mob?15:22,gp=mob?5:7,W=[64,128,256,512],R=[56,28,14,7],cols=[BLUE,GREEN,ORANGE,PINK];
+ var total=d.n.reduce(function(a,b){return a+b;},0),avail=(mob?540:1000)-110,scale=Math.min(1,avail/(total*(bw+gp)+4*20));bw*=scale;gp*=scale;
+ s+='<rect x="'+x+'" y="'+(y-40)+'" width="44" height="40" rx="4" fill="var(--surface-1)" stroke="var(--border-strong)"/>'+T(x+22,y-24,'stem','tn','middle','var(--text-primary)')+T(x+22,y-10,'&rarr;56','tn','middle');
+ x+=60;
+ d.n.forEach(function(nb,si){var x0=x;
+  for(var b=0;b<nb;b++){var col=cols[si],first=b===0&&si>0;
+   s+='<rect x="'+x.toFixed(1)+'" y="'+(y-40)+'" width="'+bw.toFixed(1)+'" height="40" rx="3" fill="color-mix(in oklab, '+col+' 35%, var(--surface))" stroke="'+col+'"/>';
+   // the shortcut over the block: dashed where it is a projection
+   var proj=first||(d.kind==='bottleneck'&&b===0);
+   s+='<path d="M'+(x-gp/2).toFixed(1)+' '+(y-40)+' C'+(x-gp/2).toFixed(1)+' '+(y-64)+' '+(x+bw+gp/2).toFixed(1)+' '+(y-64)+' '+(x+bw+gp/2).toFixed(1)+' '+(y-40)+'" fill="none" stroke="'+GINK+'" stroke-width="1.3"'+(proj?' stroke-dasharray="3 2"':'')+'/>';
+   x+=bw+gp;}
+  var mx=(x0+x-gp)/2,wch=d.kind==='basic'?W[si]:4*W[si];
+  s+=T(mx,y+18,'stage '+(si+1),'tn','middle',col=cols[si]);
+  s+=T(mx,y+34,R[si]+'&times;'+R[si]+', '+wch,'tn','middle');
+  s+=T(mx,y+50,nb+' block'+(nb>1?'s':''),'tn','middle');
+  x+=20;});
+ s+='<rect x="'+x+'" y="'+(y-40)+'" width="44" height="40" rx="4" fill="var(--surface-1)" stroke="var(--border-strong)"/>'+T(x+22,y-24,'pool,','tn','middle','var(--text-primary)')+T(x+22,y-10,'fc 1000','tn','middle');
+ s+=T(20,24,'ResNet-'+NET+': '+n(c.total)+' parameters','ts','start','var(--text-primary)');
+ s+=T(20,44,'green arcs: shortcuts; dashed: projections, where the shape changes','tn','start');
+ // where the parameters are
+ var bx=20,by=y+70,bwid=(mob?520:1000)-40,acc=0,labs=['stem'].concat(['stage 1','stage 2','stage 3','stage 4'],['fc']),pc=['var(--text-muted)'].concat(cols,['var(--text-muted)']);
+ c.parts.forEach(function(p,k){var w=bwid*p/c.total;s+='<rect x="'+(bx+acc).toFixed(1)+'" y="'+by+'" width="'+w.toFixed(1)+'" height="14" fill="color-mix(in oklab, '+pc[k]+' 45%, var(--surface))" stroke="var(--surface)"/>';
+  if(w>60)s+=T(bx+acc+w/2,by+30,labs[k]+' '+M(p),'tn','middle');acc+=w;});
+ var svg=document.getElementById('f3');svg.setAttribute('viewBox',mob?'0 0 560 '+(by+40):'0 0 1040 250');
+ document.getElementById('s3').innerHTML=s;
+ var last=c.parts[4],fc=c.parts[5];
+ document.getElementById('rd3').innerHTML='<b>'+n(c.total)+'</b> parameters. As on the slide: a stack of '+(d.kind==='basic'?'basic':'bottleneck')+' blocks in four stages, and the first block of each later stage halves the resolution (a stride-2 convolution) and doubles the channels, so each stage costs about the same computation per block. '+
+  'Most of the weights sit in the last stage ('+M(last)+'), where the channels are widest; the 1000-way classifier is only '+M(fc)+', because a global average pool shrinks the '+c.cout+'&times;7&times;7 map to '+c.cout+' numbers first. '+
+  (NET===50?'ResNet-50 has the same stage depths as ResNet-34 but bottleneck blocks, 3 layers each instead of 2, which is how it gets to 50 layers for only a little more weight.':NET===34?'ResNet-34 is ResNet-18 with more blocks in the middle stages: 3, 4, 6, 3 instead of 2, 2, 2, 2.':'Two blocks per stage, 16 convolutions, plus the stem and the classifier: 18 layers.');
+}
+seg('net',function(b){NET=+b.dataset.n;draw3();});
+
+function caption(){
+ document.getElementById('caption').innerHTML=
+ '<b>Why a bottleneck.</b> A 3&times;3 convolution&rsquo;s weights grow with the square of its width, 9C&sup2;. The bottleneck runs its 3&times;3 at a quarter of the block&rsquo;s width, with cheap 1&times;1s to narrow the channels on the way in and widen them on the way out. '+
+ 'He et al. pair a 64-wide basic block with a 256-wide bottleneck (their Fig. 5) because the two cost about the same, which let them go to 50, 101 and 152 layers without paying for it. '+
+ '<div style="margin-top:4px"><b>Why the shortcut should be the identity.</b> A block computes F(x) + x, so with F&rsquo;s weights at zero it passes its input straight through: an extra block can do no harm. A projection shortcut is still a learned layer, which is why the paper keeps them to the few places where the shape changes. '+
+ 'The shapes and sizes here are the ones in the <a href="../convolutions/output-size.html">output-size explainer</a>&rsquo;s ResNet-18 preset. The parameter totals count BatchNorm&rsquo;s scale and shift and the classifier, the way PyTorch reports them.</div>';
+}
+window.addEventListener('resize',function(){draw1();draw2();draw3();});
+caption();draw1();draw2();draw3();
+</script>
+</body>
+</html>

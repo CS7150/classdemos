@@ -59,6 +59,26 @@ footer a{color:var(--text-secondary)}
 <ol class="qs">
 
 <li class="done">
+  <div class="qtag">Softmax</div>
+  <h2><a href="softmax.html">Softmax</a></h2>
+  <p class="what">Drag the logits and watch the probabilities, and the Jacobian &part;p<sub>i</sub>/&part;z<sub>j</sub>
+     as a live matrix (homework 1 question 1.3.1). Adding a constant to every logit changes nothing,
+     each row of the Jacobian sums to zero, it all flattens when one class dominates, and a temperature
+     slides softmax between argmax and uniform.</p>
+  <a class="go" href="softmax.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">Cross-entropy, KL, entropy</div>
+  <h2><a href="cross-entropy.html">Cross-entropy, KL and entropy</a></h2>
+  <p class="what">Homework 1&rsquo;s questions 1.3.2&ndash;1.3.3 with n classes: drag the logits and the target
+     (one-hot, label-smoothed, mixup, or free) and watch CE split into the target&rsquo;s entropy plus the KL,
+     with the gradient p &minus; y drawn on every logit. Against a one-hot target the loss never reaches zero,
+     so descent pushes the logits apart forever; label smoothing gives it a finite minimum.</p>
+  <a class="go" href="cross-entropy.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
   <div class="qtag">Why cross-entropy</div>
   <h2><a href="output-loss.html">Squared error vs. cross-entropy</a></h2>
   <p class="what">Why classifiers train better with cross-entropy than with the quadratic cost, as
@@ -67,6 +87,56 @@ footer a{color:var(--text-secondary)}
      error&rsquo;s gradient keeps the sigmoid&rsquo;s slope and vanishes when the output is confidently
      wrong, while cross-entropy&rsquo;s log cancels it.</p>
   <a class="go" href="output-loss.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">Weight decay</div>
+  <h2><a href="weight-decay.html">Weight decay: L2 against L1</a></h2>
+  <p class="what">Homework 2.1&rsquo;s penalty makes every gradient step a shrink first. Read as a budget,
+     L2 is a ball and L1 a diamond whose corners zero out weights. A penalty turns a wildly bumpy
+     twelve-point fit smooth, and inside Adam the same penalty is not weight decay, which is why AdamW exists.</p>
+  <a class="go" href="weight-decay.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">Dropout</div>
+  <h2><a href="dropout.html">Dropout</a></h2>
+  <p class="what">The lecture's two-input neuron with all four masks enumerated: their average is (1&minus;p) times
+     the full output, which is why test time scales by 1&minus;p, or inverted dropout scales while training. Then the
+     cat-feature example as 32 subnetworks, co-adapted against redundant, and two networks overfitting 40 noisy
+     points live, one with dropout.</p>
+  <a class="go" href="dropout.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">The regularization pattern</div>
+  <h2><a href="noise.html">Train with noise, test by averaging it out</a></h2>
+  <p class="what">Early stopping on live train and validation curves; a picture flipped, cropped,
+     jittered, cut out and mixed up; the same small network trained on one quarter of a ring,
+     with and without random rotations, learning the symmetry only when shown it; and a table of
+     how dropout, BatchNorm, augmentation, mixup and stochastic depth each add noise while
+     training and average it away at test time.</p>
+  <a class="go" href="noise.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">Gradient noise</div>
+  <h2><a href="batch-size.html">Batch size, learning rate, and gradient noise</a></h2>
+  <p class="what">A minibatch gradient is the full gradient plus noise that shrinks like 1/&radic;B, and vanishes
+     at B = N (HW2.1&rsquo;s full batch). SGD settles into a cloud whose size is set by lr/B, which is why
+     the linear scaling rule works, until lr passes 2/&lambda;<sub>max</sub>. And enough noise carries SGD out
+     of a sharp minimum into a wide one.</p>
+  <a class="go" href="batch-size.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">Capacity</div>
+  <h2><a href="capacity.html">Width, and double descent</a></h2>
+  <p class="what">Homework 2.1's shrinking experiment in miniature: seven networks of widths 2 to 128
+     train live on the same 60 points with some labels flipped, and the wide ones draw islands around
+     the wrong labels. Then the rest of the story: least squares with more and more features, whose
+     test error spikes where the features just match the points and falls again beyond it.</p>
+  <a class="go" href="capacity.html">Open the explainer &rarr;</a>
 </li>
 </ol>
 

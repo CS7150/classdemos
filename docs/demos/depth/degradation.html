@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The degradation problem</title>
+<meta name="description" content="Plain and residual networks of 8, 20, 32 and 56 layers trained live on two spirals: the deeper plain networks end with higher training error, the residual ones do not.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 16px;max-width:1100px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+.quiz{margin:0}
+svg{max-height:64vh}
+.row{gap:7px}
+button{height:30px;font-size:13px;padding:0 9px}
+.seg button{height:28px;font-size:12.5px;padding:0 9px}
+.klab{font-size:12.5px}
+.rd{font-size:14px;line-height:1.5;min-height:3em}
+.cap{font-size:12.5px;line-height:1.55;padding-top:4px}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Training deep networks demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>The degradation problem<span>: deeper plain networks train worse</span></h1>
+<p class="quiz">He et al. found that a 56-layer network had higher <b>training</b> error than a 20-layer one. Eight networks train here at once, live, on the same 240 points: plain on top, residual below, 8 to 56 layers deep. <b>Watch the training error</b>, then try another initialization or turn BatchNorm off.</p>
+
+<svg id="fig" viewBox="0 0 1040 470" role="img">
+<title>Training error against steps for plain and residual networks of four depths</title>
+<desc>Top row: training error curves for plain networks of 8, 20, 32 and 56 layers, and the decision boundary each has learned on two interleaved spirals. Bottom row: the same for residual networks. The deeper plain networks stay near chance, 50 percent error, while every residual network fits the spirals.</desc>
+<g id="stage"></g>
+</svg>
+
+<div class="row">
+<button class="main" id="run" onclick="toggle()">Pause</button>
+<button onclick="reset(true)">New initialization</button>
+<div class="seg" id="bnSeg"><button data-bn="1" class="on">BatchNorm on</button><button data-bn="0">BatchNorm off</button></div>
+<span class="klab" id="stepv"></span>
+</div>
+<div class="rd" id="readout"></div>
+<div class="cap" id="caption"></div>
+
+<script>
+/* ---------- data ---------- */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function randn(r){var u=0,v=0;while(!u)u=r();while(!v)v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+// two spirals, each arm turning two and a half times, with a little noise
+function spirals(n,seed){var r=mulberry32(seed),X=new Float64Array(2*n),Y=new Float64Array(n),T=5;
+ for(var i=0;i<n;i++){var c=i%2,t=(i>>1)/(n/2)*T*Math.PI+0.5,rad=t/(T*Math.PI+0.5),a=t+c*Math.PI;
+  X[2*i]=rad*Math.cos(a)+0.02*randn(r);X[2*i+1]=rad*Math.sin(a)+0.02*randn(r);Y[i]=c;}return {X:X,Y:Y,n:n};}
+var DATA=spirals(240,3);
+
+/* ---------- the networks ---------- */
+// A layer holds its weights, Adam moments and BatchNorm scale and shift.  He init:
+// weights ~ N(0, 2/fan_in).  Everything is flat typed arrays over the whole batch.
+function Layer(nin,nout,r,gain){this.nin=nin;this.nout=nout;this.w=new Float64Array(nin*nout);this.b=new Float64Array(nout);
+ for(var i=0;i<this.w.length;i++)this.w[i]=randn(r)*Math.sqrt(gain/nin);
+ this.g=new Float64Array(nout).fill(1);this.be=new Float64Array(nout);
+ this.P=[this.w,this.b,this.g,this.be];this.G=this.P.map(function(p){return new Float64Array(p.length);});
+ this.M=this.P.map(function(p){return new Float64Array(p.length);});this.V=this.P.map(function(p){return new Float64Array(p.length);});
+ this.mu=new Float64Array(nout);this.sd=new Float64Array(nout).fill(1);}
+Layer.prototype.lin=function(X,N,Y){var o=this.nout,i=this.nin,w=this.w,b=this.b;
+ for(var n=0;n<N;n++){var xo=n*i,yo=n*o;for(var k=0;k<o;k++){var s=b[k],wo=k*i;for(var j=0;j<i;j++)s+=w[wo+j]*X[xo+j];Y[yo+k]=s;}}};
+Layer.prototype.linB=function(X,N,dY,dX){var o=this.nout,i=this.nin,w=this.w,gw=this.G[0],gb=this.G[1];if(dX)dX.fill(0,0,N*i);
+ for(var n=0;n<N;n++){var xo=n*i,yo=n*o;for(var k=0;k<o;k++){var g=dY[yo+k];if(g===0)continue;gb[k]+=g;var wo=k*i;
+  for(var j=0;j<i;j++){gw[wo+j]+=g*X[xo+j];if(dX)dX[xo+j]+=g*w[wo+j];}}}};
+// BatchNorm in place over the N rows.  Training is full batch, so the statistics of
+// the last training pass are the statistics of the whole data set, and drawing the
+// decision boundary reuses them.
+Layer.prototype.bn=function(H,N,Xh,train){var o=this.nout,mu=this.mu,sd=this.sd,g=this.g,be=this.be,n,k;
+ if(train){mu.fill(0);var va=new Float64Array(o);for(n=0;n<N;n++)for(k=0;k<o;k++)mu[k]+=H[n*o+k]/N;
+  for(n=0;n<N;n++)for(k=0;k<o;k++){var d=H[n*o+k]-mu[k];va[k]+=d*d/N;}for(k=0;k<o;k++)sd[k]=Math.sqrt(va[k]+1e-5);}
+ for(n=0;n<N;n++)for(k=0;k<o;k++){var x=(H[n*o+k]-mu[k])/sd[k];if(Xh)Xh[n*o+k]=x;H[n*o+k]=g[k]*x+be[k];}};
+Layer.prototype.bnB=function(dY,N,Xh){var o=this.nout,g=this.g,sd=this.sd,gg=this.G[2],gbe=this.G[3],s1=new Float64Array(o),s2=new Float64Array(o),n,k;
+ for(n=0;n<N;n++)for(k=0;k<o;k++){var d=dY[n*o+k],x=Xh[n*o+k];gg[k]+=d*x;gbe[k]+=d;s1[k]+=d*g[k];s2[k]+=d*g[k]*x;}
+ for(n=0;n<N;n++)for(k=0;k<o;k++){var i=n*o+k;dY[i]=(dY[i]*g[k]-s1[k]/N-Xh[i]*s2[k]/N)/sd[k];}};
+Layer.prototype.adam=function(lr,t,bn){var b1=0.9,b2=0.999,c1=1-Math.pow(b1,t),c2=1-Math.pow(b2,t);
+ for(var p=0;p<(bn?4:2);p++){var P=this.P[p],G=this.G[p],M=this.M[p],V=this.V[p];
+  for(var i=0;i<P.length;i++){var gi=G[i];M[i]=b1*M[i]+(1-b1)*gi;V[i]=b2*V[i]+(1-b2)*gi*gi;P[i]-=lr*(M[i]/c1)/(Math.sqrt(V[i]/c2)+1e-8);G[i]=0;}}};
+// A network of `depth` weighted layers: a stem 2 -> W, depth - 2 body layers, and a
+// head W -> 1.  Plain: every body layer is relu(BN(W h)).  Residual: the body layers
+// pair up into He et al.'s basic block, relu(h + BN(W2 relu(BN(W1 h)))).  The depths
+// 8, 20, 32, 56 are the paper's 6n + 2.
+function Net(depth,res,bn,width,seed,N){var r=mulberry32(seed);this.depth=depth;this.res=res;this.bn=bn;this.W=width;this.t=0;this.hist=[];
+ this.stem=new Layer(2,width,r,2);this.body=[];var nb=depth-2;
+ if(res)for(var k=0;k<nb/2;k++)this.body.push(new Layer(width,width,r,2),new Layer(width,width,r,2));
+ else for(var k2=0;k2<nb;k2++)this.body.push(new Layer(width,width,r,2));
+ this.head=new Layer(width,1,r,1);this.alloc(N);}
+Net.prototype.alloc=function(N){var W=this.W,L=this.body.length,f=function(){return new Float64Array(N*W);};this.cap=N;
+ this.A=[];this.Z=[];this.Xh=[];for(var i=0;i<=L;i++)this.A.push(f());for(i=0;i<L;i++){this.Z.push(f());this.Xh.push(f());}
+ this.out=new Float64Array(N);this.d1=f();this.d2=f();this.d3=f();};
+Net.prototype.forward=function(X,N,train){var W=this.W,A=this.A,Z=this.Z,bn=this.bn,i,l;
+ this.stem.lin(X,N,A[0]);for(i=0;i<N*W;i++)if(A[0][i]<0)A[0][i]=0;
+ for(l=0;l<this.body.length;l++){var L=this.body[l],z=Z[l];L.lin(A[l],N,z);if(bn)L.bn(z,N,train?this.Xh[l]:null,train);
+  var o=A[l+1];if(this.res&&l%2===1){var x=A[l-1];for(i=0;i<N*W;i++){var v=x[i]+z[i];o[i]=v>0?v:0;}}
+  else for(i=0;i<N*W;i++)o[i]=z[i]>0?z[i]:0;}
+ this.head.lin(A[this.body.length],N,this.out);return this.out;};
+// one full-batch step of Adam on the logistic loss; records the training error
+Net.prototype.step=function(D,lr){var N=D.n,W=this.W,A=this.A,L=this.body.length,out=this.forward(D.X,N,true),loss=0,err=0,i,l;
+ var dO=new Float64Array(N);for(i=0;i<N;i++){var p=1/(1+Math.exp(-out[i])),y=D.Y[i];
+  loss+=y?-Math.log(Math.max(p,1e-12)):-Math.log(Math.max(1-p,1e-12));if((p>0.5)!==(y===1))err++;dO[i]=(p-y)/N;}
+ var dA=this.d1,skip=this.d3;this.head.linB(A[L],N,dO,dA);
+ for(l=L-1;l>=0;l--){var Lr=this.body[l],o=A[l+1],dz=this.d2;
+  for(i=0;i<N*W;i++)dz[i]=o[i]>0?dA[i]:0;
+  if(this.res&&l%2===1)skip.set(dz.subarray(0,N*W));   // the shortcut carries this gradient straight down
+  if(this.bn)Lr.bnB(dz,N,this.Xh[l]);
+  Lr.linB(A[l],N,dz,dA);
+  if(this.res&&l%2===0)for(i=0;i<N*W;i++)dA[i]+=skip[i];}
+ for(i=0;i<N*W;i++)if(A[0][i]<=0)dA[i]=0;this.stem.linB(D.X,N,dA,null);
+ this.t++;var t=this.t,bn=this.bn;[this.stem].concat(this.body,[this.head]).forEach(function(Ly){Ly.adam(lr,t,bn);});
+ this.hist.push(err/N);this.loss=loss/N;return err/N;};
+// probabilities on a grid, for the decision-boundary pictures
+Net.prototype.grid=function(G){var N=G.n;if(this.cap<N)this.alloc(N);var out=this.forward(G.X,N,false),p=new Float64Array(N);
+ for(var i=0;i<N;i++)p[i]=1/(1+Math.exp(-out[i]));return p;};
+
+/* ---------- the experiment ---------- */
+var DEPTHS=[8,20,32,56],WIDTH=10,LR=0.01,STEPS=400,BN=true,SEED=1,NETS=[],STEP=0,running=true;
+var GR=48,GRID=(function(){var X=new Float64Array(2*GR*GR);for(var j=0;j<GR;j++)for(var i=0;i<GR;i++){X[2*(j*GR+i)]=-1.15+2.3*(i+0.5)/GR;X[2*(j*GR+i)+1]=1.15-2.3*(j+0.5)/GR;}return {X:X,n:GR*GR};})();
+function reset(newSeed){if(newSeed)SEED=1+Math.floor(Math.random()*1e6);STEP=0;NETS=[];
+ [false,true].forEach(function(res){DEPTHS.forEach(function(d,k){NETS.push(new Net(d,res,BN,WIDTH,SEED*97+k*13+(res?7:0),DATA.n));});});
+ PICS={};setRun(true);draw();}
+function setRun(r){running=r;document.getElementById('run').textContent=r?'Pause':STEP>=STEPS?'Train 400 more':'Train';if(r)requestAnimationFrame(loop);}
+function toggle(){if(!running&&STEP>=STEPS)STEPS+=400;setRun(!running);}
+// every frame: as many whole steps of all eight networks as fit in about 30 ms
+function loop(){if(!running)return;var t0=performance.now();
+ do{NETS.forEach(function(n){n.step(DATA,LR);});STEP++;}while(STEP<STEPS&&performance.now()-t0<30);
+ if(STEP%20===0||STEP>=STEPS)PICS={};
+ draw();if(STEP>=STEPS){setRun(false);return;}requestAnimationFrame(loop);}
+
+/* ---------- drawing ---------- */
+var COL=['var(--green)','var(--blue)','var(--violet)','var(--orange)'],INKC=['var(--green-ink)','var(--blue-ink)','var(--violet-ink)','var(--orange-ink)'];
+function T(x,y,s,cls,anc,fill,extra){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'"'+(anc?' text-anchor="'+anc+'"':'')+(fill?' style="fill:'+fill+'"':'')+(extra||'')+'>'+s+'</text>';}
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()||'#888';}
+// a decision boundary as a small picture: the net's probability as a tint, the data on top
+var PICS={};
+function pic(net){var key=NETS.indexOf(net);if(PICS[key])return PICS[key];
+ var p=net.grid(GRID),S=4,c=document.createElement('canvas');c.width=c.height=GR*S;var x=c.getContext('2d');
+ var ca=hex(css('--blue')),cb=hex(css('--orange')),bg=hex(css('--surface'));
+ for(var j=0;j<GR;j++)for(var i=0;i<GR;i++){var q=p[j*GR+i],w=Math.min(1,Math.abs(q-0.5)*2)*0.45,col=q<0.5?ca:cb;
+  x.fillStyle='rgb('+[0,1,2].map(function(k){return Math.round(bg[k]*(1-w)+col[k]*w);}).join(',')+')';x.fillRect(i*S,j*S,S,S);}
+ for(var n=0;n<DATA.n;n++){var px=(DATA.X[2*n]+1.15)/2.3*GR*S,py=(1.15-DATA.X[2*n+1])/2.3*GR*S;x.beginPath();x.arc(px,py,2.3,0,7);
+  x.fillStyle=DATA.Y[n]?css('--orange'):css('--blue');x.fill();}
+ return PICS[key]=c.toDataURL();}
+function hex(s){if(s[0]==='#'){var h=s.slice(1);if(h.length===3)h=h.split('').map(function(c){return c+c;}).join('');return [0,2,4].map(function(k){return parseInt(h.substr(k,2),16);});}
+ var m=s.match(/\d+/g);return m?m.slice(0,3).map(Number):[128,128,128];}
+function mobile(){return !!(window.matchMedia&&window.matchMedia('(max-width:820px)').matches);}
+function draw(){var mob=mobile(),s='';
+ var L=mob?{vb:'0 0 560 1000',rows:[[40,24],[540,24]],pw:500,ph:230,tx:30,ty:[320,820],ts:118,tg:128}
+          :{vb:'0 0 1040 470',rows:[[40,22],[40,262]],pw:420,ph:170,tx:520,ty:[34,274],ts:116,tg:128};
+ [0,1].forEach(function(row){var y0=mob?L.rows[row][0]:L.rows[row][1],x0=mob?40:L.rows[row][0],W=L.pw,H=L.ph,nets=NETS.slice(row*4,row*4+4);
+  function px(t){return x0+t/STEPS*W;}function py(e){return y0+H-Math.min(0.55,e)/0.55*H;}
+  s+='<rect x="'+x0+'" y="'+y0+'" width="'+W+'" height="'+H+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
+  s+=T(x0,y0-8,row?'<tspan style="font-weight:600">residual</tspan> networks: relu(x + F(x))':'<tspan style="font-weight:600">plain</tspan> networks: relu(W x)','ts','start');
+  [0,0.1,0.2,0.3,0.4,0.5].forEach(function(e){s+='<line x1="'+x0+'" y1="'+py(e).toFixed(1)+'" x2="'+(x0+W)+'" y2="'+py(e).toFixed(1)+'" stroke="var(--border)" stroke-width="'+(e===0.5?1:0.5)+'"'+(e===0.5?' stroke-dasharray="4 3"':'')+'/>'+
+   T(x0-6,py(e)+4,Math.round(e*100)+'%','tn','end');});
+  s+=T(x0+W-4,py(0.5)-5,'chance','tn','end');
+  for(var t=0;t<=STEPS;t+=100)s+=T(px(t),y0+H+15,String(t),'tn','middle');
+  s+=T(x0+W/2,y0+H+31,'training steps (training error)','tn','middle');
+  nets.forEach(function(n,k){if(!n.hist.length)return;var d='',h=n.hist,stp=Math.max(1,Math.floor(h.length/200));
+   for(var i=0;i<h.length;i+=stp)d+=(i?'L':'M')+px(i+1).toFixed(1)+' '+py(h[i]).toFixed(1)+' ';
+   s+='<path d="'+d+'" fill="none" stroke="'+COL[k]+'" stroke-width="'+(k===3?2.4:1.8)+'" stroke-linejoin="round"/>';});
+  // end labels, nudged apart
+  var ends=nets.map(function(n,k){return {k:k,y:n.hist.length?py(n.hist[n.hist.length-1]):py(0.5)};}).sort(function(a,b){return a.y-b.y;});
+  // pushed upward from the bottom, so labels of curves that end at 0% stay inside the plot
+  for(var i=ends.length-2;i>=0;i--)ends[i].y=Math.min(ends[i].y,ends[i+1].y-13);
+  if(STEP>0)ends.forEach(function(e){s+=T(px(Math.min(STEP,STEPS))+5,e.y+4,DEPTHS[e.k]+'','tn','start',INKC[e.k]);});
+  // decision boundaries
+  var tx=L.tx,ty=L.ty[row];nets.forEach(function(n,k){var x=tx+k*L.tg,e=n.hist.length?n.hist[n.hist.length-1]:null;
+   s+='<image href="'+pic(n)+'" x="'+x+'" y="'+ty+'" width="'+L.ts+'" height="'+L.ts+'"/>';
+   s+='<rect x="'+x+'" y="'+ty+'" width="'+L.ts+'" height="'+L.ts+'" fill="none" stroke="'+COL[k]+'" stroke-width="2"/>';
+   s+=T(x+L.ts/2,ty+L.ts+16,DEPTHS[k]+' layers','tn','middle',INKC[k]);
+   if(e!==null)s+=T(x+L.ts/2,ty+L.ts+32,Math.round(e*100)+'% wrong','tn','middle',e>0.2?'var(--red)':'');});
+  if(!mob)s+=T(tx,ty-12+(row?0:0),'what each has learned, on the 240 training points','tn','start');});
+ var svg=document.getElementById('fig');svg.setAttribute('viewBox',L.vb);document.getElementById('stage').innerHTML=s;
+ document.getElementById('stepv').textContent='step '+STEP+' of '+STEPS;readout();}
+function pct(n){return n.hist.length?Math.round(100*n.hist[n.hist.length-1])+'%':'&mdash;';}
+function readout(){var P=NETS.slice(0,4),R=NETS.slice(4);if(!P.length)return;
+ var h='Training error: plain '+P.map(function(n,k){return DEPTHS[k]+' layers <b class="num">'+pct(n)+'</b>';}).join(', ')+
+  '; residual '+R.map(function(n,k){return DEPTHS[k]+' <b class="num">'+pct(n)+'</b>';}).join(', ')+'.';
+ if(STEP>=STEPS){var p20=P[1].hist[P[1].hist.length-1],p56=P[3].hist[P[3].hist.length-1],r56=R[3].hist[R[3].hist.length-1];
+  if(p56>p20+0.05)h+=' <b>The 56-layer plain network fits its own training data worse than the 20-layer one</b>'+(r56<p56-0.05?', while the 56-layer residual network fits it.':'.');
+  else h+=' This initialization happened to be kind to the deep plain networks; try another.';}
+ document.getElementById('readout').innerHTML=h;}
+function caption(){document.getElementById('caption').innerHTML=
+ '<b>The puzzle.</b> A deeper network can do anything a shallower one can: copy the 20 layers, and make every extra layer compute the identity. '+
+ 'So the best 56-layer network is at least as good as the best 20-layer one. When the 56-layer one ends with <i>higher training error</i>, it is not overfitting, which would show up only on held-out data; '+
+ 'the optimizer simply fails to find the good solution. That is what He et al. saw on CIFAR-10 and ImageNet, and what the top row shows on two spirals.'+
+ '<div style="margin-top:4px"><b>Not vanishing signals.</b> Every plain network here has BatchNorm after each layer, as the paper&rsquo;s did, so each layer&rsquo;s signal keeps a healthy spread going forward. '+
+ 'Still the deep ones stall. What they lack is an easy way to leave the input alone: a stack of relu(W x) layers has to learn the identity with its weights, from a random start. '+
+ 'A residual block computes relu(x + F(x)), so the identity is F = 0, and the gradient has a path around every block (see <a href="identity.html">identity vs. zero</a> and <a href="gradient-depth.html">gradient through depth</a>). '+
+ 'The bottom row is the same data, widths, depths, optimizer and initialization scale; only the shortcut differs.</div>'+
+ '<div style="margin-top:4px"><b>What the paper found, and what this toy cannot show.</b> In the paper, deeper residual networks were not just no worse: they were more accurate, up to 110 layers on CIFAR-10. '+
+ 'On two spirals every residual network here already fits the data, so there is no room left to improve with depth; what does carry over is that depth stops hurting.</div>'+
+ '<div style="margin-top:4px"><b>What nobody asked: turn BatchNorm off.</b> The plain networks fail sooner, and now the residual networks struggle as well, the 56-layer one stuck at chance. '+
+ 'Each block adds its branch F(x) to the signal, and with every branch starting at full size, 27 of them make the signal grow with depth. '+
+ 'Residual networks without normalization need each branch to start near zero, for example by setting the last BatchNorm scale of each block to zero (Goyal et al. 2017) or by rescaling the initialization (Fixup, Zhang et al. 2019).</div>'+
+ '<div style="margin-top:4px">Homework 2.1, tasks 3.14 to 3.18, builds exactly these blocks: y = f(x) + x, with BatchNorm, six of them in a row. '+
+ 'Here: 240 points, width 10, He initialization, full-batch Adam at learning rate 0.01, logistic loss; the depths are the paper&rsquo;s 6n&nbsp;+&nbsp;2.</div>';}
+document.getElementById('bnSeg').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;BN=b.dataset.bn==='1';
+ Array.from(this.children).forEach(function(x){x.classList.toggle('on',x===b);});STEPS=400;reset(false);});
+window.addEventListener('resize',function(){PICS={};draw();});
+if(window.matchMedia)window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){PICS={};draw();});
+caption();reset(false);
+</script>
+</body>
+</html>

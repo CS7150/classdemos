@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Training deep networks</title>
+<meta name="description" content="Interactive explainers for He et al. 2016 (ResNet) and Ioffe &amp; Szegedy 2015 (BatchNorm): why deep plain networks train worse, how residual connections and normalization fix it.">
+<style>
+:root{--bg:#faf9f5;--surface:#ffffff;--surface-1:#f1efe8;--text-primary:#26251f;--text-secondary:#5f5e5a;--text-muted:#888780;
+ --border:#d3d1c7;--border-strong:#b4b2a9;--accent:#185FA5;--accent-warm:#BA7517;--accent-green:#0F6E56;}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#1a1a18;--surface:#232320;--surface-1:#2c2c2a;
+ --text-primary:#eceae2;--text-secondary:#b4b2a9;--text-muted:#888780;--border:#3a3a36;--border-strong:#5f5e5a;
+ --accent:#79b1ec;--accent-warm:#d9a24d;--accent-green:#4fbb99;}}
+:root[data-theme="dark"]{--bg:#1a1a18;--surface:#232320;--surface-1:#2c2c2a;--text-primary:#eceae2;--text-secondary:#b4b2a9;
+ --text-muted:#888780;--border:#3a3a36;--border-strong:#5f5e5a;--accent:#79b1ec;--accent-warm:#d9a24d;--accent-green:#4fbb99;}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--text-primary);line-height:1.6;
+ font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
+.page{max-width:900px;margin:0 auto;padding:0 20px 72px}
+header{padding-block:44px 24px;border-bottom:1px solid var(--border)}
+.nav{font-size:14px;margin:0 0 18px}
+.nav a{color:var(--text-muted);text-decoration:none}
+.nav a:hover{color:var(--text-secondary);text-decoration:underline}
+.eyebrow{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);margin:0 0 10px}
+h1{font-size:32px;font-weight:600;letter-spacing:-.015em;margin:0 0 12px}
+header p{margin:0 0 10px;font-size:17px;color:var(--text-secondary);max-width:64ch}
+a{color:var(--accent)}
+ol.qs{list-style:none;counter-reset:q;margin:26px 0 0;padding:0}
+ol.qs li{counter-increment:q;border-bottom:1px solid var(--border);padding:20px 0 20px 52px;position:relative}
+ol.qs li:before{content:counter(q);position:absolute;left:0;top:19px;width:34px;height:34px;border-radius:50%;
+ display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500;
+ background:var(--surface-1);color:var(--text-secondary);border:1px solid var(--border)}
+ol.qs li.done:before{background:var(--surface);border-color:var(--accent);color:var(--accent)}
+.qtag{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-warm)}
+h2{font-size:20px;font-weight:600;margin:5px 0 6px;letter-spacing:-.01em}
+h2 a{text-decoration:none}
+h2 a:hover{text-decoration:underline}
+.what{margin:0;font-size:15.5px;color:var(--text-secondary)}
+.go{display:inline-block;margin-top:9px;font-size:15px}
+footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--border);font-size:14.5px;color:var(--text-muted)}
+footer a{color:var(--text-secondary)}
+@media (max-width:640px){h1{font-size:26px}ol.qs li{padding-left:44px}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <div class="nav"><a href="../../">&larr; CS7150 class demos</a></div>
+  <p class="eyebrow">Northeastern University &middot; CS 7150 &middot; Fall 2026</p>
+  <h1>Training deep networks</h1>
+  <p>Interactive pieces for <a href="https://papers.baulab.info/papers/He-2015.pdf">He et al. 2016</a> (ResNet)
+     and Ioffe &amp; Szegedy 2015 (batch normalization): first the puzzle, that deeper plain networks train
+     <i>worse</i>; then why a shortcut fixes it, as learning zero instead of identity, as a gradient that
+     survives depth, and as an ensemble of short paths; the blocks ResNets are built from; and then
+     BatchNorm, step by step, why it helps, and which axes other normalizations use. Homework 2.1,
+     tasks 3.13&ndash;3.18, builds these same pieces.</p>
+</header>
+
+<ol class="qs">
+
+<li class="done">
+  <div class="qtag">The puzzle</div>
+  <h2><a href="degradation.html">The degradation problem</a></h2>
+  <p class="what">Eight networks train live on two spirals: plain and residual, 8 to 56 layers,
+     all with BatchNorm. The deep plain ones end with higher <i>training</i> error than the shallow
+     ones, so it is not overfitting; the residual ones fit at every depth. Turn BatchNorm off to see
+     why ResNets need their branches to start small.</p>
+  <a class="go" href="degradation.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">Why shortcuts help</div>
+  <h2><a href="identity.html">Learning identity vs. learning zero</a></h2>
+  <p class="what">The same random weights wired as a plain block and as a residual block, each drawn
+     as a warp of the plane. The plain block has to be taught to copy its input; the residual block
+     copies it once F is zero, and weight decay alone sends it there while it sends the plain block
+     to the zero map. Then thirty blocks stacked on two spirals: a smooth flow, or a collapse.</p>
+  <a class="go" href="identity.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">Why skips help</div>
+  <h2><a href="gradient-depth.html">Gradient through depth</a></h2>
+  <p class="what">Plain and residual networks with the same random weights: backprop multiplies
+     Jacobians, J&middot;J&middot;&middot;&middot;J against (I+J)&middot;&middot;&middot;(I+J). Slide the weight scale and the plain
+     gradient tilts geometrically unless the scale is just right; the residual one stays near 1, as
+     long as each branch is normalized or scaled down. Plus the singular values of one layer.</p>
+  <a class="go" href="gradient-depth.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">Unrolled</div>
+  <h2><a href="paths.html">A ResNet is an ensemble of paths</a></h2>
+  <p class="what">Unroll n residual blocks and they become 2<sup>n</sup> paths of every length. Most paths
+     are medium length, but each block a path passes through weakens its gradient, so the gradient flows
+     mostly through short ones: measured on a random net, and matching Veit et al.&rsquo;s 5&ndash;17 of 54
+     blocks. Delete a block and a residual stack loses one block&rsquo;s share; a plain stack loses its only path.</p>
+  <a class="go" href="paths.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">The architecture</div>
+  <h2><a href="resnet-blocks.html">Residual blocks: basic, bottleneck, and the shortcut</a></h2>
+  <p class="what">ResNet's two blocks with live weight and multiply-add counts: a 256-wide bottleneck
+     costs about what a 64-wide basic block does. When a block halves the map and doubles the channels,
+     the shortcut must change shape, by zero-padding or a 1&times;1 projection. Then the stages of
+     ResNet-18, 34 and 50, with where their 11.7M, 21.8M and 25.6M parameters sit. (The whole of ResNet-18
+     is also a preset in <a href="../convolutions/output-size.html">how big is the output?</a>)</p>
+  <a class="go" href="resnet-blocks.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">Ioffe 2015</div>
+  <h2><a href="batchnorm.html">BatchNorm, step by step</a></h2>
+  <p class="what">Drag the examples of a minibatch and watch each feature be normalized by the batch's
+     mean and spread, then scaled by &gamma; and shifted by &beta;; moving one example moves them all. Then
+     the running averages used at test time, what goes wrong with tiny or unshuffled batches, and how
+     BatchNorm folds into the layer before it.</p>
+  <a class="go" href="batchnorm.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">BatchNorm, why</div>
+  <h2><a href="why-batchnorm.html">Why BatchNorm helps</a></h2>
+  <p class="what">One sigmoid network trained twice side by side, plain and batch-normalized. Watch a
+     hidden unit's input drift by many times its own width without BatchNorm and hold still with it;
+     sweep the learning rate and see the range that trains widen from a factor of 2 to a factor of
+     about 180; and scale a normalized layer's weights to see the loss not move while the gradient
+     shrinks like 1/&Vert;W&Vert;, which is why weight decay matters there.</p>
+  <a class="go" href="why-batchnorm.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">Normalization axes</div>
+  <h2><a href="norms.html">Which axes get normalized</a></h2>
+  <p class="what">A batch of activations drawn as a block of cells, N examples by C channels by
+     positions. Pick BatchNorm, LayerNorm, InstanceNorm or GroupNorm and click any cell: the cells
+     that share its mean and standard deviation light up, with the numbers. Only BatchNorm depends
+     on the rest of the batch, which is why transformers use LayerNorm.</p>
+  <a class="go" href="norms.html">Open the explainer &rarr;</a>
+</li>
+</ol>
+
+<footer>
+  Builds on <a href="../initialization/">initialization</a> and <a href="../convolutions/">convolutions</a>;
+  the regularizers are in <a href="../objectives/">losses and regularization</a>. &middot;
+  <a href="https://github.com/CS7150/classdemos">Repository</a>
+</footer>
+
+</div>
+</body>
+</html>

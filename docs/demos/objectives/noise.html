@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Train with noise</title>
+<meta name="description" content="Train with noise, test by averaging it out: early stopping on live train and validation curves, data augmentation on a picture, a symmetry taught by augmentation, and the pattern shared by dropout, BatchNorm, cutout, mixup and stochastic depth.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 20px;max-width:1100px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+h2.sec{font-size:16px;font-weight:600;margin:14px 0 0;padding-top:10px;border-top:1px solid var(--border)}
+h2.sec span{font-weight:400;color:var(--text-secondary)}
+.quiz{margin:0}
+.row{gap:7px}
+button{height:30px;font-size:13px;padding:0 10px}
+.seg button{height:28px;font-size:12.5px;padding:0 9px}
+label.cb{font-size:13px}
+.rd{font-size:14px;line-height:1.5;min-height:1.5em}
+.cap{font-size:12.5px;line-height:1.55;padding-top:4px}
+svg{max-height:52vh}
+.tiles{display:flex;flex-wrap:wrap;gap:10px}
+.tile{display:flex;flex-direction:column;gap:3px;width:150px}
+.tile canvas{width:150px;height:150px;border:1px solid var(--border);border-radius:4px;background:var(--surface)}
+.tile .tt{font-size:12.5px;font-weight:600;color:var(--text-primary)}
+.tile .td{font-size:11.5px;line-height:1.35;color:var(--text-muted);font-variant-numeric:tabular-nums}
+.lbar{display:flex;height:9px;border-radius:2px;overflow:hidden;margin-top:2px}
+.pair{display:flex;flex-wrap:wrap;gap:18px}
+.pane{display:flex;flex-direction:column;gap:4px}
+.pane canvas{width:260px;height:260px;border:1px solid var(--border);border-radius:4px}
+.pane .pt{font-size:13.5px;color:var(--text-secondary)}
+.pane .pt b{color:var(--text-primary);font-weight:600}
+table.pat{border-collapse:collapse;font-size:13px;line-height:1.45;margin-top:4px;width:100%}
+table.pat th{text-align:left;font-weight:600;color:var(--text-primary);padding:4px 10px 4px 0;border-bottom:1px solid var(--border-strong)}
+table.pat td{vertical-align:top;padding:4px 10px 4px 0;color:var(--text-secondary);border-bottom:1px solid var(--border)}
+table.pat td:first-child{color:var(--text-primary);white-space:nowrap}
+.tw{max-width:100%;overflow-x:auto}
+@media (max-width:640px){.tile{width:calc(50% - 5px)}.tile canvas{width:100%;height:auto;aspect-ratio:1}.pane canvas{width:min(78vw,300px);height:auto;aspect-ratio:1}}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Losses and regularization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Train with noise<span>: and test by averaging it out</span></h1>
+<p class="quiz">Many regularizers share one pattern: <b>while training, add some randomness; at test time, average it away.</b> First the one that adds no noise at all, early stopping; then data augmentation, and a symmetry it can teach; then the pattern, method by method.</p>
+
+<!-- ============ (a) early stopping ============ -->
+<h2 class="sec">1. Early stopping <span>&mdash; keep the snapshot that did best on data it never trained on</span></h2>
+<svg id="esfig" viewBox="0 0 1000 320" role="img">
+<title>A curve fit to sixteen noisy points, and its training and validation loss over time</title>
+<desc>Left: sixteen noisy training points, the true curve dashed, the current fit, and the fit from the step with the lowest validation loss. Right: training loss and validation loss against training step on a log scale; the training loss keeps falling while the validation loss falls, bottoms out, and rises again, with the best step marked.</desc>
+<g id="esg"></g>
+</svg>
+<div class="row">
+<button class="main" id="esPlay" onclick="esToggle()">Pause</button>
+<button onclick="esNew()">New sample</button>
+<label class="cb"><input type="checkbox" id="esBest" checked onchange="esDraw()">show the best snapshot</label>
+</div>
+<div class="rd" id="esRd"></div>
+<div class="cap">The model is flexible on purpose: 30 bumps (Gaussian radial basis functions) to fit 16 noisy points, trained by plain gradient descent from all-zero weights. Gradient descent learns the smooth, broad shape first, because that is where the gradient is largest; the wiggles that thread every noisy point come much later. So the <b style="color:var(--warm-ink)">validation loss</b>, measured on 100 fresh points, falls, bottoms out, and rises, while the <b style="color:var(--blue-ink)">training loss</b> falls forever. <b>Early stopping</b> keeps the weights from the bottom of that dip. It adds no noise; it limits how far from the starting point training can wander, which for a linear model like this one acts much like a penalty on the weights (<a href="weight-decay.html">weight decay</a>). Note the log scale: the fit is best after about ten steps and spends the next thirty thousand getting worse.</div>
+
+<!-- ============ (b) data augmentation ============ -->
+<h2 class="sec">2. Data augmentation <span>&mdash; each training image, seen a different way every time</span></h2>
+<div class="tiles" id="tiles"></div>
+<div class="row"><button class="main" onclick="augDraw()">Resample</button></div>
+<div class="cap">Each change is one a label should survive: a flipped cat is still a cat. Every time the image comes round in training it is drawn again, so a network sees thousands of variants of each photograph, which is like having thousands more photographs of hippos. The <b>crop</b> is ResNet&rsquo;s recipe: resize so the short side is a random L between 256 and 480, then take a random 224&times;224 patch; here the picture is 256 pixels across and scaled the same way. <b>Cutout</b> blanks a random square, which after input normalization is zero, the average color. <b>Mixup</b> is the odd one: it blends two images, and blends their labels by the same weight, drawn from a Beta(&alpha;, &alpha;) distribution (&alpha; = 1 here, which is uniform; smaller &alpha; keeps most blends close to one image), so the target for a 40% cat, 60% dog picture is 40% cat, 60% dog. At test time the network sees the plain image (or, for a little extra accuracy, the average of its predictions over a fixed set of crops).</div>
+
+<!-- ============ (c) augmentation teaches a symmetry ============ -->
+<h2 class="sec">3. Augmentation teaches a symmetry <span>&mdash; the same small network, with and without rotations</span></h2>
+<div class="pair">
+ <div class="pane"><div class="pt" id="p0t"></div><canvas id="cv0" width="520" height="520"></canvas></div>
+ <div class="pane"><div class="pt" id="p1t"></div><canvas id="cv1" width="520" height="520"></canvas></div>
+</div>
+<div class="row">
+<button class="main" id="symPlay" onclick="symTrain()">Train again</button>
+<button onclick="symNew()">New training set</button>
+<span class="klab" id="symStep"></span>
+</div>
+<div class="cap">The true rule is a ring: points between the two dashed circles are <b style="color:var(--blue-ink)">blue</b>, the rest <b style="color:var(--warm-ink)">orange</b>, and the rule is the same after any rotation. But all 24 training points come from one quarter of the disk. Both networks are identical (2&rarr;16&rarr;16&rarr;1, tanh, Adam) and see the same points. The left one learns a boundary that works in its quarter and is guesswork elsewhere. The right one gets each point <b>rotated by a fresh random angle</b> at every step, the faint dots, so it never sees the same input twice; it is never told the rule is circular, but that is the only boundary consistent with all it was shown. The accuracy is measured over the whole disk. This is what augmentation is for: a symmetry you know the answer has, written into the data instead of into the network, where <a href="../convolutions/equivariance.html">convolutions</a> write translation.</div>
+
+<!-- ============ (d) the pattern ============ -->
+<h2 class="sec">4. The pattern <span>&mdash; noise while training, averaged away at test time</span></h2>
+<div class="tw"><table class="pat">
+<tr><th>Method</th><th>Randomness added while training</th><th>At test time</th></tr>
+<tr><td><a href="dropout.html">Dropout</a></td><td>Each unit zeroed with probability p</td><td>Keep every unit and scale by 1&minus;p, so each unit&rsquo;s output matches its average while training (or scale up by 1/(1&minus;p) while training, &ldquo;inverted dropout&rdquo;, and change nothing at test time)</td></tr>
+<tr><td>DropConnect</td><td>Each weight zeroed at random</td><td>Use every weight, scaled the same way</td></tr>
+<tr><td>BatchNorm</td><td>Each example normalized with the mean and spread of whichever random minibatch it landed in</td><td>Normalize with running averages of those statistics, the same for every input</td></tr>
+<tr><td>Data augmentation</td><td>Random flips, crops, scales and colors</td><td>The plain image, or the average prediction over a fixed set of crops (ResNet: 10 crops at each of 5 scales)</td></tr>
+<tr><td>Cutout</td><td>A random square blanked out</td><td>The whole image</td></tr>
+<tr><td>Mixup</td><td>Two images and their labels blended by a random weight</td><td>Real, unblended images</td></tr>
+<tr><td>Stochastic depth</td><td>Whole residual blocks skipped at random</td><td>Every block, each scaled by its survival probability (<a href="../depth/paths.html">why a ResNet can lose a block</a>)</td></tr>
+</table></div>
+<div class="cap" id="patcap">Each line trains many slightly different networks, or one network on many slightly different inputs, and asks the test-time network to behave like their average. The average is taken cheaply, by a rescaling or a fixed statistic, not by running the network thousands of times; for dropout the rescaling is exact for a single linear layer and a good approximation beyond it. <a href="dropout.html">Dropout</a> works through the expectation one unit at a time. Early stopping is the exception in the family: no noise, just a limit on how long the noise-free descent may run.</div>
+
+<script>
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function gauss(r){var u=0,v=0;while(!u)u=r();while(!v)v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()||'#888';}
+function T(x,y,s,cls,anc,fill){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'"'+(anc?' text-anchor="'+anc+'"':'')+(fill?' style="fill:'+fill+'"':'')+'>'+s+'</text>';}
+function mobile(){return !!(window.matchMedia&&window.matchMedia('(max-width:820px)').matches);}
+
+/* ================= (a) early stopping ================= */
+// 30 Gaussian bumps of width 0.15 on [-1.1, 1.1], fit to 16 stratified noisy points by
+// full-batch gradient descent at 0.3/lambda_max; checked offline over 20 seeds: the
+// validation loss bottoms out around step 10 and ends 2 to 3 times higher by step 30000.
+var ES={M:30,W:0.15,NT:16,NV:100,SG:0.3,TMAX:30000},es=null,esRaf=null,esRun=true,esSeed=1;
+function truth(x){return Math.sin(3*x)+0.3*x;}
+function esFeat(x){var f=new Float64Array(ES.M);for(var i=0;i<ES.M;i++){var c=-1.1+2.2*i/(ES.M-1),d=x-c;f[i]=Math.exp(-d*d/(2*ES.W*ES.W));}return f;}
+function esMake(seed){var r=mulberry32(seed),s={TX:[],TY:[],VX:[],VY:[],t:0,hist:[],best:1e9,bestT:0};
+ for(var i=0;i<ES.NT;i++){var x=-1+2*(i+r())/ES.NT;s.TX.push(x);s.TY.push(truth(x)+ES.SG*gauss(r));}
+ for(i=0;i<ES.NV;i++){var x2=-1+2*r();s.VX.push(x2);s.VY.push(truth(x2)+ES.SG*gauss(r));}
+ s.TF=s.TX.map(esFeat);s.VF=s.VX.map(esFeat);s.w=new Float64Array(ES.M);s.bw=new Float64Array(ES.M);
+ // largest eigenvalue of the loss's Hessian, 2 F^T F / n, by power iteration
+ var v=new Float64Array(ES.M).fill(1),lam=1;
+ for(var it=0;it<60;it++){var u=new Float64Array(ES.M);s.TF.forEach(function(f){var d=0,k;for(k=0;k<ES.M;k++)d+=f[k]*v[k];for(k=0;k<ES.M;k++)u[k]+=2*f[k]*d/ES.NT;});
+  lam=Math.sqrt(u.reduce(function(a,b){return a+b*b;},0));for(var k=0;k<ES.M;k++)v[k]=u[k]/lam;}
+ s.lr=0.3/lam;s.hist.push([0,esLoss(s,s.TF,s.TY),esLoss(s,s.VF,s.VY)]);s.best=s.hist[0][2];return s;}
+function esPred(w,f){var p=0;for(var k=0;k<ES.M;k++)p+=w[k]*f[k];return p;}
+function esLoss(s,F,Y,w){w=w||s.w;var e=0;for(var j=0;j<F.length;j++){var d=esPred(w,F[j])-Y[j];e+=d*d;}return e/F.length;}
+function esStep(s){var g=new Float64Array(ES.M);
+ for(var j=0;j<ES.NT;j++){var f=s.TF[j],e=2*(esPred(s.w,f)-s.TY[j])/ES.NT;for(var k=0;k<ES.M;k++)g[k]+=e*f[k];}
+ for(var k=0;k<ES.M;k++)s.w[k]-=s.lr*g[k];s.t++;
+ // the validation loss is checked every step early on, where the dip is, and every tenth later
+ if(s.t<2000||s.t%10===0){var vl=esLoss(s,s.VF,s.VY);if(vl<s.best){s.best=vl;s.bestT=s.t;s.bw.set(s.w);}}}
+function esTick(){if(!esRun||es.t>=ES.TMAX){esRaf=null;if(es.t>=ES.TMAX){esRun=false;document.getElementById('esPlay').textContent='Replay';}return;}
+ // time runs on a log scale: each frame goes about 4% further than the last
+ var target=Math.min(ES.TMAX,Math.max(es.t+1,Math.round(es.t*1.04)));
+ while(es.t<target)esStep(es);
+ es.hist.push([es.t,esLoss(es,es.TF,es.TY),esLoss(es,es.VF,es.VY)]);esDraw();esRaf=requestAnimationFrame(esTick);}
+function esToggle(){if(es.t>=ES.TMAX){es=esMake(esSeed);esRun=true;}else esRun=!esRun;
+ document.getElementById('esPlay').textContent=esRun?'Pause':'Play';if(esRun&&!esRaf)esRaf=requestAnimationFrame(esTick);esDraw();}
+function esNew(){esSeed=1+Math.floor(Math.random()*1e6);es=esMake(esSeed);esRun=true;document.getElementById('esPlay').textContent='Pause';if(!esRaf)esRaf=requestAnimationFrame(esTick);esDraw();}
+function esDraw(){var mob=mobile(),s='',i,showB=document.getElementById('esBest').checked;
+ var BLUE='var(--blue)',WARM='var(--warm)',GREEN='var(--green)';
+ // left: the fit
+ var L={x0:50,x1:470,y0:30,y1:280},R=mob?{x0:50,x1:470,y0:360,y1:600}:{x0:560,x1:970,y0:30,y1:280};
+ function lx(x){return L.x0+(x+1.1)/2.2*(L.x1-L.x0);}function ly(y){return (L.y0+L.y1)/2-y*(L.y1-L.y0)/4.4;}
+ s+='<rect x="'+L.x0+'" y="'+L.y0+'" width="'+(L.x1-L.x0)+'" height="'+(L.y1-L.y0)+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
+ s+='<clipPath id="lc"><rect x="'+L.x0+'" y="'+L.y0+'" width="'+(L.x1-L.x0)+'" height="'+(L.y1-L.y0)+'"/></clipPath>';
+ s+=T((L.x0+L.x1)/2,L.y0-10,'the fit, at step '+es.t.toLocaleString(),'ts','middle');
+ function curve(fn,col,w,dash,op){var p='';for(i=0;i<=160;i++){var x=-1.1+2.2*i/160,y=Math.max(-2.3,Math.min(2.3,fn(x)));p+=(i?'L':'M')+lx(x).toFixed(1)+' '+ly(y).toFixed(1)+' ';}
+  return '<path d="'+p+'" fill="none" stroke="'+col+'" stroke-width="'+w+'"'+(dash?' stroke-dasharray="'+dash+'"':'')+(op?' opacity="'+op+'"':'')+' clip-path="url(#lc)"/>';}
+ s+=curve(truth,'var(--text-muted)',1.6,'6 5');
+ if(showB&&es.bestT)s+=curve(function(x){return esPred(es.bw,esFeat(x));},GREEN,2.4,null,0.9);
+ s+=curve(function(x){return esPred(es.w,esFeat(x));},WARM,2.6);
+ for(i=0;i<ES.NV;i++)s+='<circle cx="'+lx(es.VX[i]).toFixed(1)+'" cy="'+ly(es.VY[i]).toFixed(1)+'" r="2" fill="var(--text-muted)" opacity="0.35"/>';
+ for(i=0;i<ES.NT;i++)s+='<circle cx="'+lx(es.TX[i]).toFixed(1)+'" cy="'+ly(es.TY[i]).toFixed(1)+'" r="4.2" fill="'+BLUE+'" stroke="var(--blue-ink)" stroke-width="1"/>';
+ s+=T(L.x0,L.y1+18,'<tspan style="fill:var(--blue)">&#9679;</tspan> 16 training points   <tspan style="fill:var(--text-muted)">&#9679;</tspan> 100 validation points   <tspan style="fill:var(--text-muted)">&#8211; &#8211;</tspan> truth','tn','start');
+ s+=T(L.x0,L.y1+36,'<tspan style="fill:var(--warm)">&#9644;</tspan> fit now'+(showB?'   <tspan style="fill:var(--green)">&#9644;</tspan> best snapshot, step '+es.bestT:''),'tn','start');
+ // right: the loss curves, step on a log scale
+ var tmax=Math.log10(ES.TMAX+1),lmax=Math.max(1.0,1.1*Math.max.apply(null,es.hist.map(function(h){return h[2];})));
+ function rx(t){return R.x0+Math.log10(t+1)/tmax*(R.x1-R.x0);}function ry(v){return R.y1-Math.min(v,lmax)/lmax*(R.y1-R.y0);}
+ s+='<rect x="'+R.x0+'" y="'+R.y0+'" width="'+(R.x1-R.x0)+'" height="'+(R.y1-R.y0)+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
+ s+=T((R.x0+R.x1)/2,R.y0-10,'loss (mean squared error) against step','ts','middle');
+ [0,1,10,100,1000,10000].forEach(function(t){s+='<line x1="'+rx(t)+'" y1="'+R.y0+'" x2="'+rx(t)+'" y2="'+R.y1+'" stroke="var(--border)" stroke-width="0.6"/>'+T(rx(t),R.y1+15,t>=1000?t/1000+'k':String(t),'tn','middle');});
+ s+=T((R.x0+R.x1)/2,R.y1+33,'step (log scale)','tn','middle');
+ [0,0.5,1,1.5,2,3].forEach(function(v){if(v<=lmax)s+=T(R.x0-6,ry(v)+4,String(v),'tn','end');});
+ function hp(k,col,w){var p='';es.hist.forEach(function(h,j){p+=(j?'L':'M')+rx(h[0]).toFixed(1)+' '+ry(h[k]).toFixed(1)+' ';});return '<path d="'+p+'" fill="none" stroke="'+col+'" stroke-width="'+w+'"/>';}
+ s+=hp(1,BLUE,2.4)+hp(2,WARM,2.4);
+ if(es.bestT){var bx=rx(es.bestT);s+='<line x1="'+bx+'" y1="'+R.y0+'" x2="'+bx+'" y2="'+R.y1+'" stroke="'+GREEN+'" stroke-width="1.5" stroke-dasharray="4 3"/>'+
+  '<circle cx="'+bx.toFixed(1)+'" cy="'+ry(es.best).toFixed(1)+'" r="5" fill="'+GREEN+'" stroke="var(--bg)" stroke-width="1.5"/>'+T(bx+6,R.y0+16,'stop here','tn','start','var(--green-ink)');}
+ var last=es.hist[es.hist.length-1];
+ s+=T(R.x1-6,ry(last[2])-7,'validation','tn','end','var(--warm-ink)')+T(R.x1-6,ry(last[1])-7,'training','tn','end','var(--blue-ink)');
+ var svg=document.getElementById('esfig');svg.setAttribute('viewBox',mob?'0 0 520 660':'0 0 1000 330');
+ document.getElementById('esg').innerHTML=s;
+ document.getElementById('esRd').innerHTML='Step <b class="num">'+es.t.toLocaleString()+'</b>: training loss <b class="num">'+last[1].toFixed(3)+'</b>, validation loss <b class="num">'+last[2].toFixed(3)+'</b>. '+
+  'Best validation so far <b class="num">'+es.best.toFixed(3)+'</b>, at step <b class="num">'+es.bestT+'</b>'+(last[2]>1.3*es.best?' &mdash; every step since has made the model worse on new data while it got better on its own.':'.');}
+
+/* ================= (b) data augmentation ================= */
+// Two pictures drawn on 256x256 canvases: a cat face and a dog face, each in a scene
+// with the sun at the upper left, so a flip is visible.
+function scene(ctx,kind){var S=256;
+ var g=ctx.createLinearGradient(0,0,0,S);g.addColorStop(0,kind==='cat'?'#9fd0f0':'#b9dcf2');g.addColorStop(0.62,'#dff0fa');g.addColorStop(0.62,'#8cc46a');g.addColorStop(1,'#5f9e45');
+ ctx.fillStyle=g;ctx.fillRect(0,0,S,S);
+ ctx.fillStyle='#f6c945';ctx.beginPath();ctx.arc(46,44,22,0,7);ctx.fill();
+ ctx.fillStyle='#ffffff';[[190,40,16],[210,46,20],[228,40,14]].forEach(function(c){ctx.beginPath();ctx.arc(c[0],c[1],c[2],0,7);ctx.fill();});
+ if(kind==='cat'){ctx.fillStyle='#e8913a';
+  ctx.beginPath();ctx.moveTo(86,108);ctx.lineTo(96,56);ctx.lineTo(126,96);ctx.fill();
+  ctx.beginPath();ctx.moveTo(170,108);ctx.lineTo(160,56);ctx.lineTo(130,96);ctx.fill();
+  ctx.beginPath();ctx.ellipse(128,140,62,56,0,0,7);ctx.fill();
+  ctx.fillStyle='#fbe3c4';ctx.beginPath();ctx.ellipse(128,160,30,22,0,0,7);ctx.fill();
+  ctx.fillStyle='#2a6e3a';[[104,128],[152,128]].forEach(function(e){ctx.beginPath();ctx.ellipse(e[0],e[1],9,12,0,0,7);ctx.fill();});
+  ctx.fillStyle='#111';[[104,128],[152,128]].forEach(function(e){ctx.beginPath();ctx.ellipse(e[0],e[1],3,9,0,0,7);ctx.fill();});
+  ctx.fillStyle='#d9557a';ctx.beginPath();ctx.moveTo(122,150);ctx.lineTo(134,150);ctx.lineTo(128,157);ctx.fill();
+  ctx.strokeStyle='#553';ctx.lineWidth=1.5;[[-1,-4],[-1,4],[1,-4],[1,4]].forEach(function(w){ctx.beginPath();ctx.moveTo(128+w[0]*14,158);ctx.lineTo(128+w[0]*52,158+w[1]*2);ctx.stroke();});
+ }else{ctx.fillStyle='#8a5a33';
+  ctx.beginPath();ctx.ellipse(128,138,60,58,0,0,7);ctx.fill();
+  ctx.fillStyle='#5c3a1e';ctx.beginPath();ctx.ellipse(72,140,18,42,0.25,0,7);ctx.fill();ctx.beginPath();ctx.ellipse(184,140,18,42,-0.25,0,7);ctx.fill();
+  ctx.fillStyle='#e9d2b4';ctx.beginPath();ctx.ellipse(128,168,34,26,0,0,7);ctx.fill();
+  ctx.fillStyle='#fff';[[106,124],[150,124]].forEach(function(e){ctx.beginPath();ctx.arc(e[0],e[1],9,0,7);ctx.fill();});
+  ctx.fillStyle='#222';[[108,126],[152,126]].forEach(function(e){ctx.beginPath();ctx.arc(e[0],e[1],5,0,7);ctx.fill();});
+  ctx.beginPath();ctx.ellipse(128,154,11,8,0,0,7);ctx.fill();
+  ctx.fillStyle='#e0607a';ctx.beginPath();ctx.ellipse(128,184,8,11,0,0,7);ctx.fill();}}
+var BASE={};['cat','dog'].forEach(function(k){var c=document.createElement('canvas');c.width=c.height=256;scene(c.getContext('2d'),k);BASE[k]=c;});
+function gammaS(a,r){if(a<1)return gammaS(a+1,r)*Math.pow(r(),1/a);var d=a-1/3,c=1/Math.sqrt(9*d);
+ for(;;){var x=gauss(r),v=1+c*x;if(v<=0)continue;v=v*v*v;var u=r();if(Math.log(u)<0.5*x*x+d-d*v+d*Math.log(v))return d*v;}}
+function betaS(a,r){var x=gammaS(a,r),y=gammaS(a,r);return x/(x+y);}
+function tile(title,desc,draw,label){var d=document.createElement('div');d.className='tile';var c=document.createElement('canvas');c.width=c.height=256;
+ d.innerHTML='<div class="tt">'+title+'</div>';d.appendChild(c);var t=document.createElement('div');t.className='td';t.innerHTML=desc;d.appendChild(t);
+ if(label){var b=document.createElement('div');b.className='lbar';b.innerHTML='<div style="width:'+(100*label[0]).toFixed(0)+'%;background:var(--warm)"></div><div style="flex:1;background:var(--blue)"></div>';d.appendChild(b);}
+ draw(c.getContext('2d'));return d;}
+function augDraw(){var r=Math.random,box=document.getElementById('tiles');box.innerHTML='';
+ box.appendChild(tile('Original','the training image, labelled &ldquo;cat&rdquo;',function(x){x.drawImage(BASE.cat,0,0);}));
+ box.appendChild(tile('Horizontal flip','mirror left to right: the sun moves to the right',function(x){x.save();x.translate(256,0);x.scale(-1,1);x.drawImage(BASE.cat,0,0);x.restore();}));
+ var Lr=256+Math.floor(r()*225),sz=224*256/Lr,ox=r()*(256-sz),oy=r()*(256-sz);
+ box.appendChild(tile('Random crop and scale','short side L = '+Lr+', then a random 224&times;224 patch at ('+Math.round(ox*Lr/256)+', '+Math.round(oy*Lr/256)+')',function(x){x.drawImage(BASE.cat,ox,oy,sz,sz,0,0,256,256);}));
+ var br=0.6+0.8*r(),ct=0.6+0.8*r(),sa=0.4+1.2*r();
+ box.appendChild(tile('Color jitter','brightness &times;'+br.toFixed(2)+', contrast &times;'+ct.toFixed(2)+', saturation &times;'+sa.toFixed(2),function(x){x.drawImage(BASE.cat,0,0);
+  var im=x.getImageData(0,0,256,256),p=im.data;for(var i=0;i<p.length;i+=4){var R=p[i]*br,G=p[i+1]*br,B=p[i+2]*br,Y=0.299*R+0.587*G+0.114*B;
+   R=Y+(R-Y)*sa;G=Y+(G-Y)*sa;B=Y+(B-Y)*sa;p[i]=128+(R-128)*ct;p[i+1]=128+(G-128)*ct;p[i+2]=128+(B-128)*ct;}x.putImageData(im,0,0);}));
+ var cs=88,cx=r()*(256-cs),cy=r()*(256-cs);
+ box.appendChild(tile('Cutout','an '+cs+'-pixel square at ('+Math.round(cx)+', '+Math.round(cy)+') set to the average color',function(x){x.drawImage(BASE.cat,0,0);x.fillStyle='#8f8f8f';x.fillRect(cx,cy,cs,cs);}));
+ var lam=betaS(1,r);   // Beta(1, 1) is uniform; smaller alpha pushes the blend toward one image
+ box.appendChild(tile('Mixup','&lambda; = '+lam.toFixed(2)+' from Beta(1, 1): the label is <span style="color:var(--warm-ink)">'+Math.round(100*lam)+'% cat</span>, <span style="color:var(--blue-ink)">'+(100-Math.round(100*lam))+'% dog</span>',function(x){x.globalAlpha=1;x.drawImage(BASE.cat,0,0);x.globalAlpha=1-lam;x.drawImage(BASE.dog,0,0);x.globalAlpha=1;},[lam]));}
+
+/* ================= (c) augmentation teaches a symmetry ================= */
+// Checked offline over 5 seeds: trained on one quadrant, no augmentation reaches about
+// 57% over the whole disk and random rotations about 94%.
+function ringLab(x,y){var r=Math.hypot(x,y);return r>0.45&&r<0.8?1:0;}
+var SY={H:16,N:24,STEPS:1500},sym=null,symRaf=null,symSeed=1;
+function mkNet(H,r){function m(a,b,s){var W=[];for(var i=0;i<a;i++){var row=new Float64Array(b);for(var j=0;j<b;j++)row[j]=s*gauss(r);W.push(row);}return W;}
+ return {W1:m(H,2,1),b1:new Float64Array(H),W2:m(H,H,1/Math.sqrt(H)),b2:new Float64Array(H),W3:m(1,H,1/Math.sqrt(H))[0],b3:new Float64Array(1)};}
+function fwd(n,x0,x1){var H=n.b1.length,h1=new Float64Array(H),h2=new Float64Array(H),i,j,s;
+ for(i=0;i<H;i++)h1[i]=Math.tanh(n.b1[i]+n.W1[i][0]*x0+n.W1[i][1]*x1);
+ for(i=0;i<H;i++){s=n.b2[i];for(j=0;j<H;j++)s+=n.W2[i][j]*h1[j];h2[i]=Math.tanh(s);}
+ s=n.b3[0];for(j=0;j<H;j++)s+=n.W3[j]*h2[j];return {h1:h1,h2:h2,p:1/(1+Math.exp(-s))};}
+function flat(n){var a=[n.b1,n.b2,n.W3,n.b3];n.W1.forEach(function(r){a.push(r);});n.W2.forEach(function(r){a.push(r);});return a;}
+function adamState(n){return {t:0,m:flat(n).map(function(a){return new Float64Array(a.length);}),v:flat(n).map(function(a){return new Float64Array(a.length);})};}
+function trainStep(n,st,batch,lr){var H=n.b1.length,g={W1:n.W1.map(function(){return new Float64Array(2);}),b1:new Float64Array(H),W2:n.W2.map(function(){return new Float64Array(H);}),b2:new Float64Array(H),W3:new Float64Array(H),b3:new Float64Array(1)};
+ batch.forEach(function(d){var f=fwd(n,d[0],d[1]),dz=(f.p-d[2])/batch.length,i,j,dh2=new Float64Array(H),dh1=new Float64Array(H);
+  for(j=0;j<H;j++){g.W3[j]+=dz*f.h2[j];dh2[j]=dz*n.W3[j]*(1-f.h2[j]*f.h2[j]);}g.b3[0]+=dz;
+  for(i=0;i<H;i++){g.b2[i]+=dh2[i];for(j=0;j<H;j++){g.W2[i][j]+=dh2[i]*f.h1[j];dh1[j]+=dh2[i]*n.W2[i][j];}}
+  for(j=0;j<H;j++){var q=dh1[j]*(1-f.h1[j]*f.h1[j]);g.b1[j]+=q;g.W1[j][0]+=q*d[0];g.W1[j][1]+=q*d[1];}});
+ st.t++;var P=flat(n),G=flat(g),c1=1-Math.pow(0.9,st.t),c2=1-Math.pow(0.999,st.t);
+ for(var a=0;a<P.length;a++)for(var k=0;k<P[a].length;k++){var gk=G[a][k];st.m[a][k]=0.9*st.m[a][k]+0.1*gk;st.v[a][k]=0.999*st.v[a][k]+0.001*gk*gk;
+  P[a][k]-=lr*(st.m[a][k]/c1)/(Math.sqrt(st.v[a][k]/c2)+1e-8);}}
+function symMake(seed){var r=mulberry32(seed),D=[];
+ while(D.length<SY.N){var a=Math.PI/2*r(),rad=1.05*Math.sqrt(r()),x=rad*Math.cos(a),y=rad*Math.sin(a);D.push([x,y,ringLab(x,y)]);}
+ // the two networks start from identical weights, so only the data differs
+ var n0=mkNet(SY.H,mulberry32(seed*7+3)),n1=mkNet(SY.H,mulberry32(seed*7+3));
+ return {D:D,nets:[n0,n1],st:[adamState(n0),adamState(n1)],rng:mulberry32(seed+99),t:0,copies:[],acc:[0,0]};}
+function symAcc(n){var c=0,t=0;for(var i=0;i<50;i++)for(var j=0;j<50;j++){var x=-1.1+2.2*(i+.5)/50,y=-1.1+2.2*(j+.5)/50;if(Math.hypot(x,y)>1.1)continue;t++;if((fwd(n,x,y).p>0.5?1:0)===ringLab(x,y))c++;}return c/t;}
+function symTick(){for(var k=0;k<10&&sym.t<SY.STEPS;k++){
+  trainStep(sym.nets[0],sym.st[0],sym.D,0.02);
+  var rot=sym.D.map(function(d){var th=2*Math.PI*sym.rng(),c=Math.cos(th),s=Math.sin(th);return [c*d[0]-s*d[1],s*d[0]+c*d[1],d[2]];});
+  trainStep(sym.nets[1],sym.st[1],rot,0.02);sym.copies.push(rot);if(sym.copies.length>6)sym.copies.shift();sym.t++;}
+ if(sym.t%50===0||sym.t>=SY.STEPS)sym.acc=[symAcc(sym.nets[0]),symAcc(sym.nets[1])];
+ symDraw();if(sym.t<SY.STEPS)symRaf=requestAnimationFrame(symTick);else symRaf=null;}
+function symTrain(){if(symRaf)cancelAnimationFrame(symRaf);sym=symMake(symSeed);symRaf=requestAnimationFrame(symTick);}
+function symNew(){symSeed=1+Math.floor(Math.random()*1e6);symTrain();}
+function hexRGB(c){var d=document.createElement('div');d.style.color=c;document.body.appendChild(d);var m=getComputedStyle(d).color.match(/\d+/g).map(Number);d.remove();return m;}
+var COLS=null;
+function symDraw(){if(!COLS)COLS={b:hexRGB(css('--blue')),w:hexRGB(css('--warm')),s:hexRGB(css('--surface')),ink:css('--text-primary'),mut:css('--text-muted')};
+ [0,1].forEach(function(k){var cv=document.getElementById('cv'+k),x=cv.getContext('2d'),S=cv.width,G=65,cell=S/G,n=sym.nets[k];
+  function px(v){return (v+1.1)/2.2*S;}
+  for(var i=0;i<G;i++)for(var j=0;j<G;j++){var X=-1.1+2.2*(i+.5)/G,Y=1.1-2.2*(j+.5)/G,p=fwd(n,X,Y).p,a=Math.abs(p-0.5)*2*0.55,c=p>0.5?COLS.b:COLS.w;
+   x.fillStyle='rgb('+[0,1,2].map(function(q){return Math.round(COLS.s[q]+(c[q]-COLS.s[q])*a);}).join(',')+')';x.fillRect(i*cell,j*cell,cell+0.6,cell+0.6);}
+  x.strokeStyle=COLS.mut;x.lineWidth=2;x.setLineDash([8,7]);[0.45,0.8].forEach(function(r){x.beginPath();x.arc(S/2,S/2,r/2.2*S,0,7);x.stroke();});x.setLineDash([]);
+  x.strokeStyle=COLS.mut;x.lineWidth=1;x.beginPath();x.arc(S/2,S/2,1.1/2.2*S,0,7);x.stroke();
+  if(k===1)sym.copies.forEach(function(b){b.forEach(function(d){x.fillStyle='rgba('+(d[2]?COLS.b:COLS.w).join(',')+',0.35)';x.beginPath();x.arc(px(d[0]),S-px(d[1]),4,0,7);x.fill();});});
+  sym.D.forEach(function(d){x.fillStyle='rgb('+(d[2]?COLS.b:COLS.w).join(',')+')';x.strokeStyle=COLS.ink;x.lineWidth=1.5;x.beginPath();x.arc(px(d[0]),S-px(d[1]),7,0,7);x.fill();x.stroke();});
+  document.getElementById('p'+k+'t').innerHTML=(k?'<b>with random rotations</b>':'<b>no augmentation</b>')+' &middot; accuracy over the disk <b class="num">'+(100*sym.acc[k]).toFixed(0)+'%</b>';});
+ document.getElementById('symStep').textContent='step '+sym.t+' of '+SY.STEPS;}
+
+/* ================= start ================= */
+es=esMake(esSeed);esDraw();esRaf=requestAnimationFrame(esTick);
+augDraw();
+symTrain();
+window.addEventListener('resize',function(){esDraw();});
+if(window.matchMedia)window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){COLS=null;if(sym)symDraw();});
+</script>
+</body>
+</html>

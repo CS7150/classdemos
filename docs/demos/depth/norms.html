@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Which axes get normalized</title>
+<meta name="description" content="An N×C×(H·W) activation tensor drawn as a block of cells: pick BatchNorm, LayerNorm, InstanceNorm or GroupNorm and the cells that share one mean and standard deviation light up.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 16px;max-width:1100px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+.quiz{margin:0}
+#wrap{display:flex;gap:14px;align-items:stretch}
+#fig{flex:1 1 60%;min-width:0;max-height:62vh;touch-action:none;cursor:grab}
+#side{flex:0 0 300px;font-size:13.5px;line-height:1.55;color:var(--text-secondary)}
+#side b{font-weight:500;color:var(--text-primary)}
+#side .big{font-size:22px;font-weight:500;color:var(--text-primary);font-variant-numeric:tabular-nums}
+#side table{border-collapse:collapse;margin-top:4px;font-variant-numeric:tabular-nums;font-size:13px}
+#side td{padding:1px 10px 1px 0}
+#side .hot td{color:var(--text-primary);font-weight:500}
+.row{gap:7px}
+button{height:30px;font-size:13px;padding:0 9px}
+.seg button{height:28px;font-size:12.5px;padding:0 10px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:24px}
+input[type=range]{flex:0 1 110px;min-width:80px}
+.rd{font-size:14px;line-height:1.5;min-height:1.5em}
+.cap{font-size:12.5px;line-height:1.55;padding-top:4px}
+@media (max-width:820px){#wrap{flex-direction:column}#side{flex:none}#fig{max-height:none}}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Training deep networks demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Which axes get normalized<span>: BatchNorm, LayerNorm, InstanceNorm, GroupNorm</span></h1>
+<p class="quiz">Every normalization layer subtracts a mean and divides by a standard deviation. They differ only in <b>which numbers share one mean</b>. The block is a batch of activations: N examples, C channels, and the H&times;W positions flattened into one axis. <b>Click a cell</b> to light up the cells it is normalized with; drag to turn the block.</p>
+
+<div id="wrap">
+<svg id="fig" viewBox="0 0 560 440" role="img">
+<title>An activation tensor with the cells sharing one set of statistics highlighted</title>
+<desc>A block of small cubes: channels run across, examples in the batch run back, and spatial positions run up. The cells that are averaged together with the chosen cell are solid blue; the rest are faint. BatchNorm lights one channel across every example and position; LayerNorm one example across every channel and position; InstanceNorm one example and one channel; GroupNorm one example and a group of channels.</desc>
+<g id="stage"></g>
+</svg>
+<div id="side"></div>
+</div>
+
+<div class="row">
+<div class="seg" id="nseg">
+<button data-k="bn" class="on">BatchNorm</button><button data-k="ln">LayerNorm</button><button data-k="in">InstanceNorm</button><button data-k="gn">GroupNorm</button>
+</div>
+<span class="klab" id="glab">groups</span>
+<select id="gsel" onchange="G=+this.value;draw()"><option>1</option><option selected>2</option><option>3</option><option>6</option></select>
+<span class="klab" style="margin-left:8px">batch size N</span>
+<input type="range" id="nsl" min="1" max="6" step="1" value="4" oninput="setN(+this.value)">
+<span class="knum" id="nv">4</span>
+</div>
+<div class="rd" id="readout"></div>
+<div class="cap" id="caption"></div>
+
+<script>
+var C=6,S=5,N=4,NMAX=6,K='bn',G=2,SEL=[0,1,2],PHI=-38,THE=24,rad=Math.PI/180;
+// A fixed batch of activations: each channel has its own typical level and each example
+// its own overall brightness, so different groupings give visibly different statistics.
+var V=[];(function(){var seed=7;function r(){seed=(seed*16807)%2147483647;return seed/2147483647;}
+ var ch=[],ex=[],i,c,s;for(c=0;c<C;c++)ch.push(-2+4*r());for(i=0;i<NMAX;i++)ex.push(-1+2*r());
+ for(i=0;i<NMAX;i++){V.push([]);for(c=0;c<C;c++){V[i].push([]);for(s=0;s<S;s++)V[i][c].push(ch[c]+ex[i]+1.2*(r()+r()+r()-1.5));}}})();
+
+// which cells share statistics with cell (n,c,s) under the current norm
+function gsize(){return C/G;}
+function same(a,b){
+ if(K==='bn')return a[1]===b[1];
+ if(K==='ln')return a[0]===b[0];
+ if(K==='in')return a[0]===b[0]&&a[1]===b[1];
+ return a[0]===b[0]&&Math.floor(a[1]/gsize())===Math.floor(b[1]/gsize());}
+function groupOf(sel){var g=[],n,c,s;for(n=0;n<N;n++)for(c=0;c<C;c++)for(s=0;s<S;s++)if(same(sel,[n,c,s]))g.push([n,c,s]);return g;}
+function stats(g){var m=0,v=0;g.forEach(function(p){m+=V[p[0]][p[1]][p[2]];});m/=g.length;
+ g.forEach(function(p){var d=V[p[0]][p[1]][p[2]]-m;v+=d*d;});return {m:m,sd:Math.sqrt(v/g.length)};}
+function nstats(){return K==='bn'?C:K==='ln'?N:K==='in'?N*C:N*G;}
+
+/* ---------- 3D ---------- */
+// x runs along channels, y up along positions, z back along the batch; orthographic
+function cam(){var f=PHI*rad,t=THE*rad;return {V:[Math.sin(f)*Math.cos(t),Math.sin(t),-Math.cos(f)*Math.cos(t)],R:[Math.cos(f),0,Math.sin(f)],
+ U:[-Math.sin(f)*Math.sin(t),Math.cos(t),Math.cos(f)*Math.sin(t)]};}
+function dot(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];}
+var FACES=[[[0,0,-1],[[0,0,0],[1,0,0],[1,1,0],[0,1,0]]],[[0,0,1],[[0,0,1],[1,0,1],[1,1,1],[0,1,1]]],[[1,0,0],[[1,0,0],[1,0,1],[1,1,1],[1,1,0]]],
+ [[-1,0,0],[[0,0,0],[0,0,1],[0,1,1],[0,1,0]]],[[0,1,0],[[0,1,0],[1,1,0],[1,1,1],[0,1,1]]],[[0,-1,0],[[0,0,0],[1,0,0],[1,0,1],[0,0,1]]]];
+var GAP=0.18;
+function mix(c,p){return 'color-mix(in oklab, '+c+' '+p+'%, var(--surface))';}
+function draw(){
+ document.getElementById('nv').textContent=N;
+ document.getElementById('gsel').style.visibility=document.getElementById('glab').style.visibility=K==='gn'?'visible':'hidden';
+ if(SEL[0]>=N)SEL[0]=N-1;
+ var Cm=cam(),grp=groupOf(SEL),inG={},i;grp.forEach(function(p){inG[p.join()]=1;});
+ // the block is centred on the origin before projecting
+ var cx=C*(1+GAP)/2,cy=S*(1+GAP)/2,cz=NMAX*(1+GAP)/2;
+ function w(n,c,s,u){return [c*(1+GAP)+u[0]-cx,s*(1+GAP)+u[1]-cy,n*(1+GAP)+u[2]-cz];}
+ // fit the full-size block (the largest batch) to the frame, so resizing N does not jump
+ var xs=[],ys=[];[-cx,cx].forEach(function(X){[-cy,cy].forEach(function(Y){[-cz,cz].forEach(function(Z){xs.push(dot([X,Y,Z],Cm.R));ys.push(-dot([X,Y,Z],Cm.U));});});});
+ var mnx=Math.min.apply(null,xs),mxx=Math.max.apply(null,xs),mny=Math.min.apply(null,ys),mxy=Math.max.apply(null,ys);
+ var sc=Math.min(460/(mxx-mnx),350/(mxy-mny)),ox=280-sc*(mnx+mxx)/2,oy=220-sc*(mny+mxy)/2;
+ function P(p){return [ox+sc*dot(p,Cm.R),oy-sc*dot(p,Cm.U)];}
+ var cells=[],n,c,s;
+ for(n=0;n<N;n++)for(c=0;c<C;c++)for(s=0;s<S;s++)cells.push([n,c,s,dot(w(n,c,s,[.5,.5,.5]),Cm.V)]);
+ cells.sort(function(a,b){return a[3]-b[3];});  // far cells first
+ var o='';
+ cells.forEach(function(q){var key=q[0]+','+q[1]+','+q[2],on=!!inG[key],sel=key===SEL.join();
+  var col=sel?'var(--pink)':on?'var(--blue)':'var(--border-strong)';
+  o+='<g data-c="'+key+'" style="cursor:pointer">';
+  FACES.forEach(function(f){if(dot(f[0],Cm.V)<=1e-6)return;
+   var sh=f[0][1]?(on?62:30):f[0][2]?(on?48:22):(on?36:16);
+   o+='<polygon points="'+f[1].map(function(u){var r=P(w(q[0],q[1],q[2],u));return r[0].toFixed(1)+','+r[1].toFixed(1);}).join(' ')+
+    '" fill="'+mix(col,sh)+'" fill-opacity="'+(on||sel?0.95:0.06)+'" stroke="'+(on||sel?'color-mix(in oklab, '+col+' 70%, var(--text-primary))':'var(--border-strong)')+
+    '" stroke-width="'+(sel?1.6:0.6)+'" stroke-opacity="'+(on||sel?1:0.35)+'"/>';});
+  o+='</g>';});
+ // axis labels along three edges of the block
+ // each axis is labelled on whichever of its four parallel edges sits farthest out on
+ // screen, pushed a little further away from the block's centre
+ var O=P([0,0,0]);
+ function lab(a,b,t){var best=null,bd=-1;[[1,1],[1,-1],[-1,1],[-1,-1]].forEach(function(sg){
+   var pa=a.map(function(v,k){return v==='*'?0:v*(k===0?cx:k===1?cy:cz);}),pb=b.map(function(v,k){return v==='*'?0:v*(k===0?cx:k===1?cy:cz);}),j=0;
+   for(var k=0;k<3;k++)if(a[k]!=='*'&&a[k]===b[k]){pa[k]=pb[k]=sg[j]*(k===0?cx:k===1?cy:cz);j++;}
+   var p=P(pa),q=P(pb),m=[(p[0]+q[0])/2,(p[1]+q[1])/2],d=Math.hypot(m[0]-O[0],m[1]-O[1]);if(d>bd){bd=d;best=m;}});
+  var dx=best[0]-O[0],dy=best[1]-O[1],l=Math.hypot(dx,dy)||1;
+  return '<text class="tn gl" x="'+(best[0]+dx/l*22).toFixed(1)+'" y="'+(best[1]+dy/l*22+4).toFixed(1)+'" text-anchor="middle">'+t+'</text>';}
+ // endpoints as signs of the half-extents: the varying axis runs -1 to 1, the other two
+ // are chosen by lab() among the four edges
+ o+=lab([-1,0,0],[1,0,0],'C channels');
+ o+=lab([0,0,-1],[0,0,1],'N examples');
+ o+=lab([0,-1,0],[0,1,0],'H&middot;W positions');
+ document.getElementById('stage').innerHTML=o;
+ side(grp);readout();caption();
+}
+function f2(v){return (v<0?'&minus;':'')+Math.abs(v).toFixed(2);}
+var NAME={bn:'BatchNorm',ln:'LayerNorm',in:'InstanceNorm',gn:'GroupNorm'};
+function side(grp){
+ var st=stats(grp),x=V[SEL[0]][SEL[1]][SEL[2]],h='';
+ h+='<div><b>Cell</b>: example '+(SEL[0]+1)+', channel '+(SEL[1]+1)+', position '+(SEL[2]+1)+'</div>';
+ h+='<div>value x = <b>'+f2(x)+'</b></div>';
+ h+='<div style="margin-top:6px">'+NAME[K]+' averages it with <span class="big">'+grp.length+'</span> cells</div>';
+ h+='<div>their mean &mu; = <b>'+f2(st.m)+'</b>, std &sigma; = <b>'+f2(st.sd)+'</b></div>';
+ h+='<div>normalized: (x &minus; &mu;)/&sigma; = <b>'+f2((x-st.m)/st.sd)+'</b></div>';
+ // every group's statistics for this norm, the chosen one bold
+ var groups=[],seen={},n,c,s;
+ for(n=0;n<N;n++)for(c=0;c<C;c++)for(s=0;s<S;s++){var g=groupOf([n,c,s]),k=g.map(String)[0];if(!seen[k]){seen[k]=1;groups.push({g:g,a:[n,c,s]});}}
+ h+='<div style="margin-top:6px">It computes <b>'+nstats()+'</b> means and '+nstats()+' stds in all'+(groups.length>8?'; the first 8:':':')+'</div><table>';
+ groups.slice(0,8).forEach(function(q){var t=stats(q.g),hot=same(q.a,SEL);
+  var nm=K==='bn'?'channel '+(q.a[1]+1):K==='ln'?'example '+(q.a[0]+1):K==='in'?'ex '+(q.a[0]+1)+', ch '+(q.a[1]+1):'ex '+(q.a[0]+1)+', group '+(Math.floor(q.a[1]/gsize())+1);
+  h+='<tr'+(hot?' class="hot"':'')+'><td>'+nm+'</td><td>&mu; '+f2(t.m)+'</td><td>&sigma; '+f2(t.sd)+'</td></tr>';});
+ h+='</table>';
+ document.getElementById('side').innerHTML=h;
+}
+function readout(){
+ var t={bn:'<b>BatchNorm</b>: one mean per <b>channel</b>, over every example in the batch and every position. The statistics depend on which other examples are in the batch.',
+  ln:'<b>LayerNorm</b>: one mean per <b>example</b>, over all its channels and positions. Nothing depends on the rest of the batch.',
+  in:'<b>InstanceNorm</b>: one mean per <b>example and channel</b>, over positions only. Each feature map is normalized on its own.',
+  gn:'<b>GroupNorm</b> with '+G+' group'+(G>1?'s':'')+' of '+gsize()+' channel'+(gsize()>1?'s':'')+': one mean per <b>example and group</b>.'+(G===1?' With one group it is LayerNorm.':G===C?' With one channel per group it is InstanceNorm.':'')};
+ var dep=K==='bn'?' Try the batch size slider: the group grows and shrinks with N'+(N===1?', and at N = 1 it is exactly InstanceNorm':'')+'.':' The batch size slider only adds or removes whole groups; each group is unchanged.';
+ document.getElementById('readout').innerHTML=t[K]+dep;
+}
+function caption(){
+ document.getElementById('caption').innerHTML=
+ '<b>All four compute</b> y = &gamma;&middot;(x &minus; &mu;)/&sigma; + &beta;, with a learned scale &gamma; and shift &beta; per channel; only the set of numbers that &mu; and &sigma; average over changes. '+
+ 'Homework 2.1&rsquo;s <code>BatchNorm1d</code> (task 3.13) is the case with no positions: an N&times;D batch, one mean per feature over the batch.'+
+ '<div style="margin-top:4px"><b>Why it matters.</b> BatchNorm&rsquo;s statistics come from the batch, so an example&rsquo;s output depends on what it was batched with, it is noisy for small batches, '+
+ 'and at test time, when there may be only one example, it has to switch to running averages saved during training: it computes a different function at test time than in training. '+
+ 'LayerNorm, InstanceNorm and GroupNorm use only the example itself, so they behave the same for any batch size and the same in training and at test. '+
+ 'That is why GroupNorm (Wu and He 2018) is used where batches are tiny, as in detection, and why transformers, whose batches mix sequences of different lengths and padding, normalize each token on its own with <b>LayerNorm</b>: we will meet it again in the transformers lecture.</div>';
+}
+
+/* ---------- controls ---------- */
+function setN(v){N=v;draw();}
+document.getElementById('nseg').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;K=b.dataset.k;
+ Array.from(this.children).forEach(function(x){x.classList.toggle('on',x===b);});draw();});
+// a press that barely moves picks a cell; one that moves turns the block
+(function(){var svg=document.getElementById('fig'),st=null;
+ svg.addEventListener('pointerdown',function(e){st={x:e.clientX,y:e.clientY,lx:e.clientX,ly:e.clientY,moved:false,t:e.target};svg.setPointerCapture(e.pointerId);});
+ svg.addEventListener('pointermove',function(e){if(!st)return;if(Math.abs(e.clientX-st.x)+Math.abs(e.clientY-st.y)>4)st.moved=true;
+  if(st.moved){PHI=Math.max(-85,Math.min(85,PHI-(e.clientX-st.lx)*0.4));THE=Math.max(-10,Math.min(80,THE+(e.clientY-st.ly)*0.4));st.lx=e.clientX;st.ly=e.clientY;draw();}});
+ svg.addEventListener('pointerup',function(e){if(st&&!st.moved){var g=st.t.closest&&st.t.closest('[data-c]');if(g){SEL=g.dataset.c.split(',').map(Number);draw();}}st=null;});
+ svg.addEventListener('pointercancel',function(){st=null;});})();
+draw();
+</script>
+</body>
+</html>

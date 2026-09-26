@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Capacity and double descent</title>
+<meta name="description" content="Seven networks of different widths trained live on the same small noisy dataset, and a random-features regression whose test error rises to a spike where the features just match the data points, then falls again.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 16px;max-width:1100px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+h2{font-size:16px;font-weight:600;margin:14px 0 0}
+h2 span{font-weight:400;color:var(--text-secondary)}
+.quiz{margin:0}
+.wrap{position:relative;flex:0 0 auto;width:100%;aspect-ratio:1040/400;max-height:64vh;min-height:260px}
+#wrap1{aspect-ratio:1040/380}
+@media (max-width:820px){.wrap,#wrap1{aspect-ratio:560/760;max-height:none}}
+.wrap svg{position:absolute;inset:0;width:100%;height:100%}
+.row{gap:7px}
+button,select{height:30px;font-size:13px;padding:0 9px}
+.seg button{height:28px;font-size:12px;padding:0 8px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:44px}
+input[type=range]{flex:0 1 170px;min-width:100px}
+.rd{font-size:14px;line-height:1.5;min-height:3em}
+.cap{font-size:12.5px;line-height:1.55;padding-top:4px}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Losses and regularization demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Capacity<span>: when a smaller network generalizes better, and when a bigger one does again</span></h1>
+<p class="quiz">Homework 2.1 shrinks a network&rsquo;s hidden layers from 128 to 16 and watches its validation accuracy. Here is that experiment in miniature, then the curve that comes after it.</p>
+
+<h2>1. Width <span>&mdash; seven networks, one small noisy dataset</span></h2>
+<div class="wrap" id="wrap1"><svg id="fig1" viewBox="0 0 1040 380" role="img">
+<title>Decision regions of seven networks of different widths, and their accuracy against width</title>
+<desc>Seven small panels show the decision regions of networks with 2 to 128 hidden units per layer, trained on the same 60 points, a fifth of whose labels were flipped. On the right, training and validation accuracy against width.</desc>
+<g id="st1"></g></svg></div>
+<div class="row">
+<button class="main" id="go1" onclick="toggleTrain()">Pause</button>
+<button onclick="restart(true)">New data</button>
+<span class="klab">hidden layers</span>
+<div class="seg" id="depSeg"><button data-v="1">1</button><button data-v="2" class="on">2</button></div>
+<span class="klab">labels flipped</span>
+<div class="seg" id="flipSeg"><button data-v="0">0%</button><button data-v="0.1">10%</button><button data-v="0.2" class="on">20%</button><button data-v="0.3">30%</button></div>
+<span class="klab">show</span>
+<div class="seg" id="metSeg"><button data-v="acc" class="on">accuracy</button><button data-v="loss">cross-entropy</button></div>
+</div>
+<div class="rd" id="rd1"></div>
+
+<h2>2. Double descent <span>&mdash; past the point where the model can fit every training point</span></h2>
+<div class="wrap" id="wrap2"><svg id="fig2" viewBox="0 0 1040 400" role="img">
+<title>A regression with p features fit to n noisy points, and test error against p</title>
+<desc>Left, a true curve, n noisy samples of it, and the minimum-norm least-squares fit with p sine and cosine features. Right, test error against p on a log scale, rising to a spike at p equal to n and falling again beyond it.</desc>
+<g id="st2"></g></svg></div>
+<div class="row">
+<span class="klab">features p</span>
+<input type="range" id="ps" min="0" max="100" step="1" value="33" oninput="setP()">
+<span class="knum" id="pv"></span>
+<span class="klab">ridge &lambda;</span>
+<input type="range" id="ls" min="-7" max="0" step="0.5" value="-7" oninput="setLam()">
+<span class="knum" id="lv"></span>
+<span class="klab">points n</span>
+<div class="seg" id="nSeg"><button data-v="20">20</button><button data-v="30" class="on">30</button><button data-v="40">40</button></div>
+<button onclick="newSample()">New sample</button>
+</div>
+<div class="rd" id="rd2"></div>
+<div class="cap" id="caption"></div>
+
+<script>
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function randn(r){var u=0,v=0;while(!u)u=r();while(!v)v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+var BLUE='var(--blue)',ORANGE='var(--orange)',PINK='var(--pink)',GREEN='var(--green)',INK='var(--text-primary)';
+function T(x,y,s,cls,anc,fill){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'"'+
+ (anc?' text-anchor="'+anc+'"':'')+(fill?' style="fill:'+fill+'"':'')+'>'+s+'</text>';}
+function mobile(){return !!(window.matchMedia&&window.matchMedia('(max-width:820px)').matches);}
+function seg(id,fn){document.getElementById(id).addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;
+ Array.from(this.children).forEach(function(x){x.classList.toggle('on',x===b);});fn(b.dataset.v);});}
+
+/* ================= part 1: width ================= */
+// A wavy boundary; the training labels are flipped at random with probability FLIP,
+// the validation labels never are, so validation measures the boundary itself.
+var WIDTHS=[2,4,8,16,32,64,128],NTR=60,NVA=1000,FLIP=0.2,DEPTH=2,STEPS=1500,LR=0.01,MET='acc';
+function trueLabel(x,y){return y>0.6*Math.sin(2.2*x)?1:0;}
+var DSEED=1,TR=null,VA=null,NETS=[],STEP=0,running=true,raf=null;
+function makeData(seed,n,flip){var r=mulberry32(seed),X=[],Y=[],F=[];
+ for(var i=0;i<n;i++){var x=-2+4*r(),y=-1.6+3.2*r(),l=trueLabel(x,y),f=r()<flip;X.push([x,y]);Y.push(f?1-l:l);F.push(f);}
+ return {X:X,Y:Y,F:F};}
+// A plain MLP with relu, He init, sigmoid output and cross-entropy, trained by
+// full-batch Adam at lr 0.01, as in the homework's run_test.
+function newNet(W,seed){var r=mulberry32(seed),sz=[2];for(var d=0;d<DEPTH;d++)sz.push(W);sz.push(1);
+ var n={sz:sz,W:[],b:[],mW:[],vW:[],mb:[],vb:[],hist:[]};
+ for(var l=0;l<sz.length-1;l++){var nin=sz[l],nout=sz[l+1],w=new Float64Array(nin*nout),s=Math.sqrt(2/nin);
+  for(var i=0;i<w.length;i++)w[i]=randn(r)*s;
+  n.W.push(w);n.b.push(new Float64Array(nout));n.mW.push(new Float64Array(nin*nout));n.vW.push(new Float64Array(nin*nout));
+  n.mb.push(new Float64Array(nout));n.vb.push(new Float64Array(nout));}
+ return n;}
+function fwd(n,x,keep){var L=n.sz.length-1,a=x,acts=keep?[x]:null,pre=keep?[]:null;
+ for(var l=0;l<L;l++){var nin=n.sz[l],nout=n.sz[l+1],w=n.W[l],b=n.b[l],z=new Float64Array(nout);
+  for(var o=0;o<nout;o++){var s=b[o],off=o*nin;for(var i=0;i<nin;i++)s+=w[off+i]*a[i];z[o]=s;}
+  if(keep)pre.push(z);
+  if(l<L-1){var h=new Float64Array(nout);for(o=0;o<nout;o++)h[o]=z[o]>0?z[o]:0;a=h;if(keep)acts.push(h);}else a=z;}
+ return keep?{out:a[0],acts:acts,pre:pre}:a[0];}
+function step(n,t){var L=n.sz.length-1,gW=n.W.map(function(w){return new Float64Array(w.length);}),gb=n.b.map(function(b){return new Float64Array(b.length);});
+ for(var k=0;k<NTR;k++){var F=fwd(n,TR.X[k],true),p=1/(1+Math.exp(-F.out)),dz=[(p-TR.Y[k])/NTR];
+  for(var l=L-1;l>=0;l--){var nin=n.sz[l],nout=n.sz[l+1],a=F.acts[l],w=n.W[l],da=new Float64Array(nin);
+   for(var o=0;o<nout;o++){var g=dz[o];if(!g)continue;gb[l][o]+=g;var off=o*nin;for(var i=0;i<nin;i++){gW[l][off+i]+=g*a[i];da[i]+=g*w[off+i];}}
+   if(l>0){var z=F.pre[l-1];dz=new Float64Array(nin);for(i=0;i<nin;i++)dz[i]=z[i]>0?da[i]:0;}}}
+ var c1=1-Math.pow(0.9,t),c2=1-Math.pow(0.999,t);
+ function adam(p,g,m,v){for(var i=0;i<p.length;i++){m[i]=0.9*m[i]+0.1*g[i];v[i]=0.999*v[i]+0.001*g[i]*g[i];p[i]-=LR*(m[i]/c1)/(Math.sqrt(v[i]/c2)+1e-8);}}
+ for(l=0;l<L;l++){adam(n.W[l],gW[l],n.mW[l],n.vW[l]);adam(n.b[l],gb[l],n.mb[l],n.vb[l]);}}
+function evalOn(n,D){var c=0,loss=0;for(var i=0;i<D.X.length;i++){var z=fwd(n,D.X[i]),p=1/(1+Math.exp(-z));
+ c+=((z>0?1:0)===D.Y[i])?1:0;loss+=-Math.log(Math.max(1e-12,D.Y[i]?p:1-p));}return {acc:c/D.X.length,loss:loss/D.X.length};}
+function measure(){NETS.forEach(function(n){n.tr=evalOn(n,TR);n.va=evalOn(n,VA);});}
+function restart(newData){if(newData)DSEED++;TR=makeData(DSEED,NTR,FLIP);VA=makeData(5000+DSEED,NVA,0);
+ NETS=WIDTHS.map(function(W,k){return newNet(W,100*DSEED+k);});STEP=0;measure();IMG={};draw1();
+ if(!running)toggleTrain();else if(!raf)raf=requestAnimationFrame(frame);}
+// All widths advance together, one step each in turn, within a time budget per frame.
+var lastImg=0,lastMeas=0;
+function frame(now){raf=null;if(!running)return;var t0=performance.now();
+ while(STEP<STEPS&&performance.now()-t0<14){STEP++;for(var k=0;k<NETS.length;k++)step(NETS[k],STEP);}
+ if(STEP-lastMeas>=25||STEP>=STEPS){measure();lastMeas=STEP;}
+ if(now-lastImg>250||STEP>=STEPS){IMG={};lastImg=now;}
+ draw1();
+ if(STEP<STEPS)raf=requestAnimationFrame(frame);else{running=false;document.getElementById('go1').textContent='Train again';}}
+function toggleTrain(){if(STEP>=STEPS){running=true;document.getElementById('go1').textContent='Pause';restart(false);return;}
+ running=!running;document.getElementById('go1').textContent=running?'Pause':'Resume';if(running&&!raf){lastMeas=STEP;raf=requestAnimationFrame(frame);}}
+
+// Decision regions are painted into a small canvas per network and drawn as an image.
+var IMG={},GX=64,GY=48;
+function cssColor(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+function hex(c){c=c.replace('#','');return [parseInt(c.slice(0,2),16),parseInt(c.slice(2,4),16),parseInt(c.slice(4,6),16)];}
+function regionImage(k){if(IMG[k])return IMG[k];
+ var cv=document.createElement('canvas');cv.width=GX;cv.height=GY;var cx=cv.getContext('2d'),im=cx.createImageData(GX,GY);
+ var b=hex(cssColor('--blue')||'#378ADD'),o=hex(cssColor('--orange')||'#D85A30'),s=hex(cssColor('--surface')||'#ffffff');
+ for(var j=0;j<GY;j++)for(var i=0;i<GX;i++){var x=-2+4*(i+0.5)/GX,y=1.6-3.2*(j+0.5)/GY,p=1/(1+Math.exp(-fwd(NETS[k],[x,y])));
+  var c=p>0.5?o:b,t=0.18+0.5*Math.abs(p-0.5)*2*0.6,q=4*(j*GX+i);
+  for(var ch=0;ch<3;ch++)im.data[q+ch]=Math.round(s[ch]*(1-t)+c[ch]*t);im.data[q+3]=255;}
+ cx.putImageData(im,0,0);return IMG[k]=cv.toDataURL();}
+function draw1(){
+ var mob=mobile(),s='',PW=mob?160:108,PH=PW*0.8,gap=mob?16:10,cols=mob?3:4,x0=mob?20:14,y0=34;
+ s+=T(x0,20,'decision regions, '+DEPTH+' hidden layer'+(DEPTH>1?'s':'')+', after '+STEP+' of '+STEPS+' steps','ts','start');
+ WIDTHS.forEach(function(W,k){var c=k%cols,r=Math.floor(k/cols),px=x0+c*(PW+gap),py=y0+r*(PH+30);
+  function X(x){return px+(x+2)/4*PW;}function Y(y){return py+(1.6-y)/3.2*PH;}
+  s+='<image href="'+regionImage(k)+'" x="'+px+'" y="'+py+'" width="'+PW+'" height="'+PH+'" preserveAspectRatio="none"/>';
+  s+='<rect x="'+px+'" y="'+py+'" width="'+PW+'" height="'+PH+'" fill="none" stroke="var(--border)"/>';
+  var d='';for(var i=0;i<=40;i++){var xx=-2+4*i/40;d+=(i?'L':'M')+X(xx).toFixed(1)+' '+Y(0.6*Math.sin(2.2*xx)).toFixed(1);}
+  s+='<path d="'+d+'" fill="none" stroke="var(--text-secondary)" stroke-width="1" stroke-dasharray="3 3"/>';
+  for(i=0;i<NTR;i++){var p=TR.X[i];s+='<circle cx="'+X(p[0]).toFixed(1)+'" cy="'+Y(p[1]).toFixed(1)+'" r="'+(mob?2.8:2.2)+'" fill="'+(TR.Y[i]?ORANGE:BLUE)+'"'+
+   (TR.F[i]?' stroke="var(--text-primary)" stroke-width="1.2"':' stroke="var(--surface)" stroke-width="0.6"')+'/>';}
+  var n=NETS[k];s+=T(px+PW/2,py+PH+14,'width '+W+(n.va?' &middot; '+Math.round(100*n.va.acc)+'%':''),'tn','middle');});
+ // key in the empty cell
+ var kc=7%cols,kr=Math.floor(7/cols),kx=x0+kc*(PW+gap),ky=y0+kr*(PH+30);
+ if(!mob){s+=T(kx,ky+14,'<tspan style="fill:var(--blue)">●</tspan> <tspan style="fill:var(--orange)">●</tspan> labels','tn','start');
+  s+=T(kx,ky+32,'◯ label flipped','tn','start');s+=T(kx,ky+50,'╌ true boundary','tn','start');
+  s+=T(kx,ky+68,'% = on fresh points','tn','start');}
+ // chart: train and validation, against width
+ var C0=mob?60:540,C1=mob?530:1010,CY0=mob?y0+3*(PH+30)+30:40,CY1=CY0+(mob?230:280),acc=MET==='acc';
+ var lo=acc?0.5:0,hi=acc?1:Math.max(1,Math.ceil(Math.max.apply(null,NETS.map(function(n){return n.va?n.va.loss:1;}))));
+ function cx(k){return C0+k/(WIDTHS.length-1)*(C1-C0);}function cy(v){return CY1-(Math.min(hi,Math.max(lo,v))-lo)/(hi-lo)*(CY1-CY0);}
+ s+='<rect x="'+C0+'" y="'+CY0+'" width="'+(C1-C0)+'" height="'+(CY1-CY0)+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
+ s+=T((C0+C1)/2,CY0-10,(acc?'accuracy':'cross-entropy loss')+' against width, at step '+STEP,'ts','middle');
+ var ticks=acc?[0.5,0.6,0.7,0.8,0.9,1]:[0,hi/4,hi/2,3*hi/4,hi];
+ ticks.forEach(function(v){s+='<line x1="'+C0+'" y1="'+cy(v).toFixed(1)+'" x2="'+C1+'" y2="'+cy(v).toFixed(1)+'" stroke="var(--border)" stroke-width="0.6"/>'+
+  T(C0-6,cy(v)+4,acc?Math.round(v*100)+'%':(+v.toFixed(2))+'','tn','end');});
+ WIDTHS.forEach(function(W,k){s+=T(cx(k),CY1+16,String(W),'tn','middle');});
+ s+=T((C0+C1)/2,CY1+34,'hidden units per layer','tn','middle');
+ [['tr','training',ORANGE,'6 4'],['va','validation (fresh points, true labels)',BLUE,'']].forEach(function(q,j){
+  var d='';NETS.forEach(function(n,k){if(!n[q[0]])return;d+=(k?'L':'M')+cx(k).toFixed(1)+' '+cy(n[q[0]][MET]).toFixed(1);});
+  s+='<path d="'+d+'" fill="none" stroke="'+q[2]+'" stroke-width="2.4"'+(q[3]?' stroke-dasharray="'+q[3]+'"':'')+'/>';
+  NETS.forEach(function(n,k){if(n[q[0]])s+='<circle cx="'+cx(k).toFixed(1)+'" cy="'+cy(n[q[0]][MET]).toFixed(1)+'" r="3.5" fill="'+q[2]+'"/>';});
+  s+=T(C0+10,(acc?CY1-40:CY0+18)+j*18,'<tspan style="fill:'+q[2]+'">━</tspan> '+q[1],'tn','start');});
+ if(acc&&FLIP>0)s+='<line x1="'+C0+'" y1="'+cy(1-FLIP).toFixed(1)+'" x2="'+C1+'" y2="'+cy(1-FLIP).toFixed(1)+'" stroke="var(--text-muted)" stroke-dasharray="2 4"/>'+
+  T(C1-6,cy(1-FLIP)+15,'the true boundary gets '+Math.round(100*(1-FLIP))+'% of noisy training labels','tn','end');
+ var svg=document.getElementById('fig1');svg.setAttribute('viewBox',mob?'0 0 560 '+(CY1+50):'0 0 1040 380');
+ document.getElementById('st1').innerHTML=s;readout1();}
+function readout1(){if(!NETS[0].va)return;var best=0,worst=0;
+ NETS.forEach(function(n,k){if(n.va.acc>NETS[best].va.acc)best=k;});
+ var wide=NETS[NETS.length-1],h='Step <b>'+STEP+'</b>. ';
+ h+='The widest network fits <b>'+Math.round(100*wide.tr.acc)+'%</b> of its training labels';
+ h+=FLIP>0&&wide.tr.acc>1-FLIP+0.02?', more than the '+Math.round(100*(1-FLIP))+'% that are correct, so it has learned some of the flipped ones,':'';
+ h+=' and gets <b>'+Math.round(100*wide.va.acc)+'%</b> of fresh points right. Best on fresh points now: <b>width '+WIDTHS[best]+'</b>, <b>'+Math.round(100*NETS[best].va.acc)+'%</b>. ';
+ h+='Validation cross-entropy runs from <b>'+NETS[1].va.loss.toFixed(2)+'</b> at width 4 to <b>'+wide.va.loss.toFixed(2)+'</b> at width 128.';
+ document.getElementById('rd1').innerHTML=h;}
+
+/* ================= part 2: double descent ================= */
+// The target, and features: a constant, then a cosine and a sine at each frequency k,
+// the pair at frequency k scaled by 1/k, so a fit with small weights is a smooth one.
+function ftrue(x){return 0.8*Math.sin(Math.PI*x)+0.4*Math.cos(3*Math.PI*x+0.5);}
+var NPT=30,NOISE=0.2,P=30,LAM=0,SSEED=1,SAMPLE=null,CURVE=null;
+function phi(x,p){var o=new Float64Array(p);o[0]=1;for(var j=1;j<p;j++){var k=Math.ceil(j/2),w=1/k;o[j]=w*(j%2?Math.cos(Math.PI*k*x):Math.sin(Math.PI*k*x));}return o;}
+function sample(seed){var r=mulberry32(seed),xs=[],ys=[];for(var i=0;i<NPT;i++){var x=-1+2*r();xs.push(x);ys.push(ftrue(x)+NOISE*randn(r));}return {xs:xs,ys:ys};}
+// symmetric eigendecomposition by cyclic Jacobi, for a pseudo-inverse
+function eig(S,n){var A=S.map(function(r){return r.slice();}),V=[],i,k,p,q;for(i=0;i<n;i++){V.push(new Array(n).fill(0));V[i][i]=1;}
+ for(var sw=0;sw<50;sw++){var off=0;for(p=0;p<n;p++)for(q=p+1;q<n;q++)off+=A[p][q]*A[p][q];if(off<1e-24)break;
+  for(p=0;p<n;p++)for(q=p+1;q<n;q++){var apq=A[p][q];if(Math.abs(apq)<1e-300)continue;
+   var th=(A[q][q]-A[p][p])/(2*apq),t=(th>=0?1:-1)/(Math.abs(th)+Math.sqrt(th*th+1)),c=1/Math.sqrt(t*t+1),s=t*c;
+   for(k=0;k<n;k++){var akp=A[k][p],akq=A[k][q];A[k][p]=c*akp-s*akq;A[k][q]=s*akp+c*akq;}
+   for(k=0;k<n;k++){var apk=A[p][k],aqk=A[q][k];A[p][k]=c*apk-s*aqk;A[q][k]=s*apk+c*aqk;}
+   for(k=0;k<n;k++){var vkp=V[k][p],vkq=V[k][q];V[k][p]=c*vkp-s*vkq;V[k][q]=s*vkp+c*vkq;}}}
+ return {d:A.map(function(r,i){return r[i];}),V:V};}
+// (S + lam I)^+ b, dropping directions below 1e-12 of the largest when lam is 0
+function psolve(S,b,n,lam){var E=eig(S,n),mx=0,x=new Array(n).fill(0),i,k;for(k=0;k<n;k++)mx=Math.max(mx,Math.abs(E.d[k]));
+ for(k=0;k<n;k++){if(!lam&&Math.abs(E.d[k])<1e-12*mx)continue;var pr=0;for(i=0;i<n;i++)pr+=E.V[i][k]*b[i];pr/=E.d[k]+lam;for(i=0;i<n;i++)x[i]+=E.V[i][k]*pr;}return x;}
+// Least squares with p features: the minimum-norm solution, or ridge with lam.  Fewer
+// features than points solves the p x p normal equations; more solves the n x n kernel
+// system and maps back, w = F^T (F F^T + lam)^-1 y, the smallest w that fits.
+function fit(S,p,lam){var n=S.xs.length,F=S.xs.map(function(x){return phi(x,p);}),w,i,j,a;
+ if(p<=n){var G=[],c=new Array(p).fill(0);for(a=0;a<p;a++)G.push(new Array(p).fill(0));
+  for(i=0;i<n;i++)for(a=0;a<p;a++){c[a]+=F[i][a]*S.ys[i];for(j=0;j<p;j++)G[a][j]+=F[i][a]*F[i][j];}w=psolve(G,c,p,lam);}
+ else{var K=[];for(i=0;i<n;i++){K.push(new Array(n).fill(0));for(j=0;j<n;j++){var s=0;for(a=0;a<p;a++)s+=F[i][a]*F[j][a];K[i][j]=s;}}
+  var al=psolve(K,S.ys,n,lam);w=new Array(p).fill(0);for(i=0;i<n;i++)for(a=0;a<p;a++)w[a]+=al[i]*F[i][a];}
+ return w;}
+function predict(w,x){var q=phi(x,w.length),s=0;for(var a=0;a<w.length;a++)s+=q[a]*w[a];return s;}
+function errs(S,w){var te=0,M=200,tr=0,i;for(i=0;i<M;i++){var x=-1+2*(i+0.5)/M;te+=Math.pow(predict(w,x)-ftrue(x),2);}
+ for(i=0;i<S.xs.length;i++)tr+=Math.pow(predict(w,S.xs[i])-S.ys[i],2);
+ var nrm=0;for(i=0;i<w.length;i++)nrm+=w[i]*w[i];return {te:te/M,tr:tr/S.xs.length,norm:Math.sqrt(nrm)};}
+// the p values: roughly log spaced, and every value right around n
+function pList(){var s={},a=[1,2,3,4,5,6,7,8,10,12,14,17,20,24,28,34,40,48,58,70,85,100,130,170,230,300,400,550,750,1000];
+ a.forEach(function(v){s[v]=1;});for(var d=-4;d<=4;d++)if(NPT+d>0)s[NPT+d]=1;return Object.keys(s).map(Number).sort(function(x,y){return x-y;});}
+function sliderP(){var v=+document.getElementById('ps').value;return Math.max(1,Math.round(Math.pow(1000,v/100)));}
+// The curve is the median over 9 training samples, computed a few p values per frame.
+var CJOB=0;
+function computeCurve(){var job=++CJOB,ps=pList(),out=[],k=0;CURVE=null;
+ (function chunk(){if(job!==CJOB)return;var t0=performance.now();
+  while(k<ps.length&&performance.now()-t0<20){var te=[],tr=[];for(var sd=1;sd<=9;sd++){var S=sample(1000+sd),e=errs(S,fit(S,ps[k],LAM));te.push(e.te);tr.push(e.tr);}
+   te.sort(function(a,b){return a-b;});tr.sort(function(a,b){return a-b;});out.push({p:ps[k],te:te[4],tr:tr[4]});k++;}
+  CURVE={pts:out,done:k>=ps.length};draw2();if(k<ps.length)setTimeout(chunk,0);})();}
+var CUR=null;
+function refit(){SAMPLE=sample(SSEED);var w=fit(SAMPLE,P,LAM);CUR={w:w,e:errs(SAMPLE,w)};}
+function draw2(){if(!CUR)return;var mob=mobile(),s='';
+ // left: the fit
+ var X0=mob?50:50,X1=mob?530:470,Y0=40,Y1=mob?300:340;
+ function X(x){return X0+(x+1)/2*(X1-X0);}function Y(y){return (Y0+Y1)/2-y/3.2*(Y1-Y0);}
+ s+='<defs><clipPath id="c2"><rect x="'+X0+'" y="'+Y0+'" width="'+(X1-X0)+'" height="'+(Y1-Y0)+'"/></clipPath></defs>';
+ s+='<rect x="'+X0+'" y="'+Y0+'" width="'+(X1-X0)+'" height="'+(Y1-Y0)+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
+ s+=T((X0+X1)/2,Y0-10,P+' feature'+(P>1?'s':'')+', '+NPT+' points'+(LAM?', ridge &lambda; = '+fmtL(LAM):', minimum-norm fit'),'ts','middle');
+ var d='';for(var i=0;i<=300;i++){var x=-1+2*i/300;d+=(i?'L':'M')+X(x).toFixed(1)+' '+Y(ftrue(x)).toFixed(1);}
+ s+='<path d="'+d+'" fill="none" stroke="'+GREEN+'" stroke-width="2.2" stroke-dasharray="8 5" clip-path="url(#c2)"/>';
+ d='';for(i=0;i<=500;i++){x=-1+2*i/500;var y=Math.max(-40,Math.min(40,predict(CUR.w,x)));d+=(i?'L':'M')+X(x).toFixed(1)+' '+Y(y).toFixed(1);}
+ s+='<path d="'+d+'" fill="none" stroke="'+ORANGE+'" stroke-width="2.4" clip-path="url(#c2)"/>';
+ SAMPLE.xs.forEach(function(x,k){s+='<circle cx="'+X(x).toFixed(1)+'" cy="'+Y(SAMPLE.ys[k]).toFixed(1)+'" r="4" fill="'+BLUE+'" stroke="var(--blue-ink)"/>';});
+ s+=T(X0,Y1+18,'<tspan style="fill:var(--green)">&#8211; &#8211;</tspan> truth   <tspan style="fill:var(--blue)">●</tspan> training points   <tspan style="fill:var(--orange)">━</tspan> the fit','tn','start');
+ s+=T(X0,Y1+36,'test error '+fmtE(CUR.e.te)+', training error '+fmtE(CUR.e.tr)+', weight norm ‖w‖ = '+fmtE(CUR.e.norm),'tn','start');
+ // right: error against p
+ var oy=mob?Y1+70:0,C0=mob?60:560,C1=mob?530:1010,CY0=oy+40,CY1=oy+(mob?300:330),LO=-3,HI=4;
+ function cx(p){return C0+Math.log10(p)/3*(C1-C0);}function cy(v){var l=Math.log10(Math.max(v,1e-9));return CY1-(Math.min(HI,Math.max(LO,l))-LO)/(HI-LO)*(CY1-CY0);}
+ s+='<rect x="'+C0+'" y="'+CY0+'" width="'+(C1-C0)+'" height="'+(CY1-CY0)+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
+ s+=T((C0+C1)/2,CY0-10,'error against the number of features (median of 9 samples)','ts','middle');
+ for(var e=LO;e<=HI;e++){s+='<line x1="'+C0+'" y1="'+cy(Math.pow(10,e))+'" x2="'+C1+'" y2="'+cy(Math.pow(10,e))+'" stroke="var(--border)" stroke-width="0.6"/>'+T(C0-6,cy(Math.pow(10,e))+4,e===0?'1':'10'+sup(e),'tn','end');}
+ [1,10,100,1000].forEach(function(p){s+=T(cx(p),CY1+16,String(p),'tn','middle');});
+ s+=T((C0+C1)/2,CY1+34,'features p (log scale)','tn','middle');
+ s+='<line x1="'+cx(NPT)+'" y1="'+CY0+'" x2="'+cx(NPT)+'" y2="'+CY1+'" stroke="var(--pink)" stroke-width="1.2" stroke-dasharray="4 3"/>';
+ // short right-aligned lines, so they stay in the empty corner right of the peak
+ s+=T(C1-8,CY0+16,'dashed: p = n = '+NPT+',','tn','end','var(--pink-ink)')+T(C1-8,CY0+32,'the interpolation threshold','tn','end','var(--pink-ink)');
+ s+=T(cx(NPT)-5,CY1-8,'can fit every point →','tn','end');
+ s+='<line x1="'+C0+'" y1="'+cy(NOISE*NOISE)+'" x2="'+C1+'" y2="'+cy(NOISE*NOISE)+'" stroke="var(--text-muted)" stroke-dasharray="2 4"/>';
+ s+=T(C1-6,cy(NOISE*NOISE)-5,'noise variance &#963;&#178;','tn','end');
+ if(CURVE&&CURVE.pts.length){[['te',BLUE,2.6,''],['tr',ORANGE,1.8,'6 4']].forEach(function(q){var d='';
+   CURVE.pts.forEach(function(c,k){d+=(k?'L':'M')+cx(c.p).toFixed(1)+' '+cy(c[q[0]]).toFixed(1);});
+   s+='<path d="'+d+'" fill="none" stroke="'+q[1]+'" stroke-width="'+q[2]+'"'+(q[3]?' stroke-dasharray="'+q[3]+'"':'')+'/>';});
+  if(!CURVE.done)s+=T(C1-8,CY0+16,'computing&hellip;','tn','end');
+  var top=Math.max.apply(null,CURVE.pts.map(function(c){return c.te;}));
+  if(top>Math.pow(10,HI))s+=T(C1-8,CY0+48,'peak off the chart: '+fmtE(top),'tn','end','var(--pink-ink)');}
+ s+=T(C0+10,CY0+16,'<tspan style="fill:var(--blue)">━</tspan> test error   <tspan style="fill:var(--orange)">╌</tspan> training error','tn','start');
+ s+='<line x1="'+cx(P)+'" y1="'+CY0+'" x2="'+cx(P)+'" y2="'+CY1+'" stroke="var(--text-secondary)" stroke-dasharray="3 3"/>';
+ s+='<circle cx="'+cx(P).toFixed(1)+'" cy="'+cy(CUR.e.te).toFixed(1)+'" r="5.5" fill="'+BLUE+'" stroke="var(--bg)" stroke-width="1.5"/>';
+ var svg=document.getElementById('fig2');svg.setAttribute('viewBox',mob?'0 0 560 '+(CY1+50):'0 0 1040 400');
+ document.getElementById('st2').innerHTML=s;readout2();}
+function sup(e){var m={'-':'⁻','0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵'};return String(e).split('').map(function(c){return m[c];}).join('');}
+function fmtE(v){return v>=1000||v<0.001?v.toExponential(1):v>=10?v.toFixed(0):v>=1?v.toFixed(2):v.toFixed(3);}
+function fmtL(v){return v>=0.01?String(+v.toPrecision(2)):v.toExponential(0);}
+function readout2(){var h='<b>p = '+P+'</b> features, <b>n = '+NPT+'</b> points: ';
+ if(LAM>0&&P>=NPT-2&&P<=NPT+2)h+='right at the threshold, but the ridge penalty keeps the weights small, so there is no spike: it no longer insists on fitting every point exactly.';
+ else if(P<NPT-3)h+='fewer features than points, so no fit can pass through them all. This is the classic side of the curve: more features first help, then start to fit the noise.';
+ else if(P<=NPT+3)h+='<b>the interpolation threshold.</b> There is just about one way to pass through every point, and it takes weights of norm '+fmtE(CUR.e.norm)+', so the fit swings wildly between the points.';
+ else h+='more features than points, so infinitely many fits pass through every point; the minimum-norm one is chosen, and with more features it gets smoother. Weight norm '+fmtE(CUR.e.norm)+'.';
+ document.getElementById('rd2').innerHTML=h;}
+function setP(){P=sliderP();document.getElementById('pv').textContent=P;refit();draw2();}
+function setLam(){var v=+document.getElementById('ls').value;LAM=v<=-7?0:Math.pow(10,v);document.getElementById('lv').textContent=LAM?fmtL(LAM):'0';refit();computeCurve();}
+function newSample(){SSEED++;refit();draw2();}
+
+function caption(){document.getElementById('caption').innerHTML=
+ '<b>Width.</b> Every network sees the same 60 points and trains the same way, full-batch Adam at learning rate 0.01, as in the homework. A fifth of the labels are wrong. '+
+ 'A wide network has the capacity to learn those wrong labels too: it draws a small island around each ringed point and reaches 100% training accuracy, and every island is a region where fresh points are misclassified. '+
+ 'A narrow one cannot afford the islands, so it keeps closer to the true boundary. Too narrow and it cannot draw the boundary at all: averaged over draws of the data, width 2 does worst, though on a lucky draw it can come out best. This is the shrinking experiment of homework 2.1, tasks 3.8 to 3.10. '+
+ 'The effect on accuracy is a few points and varies from one draw of the data to the next (press New data); the effect on validation cross-entropy is large, because a network that memorizes is confidently wrong on the islands. '+
+ 'With no flipped labels, width costs almost nothing.'+
+ '<div style="margin-top:4px"><b>Double descent.</b> The <a href="../quiz0/capacity.html">capacity demo</a> shows the classic U: more flexibility helps, then fits the noise. That picture stops at the point where the model can fit every training point. '+
+ 'Here the model is least squares on p features, sines and cosines of increasing frequency, with each frequency scaled down so that small weights mean a smooth curve. Below p = n the fit is the ordinary least-squares one. '+
+ 'At p = n there is just one way to pass through every point, and with noisy points it needs enormous weights: the test error spikes. Past p = n there are infinitely many interpolating fits, and the minimum-norm one, which is what gradient descent from zero finds for least squares, spreads the noise across more and more features, each doing less: the error comes down again. '+
+ 'A little ridge penalty (&lambda;) removes the spike altogether, because the fit no longer has to pass through every point. Belkin et al. (2019) named the curve; Nakkiran et al. (2019) found it in deep networks too, in width and in training time, most sharply with noisy labels. '+
+ 'In this toy the second descent does not quite get back down to the best small model; in large networks it often goes below it, which is part of why very wide networks work.</div>';}
+
+seg('depSeg',function(v){DEPTH=+v;restart(false);});
+seg('flipSeg',function(v){FLIP=+v;restart(false);});
+seg('metSeg',function(v){MET=v;draw1();});
+seg('nSeg',function(v){NPT=+v;refit();computeCurve();draw2();});
+window.addEventListener('resize',function(){IMG={};draw1();draw2();});
+caption();
+document.getElementById('pv').textContent=(P=sliderP());document.getElementById('lv').textContent='0';
+refit();computeCurve();restart(false);
+</script>
+</body>
+</html>

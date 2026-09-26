@@ -94,6 +94,7 @@ table.ly td.eq{color:var(--text-primary)}
 <button data-p="lenet">LeNet 1989</button>
 <button data-p="alex">AlexNet</button>
 <button data-p="vgg">VGG-16</button>
+<button data-p="resnet">ResNet-18</button>
 <button data-p="deep">too deep</button>
 </div>
 <label class="cb"><input type="checkbox" id="same" onchange="sameChanged()">same padding everywhere</label>
@@ -193,6 +194,16 @@ var PRESETS={
  vgg:{C:3,H:224,cam:[10,20],L:[[3,1,1,64],[3,1,1,64],[2,2,0,'pool'],[3,1,1,128],[3,1,1,128],[2,2,0,'pool'],
   [3,1,1,256],[3,1,1,256],[3,1,1,256],[2,2,0,'pool'],[3,1,1,512],[3,1,1,512],[3,1,1,512],[2,2,0,'pool'],
   [3,1,1,512],[3,1,1,512],[3,1,1,512],[2,2,0,'pool']]},
+ // ResNet-18: a 7x7 stride-2 stem and a stride-2 max-pool, then four stages of two
+ // residual blocks, each block two padded 3x3s; the first conv of stages 2-4 has
+ // stride 2.  skips: [from block, to block], each shortcut spanning one block's two
+ // convs; the ones that change shape are projections.
+ resnet:{C:3,H:224,cam:[10,20],L:[[7,2,3,64],[3,2,1,'pool'],
+  [3,1,1,64],[3,1,1,64],[3,1,1,64],[3,1,1,64],
+  [3,2,1,128],[3,1,1,128],[3,1,1,128],[3,1,1,128],
+  [3,2,1,256],[3,1,1,256],[3,1,1,256],[3,1,1,256],
+  [3,2,1,512],[3,1,1,512],[3,1,1,512],[3,1,1,512]],
+  skips:[[2,4],[4,6],[6,8],[8,10],[10,12],[12,14],[14,16],[16,18]]},
  deep:{C:1,H:16,L:[[5,1,0,8],[5,1,0,8],[5,1,0,8],[5,1,0,8]]}};
 var PRESET='slide';
 function loadPreset(p){PRESET=p;POS=[];ACT=HOV=-1;var q=PRESETS[p];IN={C:q.C,H:q.H};PHI=q.cam?q.cam[0]:28;THE=q.cam?q.cam[1]:18;
@@ -373,6 +384,16 @@ function draw3(){
  });
  // Small filters are hard to hit, so each draggable one gets an invisible grab area on
  // top of everything: the outline of its box on screen, widened by a thick stroke.
+ // Residual shortcuts, for the ResNet preset as loaded: an arc over each block from
+ // its input to its output, where the two are added.  Dashed where the shape changes
+ // and the shortcut has to be a 1x1 projection.
+ var SK=PRESET&&PRESETS[PRESET].skips;
+ if(SK)SK.forEach(function(k){var a=blocks[k[0]],b2=blocks[k[1]];if(!a||!b2)return;
+  var p=P2(at(a,[(a.x0+a.x1)/2,a.y1,(a.z0+a.z1)/2])),q=P2(at(b2,[(b2.x0+b2.x1)/2,b2.y1,(b2.z0+b2.z1)/2]));
+  var proj=a.q.C!==b2.q.C||a.q.H!==b2.q.H,h=16+0.12*Math.abs(q[0]-p[0]),my=Math.min(p[1],q[1])-h;
+  s+='<path d="M'+p[0].toFixed(1)+' '+p[1].toFixed(1)+' C'+p[0].toFixed(1)+' '+my.toFixed(1)+' '+q[0].toFixed(1)+' '+my.toFixed(1)+' '+q[0].toFixed(1)+' '+q[1].toFixed(1)+
+   '" fill="none" stroke="var(--green-ink)" stroke-width="1.6"'+(proj?' stroke-dasharray="4 3"':'')+' pointer-events="none"/>'+
+   '<circle cx="'+q[0].toFixed(1)+'" cy="'+q[1].toFixed(1)+'" r="2.6" fill="var(--green-ink)" pointer-events="none"/>';});
  s+=HITS.join('');
  // labels: each block's size under it; on a desktop, each layer's recipe above the gap
  var lab='';
@@ -438,6 +459,10 @@ function draw3(){
   'All the shrinking is done by five <b style="color:var(--pool-ink)">2&times;2 max-pools at stride 2</b>, each halving it: 224 &rarr; 112 &rarr; 56 &rarr; 28 &rarr; 14 &rarr; 7, while the channels double from 64 to 512. '+
   'Why only 3&times;3s? Two in a row see a 5&times;5 patch and three see 7&times;7 (see <a href="receptive-field.html">receptive fields</a>), with fewer weights, 27C&sup2; against 49C&sup2; for one 7&times;7, and a nonlinearity between each. '+
   'The 512&times;7&times;7 at the end is 25,088 numbers for the first fully connected layer.';
+ else if(PRESET==='resnet')r+='ResNet-18 (He et al. 2016). A 7&times;7 stride-2 stem and a 3&times;3 stride-2 max-pool take 224 to 56; then four stages of two <b>residual blocks</b>, each two padded 3&times;3 convolutions whose input is added back to their output (the <b style="color:var(--green-ink)">green arcs</b>). '+
+  'As on the slide, the first block of each stage halves the resolution with a stride-2 convolution and doubles the channels: 56 &rarr; 28 &rarr; 14 &rarr; 7, 64 &rarr; 128 &rarr; 256 &rarr; 512. '+
+  'There the input no longer has the output&rsquo;s shape, so that shortcut (dashed) cannot be a plain copy: it is a 1&times;1 convolution at stride 2, or the input zero-padded to the new channels. '+
+  'No pooling between stages, unlike VGG, and the end is a global average pool of 512&times;7&times;7 to 512 numbers, not a 25,088-wide fully connected layer. See <a href="../depth/resnet-blocks.html">residual blocks</a>.';
  else if(PRESET==='lenet')r+='LeNet 1989: 16&times;16 inputs, then 12 feature maps of 8&times;8 and 12 of 4&times;4, each from 5&times;5 windows two pixels apart. Stride 2 alone gives ⌊(16 &minus; 5)/2⌋ + 1 = 6, not 8; the paper lets windows run past the border onto background, which in today&rsquo;s terms is padding 2. (Its second layer also reads only 8 of the 12 maps; here every filter reads all of them.)';
  else if(PRESET==='deep')r+='Unpadded 5&times;5 layers take 4 off each time: 16, 12, 8, 4, and then a 5&times;5 window no longer fits in a 4&times;4 map.';
  if(document.getElementById('same').checked)r+=' <b>Same padding</b>: P = (K&minus;1)/2 puts back exactly the K&minus;1 each layer would take off, so with stride 1 the size stops shrinking; stride still divides it.';
