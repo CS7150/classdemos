@@ -123,8 +123,8 @@ footer a{color:var(--text-secondary)}
   <p class="what">Count where the window can start: the slide&rsquo;s 3&times;3 filter on a 7&times;7 input fits in
      5 places each way, so the output is 5&times;5. Add stride and padding to get
      &lfloor;(W&minus;K+2P)/S&rfloor;+1, with the cells a stride never reads hatched. Then stack layers, drawn as
-     shrinking 3D blocks, from the slide&rsquo;s 32&rarr;28&rarr;26&rarr;24 to AlexNet&rsquo;s 224-vs-227 puzzle and a stack
-     too deep to fit.</p>
+     shrinking 3D blocks, from the slide&rsquo;s 32&rarr;28&rarr;26&rarr;24 to all of AlexNet&rsquo;s convolutions and max-pools
+     (227&rarr;55&rarr;27&rarr;13&rarr;6) and a stack too deep to fit. Drag any filter to scan it; the rest of the chain follows.</p>
   <a class="go" href="output-size.html">Open the explainer &rarr;</a>
 </li>
 
