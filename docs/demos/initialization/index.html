@@ -50,12 +50,12 @@ footer a{color:var(--text-secondary)}
   <div class="nav"><a href="../../">&larr; CS7150 class demos</a></div>
   <p class="eyebrow">Northeastern University &middot; CS 7150 &middot; Fall 2026</p>
   <h1>Initialization, explained</h1>
-  <p>Ten interactive pieces on <a href="https://proceedings.mlr.press/v9/glorot10a/glorot10a.pdf">Glorot &amp; Bengio 2010</a>:
+  <p>Nine interactive pieces on <a href="https://proceedings.mlr.press/v9/glorot10a/glorot10a.pdf">Glorot &amp; Bengio 2010</a>:
      first, what saturation is on a single tanh; then what the failure looks like while a real
      network trains, and the chain rule behind it, one neuron per layer, and how the choice of activation changes it; then what variance is, where the <i>n</i> in <i>n</i>&middot;Var(<i>W</i>) comes from (forward and
      backward), where the 1/3 comes from, the two uniform initializations the paper compares, and why forward and backward stability pull the variance in different
-     directions when a layer isn't square; and a footnote on why cross-entropy beats squared error
-     at the output.</p>
+     directions when a layer isn't square. (Their remark on why cross-entropy beats squared error at
+     the output is now in <a href="../objectives/output-loss.html">losses and regularization</a>.)</p>
 </header>
 
 <ol class="qs">
@@ -147,15 +147,6 @@ footer a{color:var(--text-secondary)}
   <a class="go" href="variance-balance.html">Open the explainer &rarr;</a>
 </li>
 
-<li class="done">
-  <div class="qtag">Footnote: the output loss</div>
-  <h2><a href="output-loss.html">Squared error vs. cross-entropy</a></h2>
-  <p class="what">Why Glorot &amp; Bengio's classifiers trained better with cross-entropy than with the
-     quadratic cost. Both are negative log-likelihoods (squared error is a Gaussian's, and a KL
-     between Gaussians); the difference is that squared error's gradient keeps the sigmoid's slope and
-     vanishes when the output is confidently wrong, while cross-entropy's log cancels it.</p>
-  <a class="go" href="output-loss.html">Open the explainer &rarr;</a>
-</li>
 </ol>
 
 <footer>
