@@ -284,8 +284,10 @@ function draw3(){
  // where each filter sits, as the output cell it makes: row oi, column oj
  blocks.forEach(function(b){var nb=blocks.filter(function(c){return c.i===b.i+1;})[0],ps=POS[b.i]||[0,0];
   POS[b.i]=nb?[Math.max(0,Math.min(nb.q.H-1,ps[0])),Math.max(0,Math.min(nb.q.H-1,ps[1]))]:[0,0];});
- function cellAt(nb){var ps=POS[nb.i-1],x=nb.x0+ps[1],y=nb.y1-ps[0];
-  return {poly:poly([[x,y,0],[x+1,y,0],[x+1,y-1,0],[x,y-1,0]].map(function(p){return at(nb,p);}),PINK,PINK,1),c:P2(at(nb,[x+0.5,y-0.5,0]))};}
+ // a pool's lines and the cell it makes take the pool's violet; a convolution's are pink
+ function lineCol(l){return l&&l.pool?VIOLET:PINK;}
+ function cellAt(nb){var ps=POS[nb.i-1],x=nb.x0+ps[1],y=nb.y1-ps[0],col=lineCol(LAYERS[nb.i-1]);
+  return {poly:poly([[x,y,0],[x+1,y,0],[x+1,y-1,0],[x,y-1,0]].map(function(p){return at(nb,p);}),col,col,1),c:P2(at(nb,[x+0.5,y-0.5,0])),col:col};}
  AXES={};
  order.forEach(function(b){
   var bcol=b.i===0?GREEN:BLUE,nb=blocks.filter(function(c){return c.i===b.i+1;})[0],l=LAYERS[b.i];
@@ -304,9 +306,9 @@ function draw3(){
    // eight corners; the ones from the far corners show through the translucent block
    if(nb){var T2=cellAt(nb).c;
     [[kx0,ky1,kz0],[kx1,ky1,kz0],[kx0,ky0,kz0],[kx1,ky0,kz0],[kx0,ky1,kz1],[kx1,ky1,kz1],[kx0,ky0,kz1],[kx1,ky0,kz1]].forEach(function(q2){var q=P2(at(b,q2));
-     s+='<line x1="'+q[0].toFixed(1)+'" y1="'+q[1].toFixed(1)+'" x2="'+T2[0].toFixed(1)+'" y2="'+T2[1].toFixed(1)+'" stroke="'+PINK+'" stroke-width="0.9" opacity="0.75" pointer-events="none"/>';});}}
+     s+='<line x1="'+q[0].toFixed(1)+'" y1="'+q[1].toFixed(1)+'" x2="'+T2[0].toFixed(1)+'" y2="'+T2[1].toFixed(1)+'" stroke="'+lineCol(l)+'" stroke-width="0.9" opacity="0.75" pointer-events="none"/>';});}}
   s+=faces(b,b.x0,b.x1,b.y0,b.y1,b.z0,b.z1,bcol,SH,true,0.45).replace(/<polygon /g,'<polygon pointer-events="none" ');
-  if(cell&&frontOn)s+=cell.poly+'<circle cx="'+cell.c[0].toFixed(1)+'" cy="'+cell.c[1].toFixed(1)+'" r="3.2" fill="'+PINK+'"/>';
+  if(cell&&frontOn)s+=cell.poly+'<circle cx="'+cell.c[0].toFixed(1)+'" cy="'+cell.c[1].toFixed(1)+'" r="3.2" fill="'+cell.col+'"/>';
  });
  // labels: each block's size under it; on a desktop, each layer's recipe above the gap
  var lab='';
