@@ -53,7 +53,7 @@ footer a{color:var(--text-secondary)}
   <p>Interactive pieces for the convolution lecture and <a href="http://yann.lecun.com/exdb/publis/pdf/lecun-89e.pdf">LeCun et al. 1989</a>:
      first, why comparing images pixel by pixel fails as soon as something moves, and the oriented
      detector Hubel and Wiesel found in the cat&rsquo;s visual cortex; then the operation itself, in 1D
-     and 2D; why sharing weights makes it shift-equivariant, and pooling makes it invariant; how far
+     and 2D, and as a fully connected matrix with zeros and tied weights; why sharing weights makes it shift-equivariant, and pooling makes it invariant; how far
      each unit sees as layers stack, and where padding creeps in; and the four axes of a layer&rsquo;s weights.</p>
 </header>
 
@@ -88,7 +88,16 @@ footer a{color:var(--text-secondary)}
      cross-correlation that libraries actually compute.</p>
   <a class="go" href="conv1d.html">Open the explainer &rarr;</a>
 </li>
-<!-- weight-sharing -->
+
+<li class="done">
+  <div class="qtag">Weight sharing</div>
+  <h2><a href="weight-sharing.html">Convolution as a constrained matrix</a></h2>
+  <p class="what">A convolution is a fully connected layer y = Mx with two constraints: zero the entries
+     outside a band (locality), then tie each diagonal to one weight (stationarity), and 80 parameters
+     become 3. Point at an entry to light every entry that shares its weight: the matrix is Toeplitz,
+     and in 2D doubly block Toeplitz. Gradients of a tied weight add up along its diagonal.</p>
+  <a class="go" href="weight-sharing.html">Open the explainer &rarr;</a>
+</li>
 
 <li class="done">
   <div class="qtag">The operation, in 2D</div>
@@ -100,7 +109,7 @@ footer a{color:var(--text-secondary)}
 </li>
 
 <li class="done">
-  <div class="qtag">Weight sharing, in action</div>
+  <div class="qtag">Equivariance</div>
   <h2><a href="equivariance.html">Equivariance and invariance</a></h2>
   <p class="what">Shift then convolve, or convolve then shift: the two paths meet exactly, because every
      position uses the same weights. Pool over positions and the result stops caring where the digit is.

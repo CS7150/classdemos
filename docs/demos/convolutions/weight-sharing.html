@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Convolution as a constrained matrix</title>
+<meta name="description" content="A convolution is a fully connected layer with most weights forced to zero and the rest tied along diagonals: morph a dense matrix into a Toeplitz one and count the parameters.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 16px;max-width:1100px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+.quiz{margin:0}
+svg{max-height:64vh;touch-action:none}
+.row{gap:7px}
+button{height:30px;font-size:13px;padding:0 9px}
+.seg button{height:28px;font-size:12.5px;padding:0 8px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:24px}
+input[type=range]{flex:0 1 150px;min-width:90px}
+label.cb{font-size:13px}
+.rd{font-size:14px;line-height:1.5;min-height:3em}
+.cap{font-size:12.5px;line-height:1.55;padding-top:4px}
+.cv{font-size:12.5px;font-variant-numeric:tabular-nums}
+.cvs{font-size:9.5px;font-variant-numeric:tabular-nums}
+/* on a phone the figure is drawn at about half size, so its type is set larger */
+#fig.m .tn{font-size:18px}#fig.m .ts{font-size:19px}#fig.m .cv{font-size:16px}#fig.m .cvs{font-size:12px}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Convolution demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Convolution as a constrained matrix<span>: a fully connected layer, with zeros and ties</span></h1>
+<p class="quiz">A convolution layer is a linear layer y = Mx whose matrix is not free: most entries are forced to zero, and the rest are forced to be equal along diagonals. Press <b>Play</b> to impose the two constraints one at a time. <b>Point at any entry</b> to see which entries share its weight; <b>drag</b> a number to change it.</p>
+
+<svg id="fig" viewBox="0 0 1040 430" role="img">
+<title>A weight matrix going from dense, to banded, to banded with constant diagonals</title>
+<desc>An input vector drawn as a row above a grid of weights, one grid row per output, and the output vector as a column to its right. In the first stage every weight is different; in the second, everything outside a band around the diagonal is zero; in the third, each diagonal of the band is one repeated weight, colored by which kernel weight it is. On the right, bars comparing the number of free parameters, and the kernel itself.</desc>
+<defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="var(--border-strong)" stroke-width="1.6"/></pattern></defs>
+<g id="stage"></g>
+</svg>
+
+<div class="row">
+<button class="main" id="play" onclick="play()">Play</button>
+<div class="seg" id="stg"><button data-s="0">fully connected</button><button data-s="1">locally connected</button><button data-s="2">convolution</button></div>
+<div class="seg" id="dim"><button data-d="1">1D</button><button data-d="2">2D</button></div>
+<span class="klab">kernel size K</span>
+<input type="range" id="ks" min="1" max="10" step="1" value="3" oninput="setK(+this.value)">
+<span class="knum" id="kv"></span>
+</div>
+<div class="row">
+<label class="cb"><input type="checkbox" id="grad" onchange="draw()">show gradients</label>
+<button onclick="randomize()">Random weights</button>
+<button onclick="reset()">Slide&rsquo;s example</button>
+</div>
+<div class="rd" id="readout"></div>
+<div class="cap" id="caption"></div>
+
+<script>
+var DIM=1,K1=3,K2=2,S=4,T=2,HOV=null,SEED=0,FED={},anim=null,MSG='';
+var X1=[0,0,1,2,1,0,1,1,0,0],X2=[0,1,1,0, 0,1,2,0, 0,1,1,0, 0,0,1,0];
+var W1=[-0.5,1,-0.5],W2=[1,-1,1,-1];
+var DY=[0.5,-1,0.5,1,-0.5,0,1,-1,0.5,-0.5,1,0,-1,0.5,-0.5,1];
+var COLK=['#378ADD','#BA7517','#7F77DD','#D85A30','#1D9E75','#D4537E','#A0518F','#5B8C2A','#2A7F8C','#888780'];
+var SUBS='₀₁₂₃₄₅₆₇₈₉';
+function sub(n){return String(n).split('').map(function(c){return SUBS[+c];}).join('');}
+function cl(v){return Math.max(0,Math.min(1,v));}
+function lerp(a,b,u){return a+(b-a)*u;}
+function f2(v){var r=Math.round(v*100)/100;if(Math.abs(r)<0.005)return '0';var s=String(Math.abs(r));return (r<0?'−':'')+s;}
+function par(v){return v<0?'('+f2(v)+')':f2(v);}
+
+/* ---------- the layer, 1D or 2D ---------- */
+function X(){return DIM===1?X1:X2;}
+function W(){return DIM===1?W1:W2;}
+function K(){return DIM===1?K1:K2;}
+function NI(){return DIM===1?X1.length:S*S;}
+function NOs(){return DIM===1?X1.length-K1+1:S-K2+1;}      // outputs per side
+function NO(){return DIM===1?NOs():NOs()*NOs();}
+function NK(){return DIM===1?K1:K2*K2;}
+// Which kernel weight entry (i,j) of the matrix is, or -1 if locality forces it to 0.
+// In 1D that depends only on the offset j - i: the matrix is Toeplitz.
+function tap(i,j){
+ if(DIM===1){var k=j-i;return k>=0&&k<K1?k:-1;}
+ var n=NOs(),r=Math.floor(i/n),c=i%n,u=Math.floor(j/S)-r,v=j%S-c;
+ return u>=0&&u<K2&&v>=0&&v<K2?u*K2+v:-1;}
+// The dense weights: a fixed pseudo-random number per entry, unless edited.
+function hr(a,b,c){var h=Math.sin(a*12.9898+b*78.233+c*37.719+SEED*3.17)*43758.5453;h-=Math.floor(h);return Math.round((h*2-1)*10)/10;}
+function Fv(i,j){var key=DIM+':'+K()+':'+i+','+j;return key in FED?FED[key]:hr(DIM*7+K(),i,j);}
+// The matrix at stage t: 0 dense, 1 banded, 2 banded and tied, with the morphs between.
+function Mv(i,j,t){var k=tap(i,j),f=Fv(i,j);if(k<0)return f*Math.max(0,1-t);return t<=1?f:lerp(f,W()[k],t-1);}
+function yv(t){var y=[],i,j,x=X();for(i=0;i<NO();i++){var s=0;for(j=0;j<NI();j++)s+=Mv(i,j,t)*x[j];y.push(s);}return y;}
+// the same outputs computed the convolution way: slide the kernel, multiply, add
+function slide(){var y=[],x=X(),w=W(),i,k;
+ if(DIM===1){for(i=0;i<NO();i++){var s=0;for(k=0;k<K1;k++)s+=w[k]*x[i+k];y.push(s);}return y;}
+ var n=NOs();for(var r=0;r<n;r++)for(var c=0;c<n;c++){var s2=0;for(var u=0;u<K2;u++)for(var v=0;v<K2;v++)s2+=w[u*K2+v]*x[(r+u)*S+c+v];y.push(s2);}return y;}
+// Backprop gives every entry of M the gradient dy_i x_j, as for any linear layer;
+// tying sums those along each set of entries that share a weight.
+function G(i,j){return DY[i%DY.length]*X()[j];}
+function gw(k){var s=0;for(var i=0;i<NO();i++)for(var j=0;j<NI();j++)if(tap(i,j)===k)s+=G(i,j);return s;}
+
+/* ---------- drawing ---------- */
+function T_(x,y,s,cls,anc,fill,extra){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'"'+
+ (anc?' text-anchor="'+anc+'"':'')+(fill?' style="fill:'+fill+'"':'')+(extra||'')+'>'+s+'</text>';}
+function div(v,vmax){return v>0?'var(--orange)':'var(--blue)';}
+function mobile(){return !!(window.matchMedia&&window.matchMedia('(max-width:820px)').matches);}
+function geo(){var m=mobile();
+ return m?{vb:'0 0 620 '+(DIM===1?720:900),X0:70,MW:360,Y0:92,MH:DIM===1?250:330,RX:40,RY:DIM===1?440:520,m:1}
+         :{vb:'0 0 1040 '+(DIM===1?400:500),X0:80,MW:400,Y0:92,MH:DIM===1?250:360,RX:720,RY:30,m:0};}
+function draw(){
+ var g=geo(),s='',i,j,k,t=T,x=X(),w=W(),ni=NI(),no=NO(),grad=document.getElementById('grad').checked;
+ var u1=cl(t),u2=cl(t-1),stage=Math.round(t);
+ var CW=g.MW/ni,RH=Math.min(34,g.MH/no),X0=g.X0,Y0=g.Y0,small=CW<32||RH<20;
+ var y=yv(t),hk=null,hi=-1,hj=-1;
+ if(HOV){if(HOV.m){hi=HOV.i;hj=HOV.j;hk=tap(hi,hj);}else if(HOV.r!=null)hi=HOV.r;else if(HOV.c!=null)hj=HOV.c;}
+ var free=function(i,j){return t<0.5||tap(i,j)>=0;};
+ // column headers: x as a row, one entry per column of M
+ s+=T_(X0+g.MW/2,Y0-(DIM===2?72:58),'x, one entry per column'+(DIM===2?' (the image read row by row)':''),'tn','middle');
+ for(j=0;j<ni;j++){var xx=X0+j*CW,lit=(hi>=0&&hj<0&&free(hi,j))||(HOV&&HOV.m&&free(hi,j))||j===hj;
+  s+='<g data-x="'+j+'" style="cursor:ns-resize"><rect x="'+(xx+1)+'" y="'+(Y0-44)+'" width="'+(CW-2)+'" height="28" rx="4" fill="var(--surface)" stroke="'+(lit?'var(--green)':'var(--border)')+'" stroke-width="'+(lit?2.2:1)+'"/>'+
+   T_(xx+CW/2,Y0-25,f2(x[j]),small?'cvs':'cv','middle')+'</g>';}
+ // the matrix
+ s+=T_(X0-10,Y0+Math.min(no*RH,g.MH)/2+4,'M','ts','end');
+ for(i=0;i<no;i++)for(j=0;j<ni;j++){
+  var cx=X0+j*CW,cy=Y0+i*RH,kk=tap(i,j),v=grad?(free(i,j)?G(i,j):0):Mv(i,j,t),fr=free(i,j);
+  var vmax=grad?2:1.2,op=Math.min(1,Math.abs(v)/vmax)*0.5;
+  s+='<g data-m="'+i+','+j+'" style="cursor:'+(fr&&!anim?'ns-resize':'default')+'">';
+  s+='<rect x="'+cx+'" y="'+cy+'" width="'+CW+'" height="'+RH+'" fill="var(--surface)"/>';
+  if(Math.abs(v)>0.005)s+='<rect x="'+cx+'" y="'+cy+'" width="'+CW+'" height="'+RH+'" fill="'+div(v)+'" opacity="'+op.toFixed(2)+'"/>';
+  if(kk<0&&u1>0)s+='<rect x="'+cx+'" y="'+cy+'" width="'+CW+'" height="'+RH+'" fill="url(#hatch)" opacity="'+(0.55*u1).toFixed(2)+'"/>';
+  s+='<rect x="'+(cx+0.5)+'" y="'+(cy+0.5)+'" width="'+(CW-1)+'" height="'+(RH-1)+'" fill="none" stroke="var(--border)" stroke-width="0.6"/>';
+  if(kk>=0&&u2>0)s+='<rect x="'+(cx+1.5)+'" y="'+(cy+1.5)+'" width="'+(CW-3)+'" height="'+(RH-3)+'" fill="none" stroke="'+COLK[kk%10]+'" stroke-width="2.4" opacity="'+u2.toFixed(2)+'"/>';
+  if(RH>=13)s+=T_(cx+CW/2,cy+(DIM===2?RH*0.64+4:RH/2+4),(kk<0&&u1>=1&&!grad)?'0':f2(v),small?'cvs':'cv','middle',(kk<0&&u1>0)||!fr?'var(--text-muted)':'');
+  s+='</g>';}
+ // 2D: the matrix is made of blocks, one per (output row, input row); label them
+ if(DIM===2){var n=NOs();
+  for(i=1;i<n;i++)s+='<line x1="'+X0+'" y1="'+(Y0+i*n*RH)+'" x2="'+(X0+g.MW)+'" y2="'+(Y0+i*n*RH)+'" stroke="var(--text-secondary)" stroke-width="1.6"/>';
+  for(j=1;j<S;j++)s+='<line x1="'+(X0+j*S*CW)+'" y1="'+Y0+'" x2="'+(X0+j*S*CW)+'" y2="'+(Y0+no*RH)+'" stroke="var(--text-secondary)" stroke-width="1.6"/>';
+  if(u1>0)for(var br=0;br<n;br++)for(var bc=0;bc<S;bc++){var du=bc-br;if(du>=0&&du<K2)
+   s+=T_(X0+bc*S*CW+2,Y0+br*n*RH+9,'B'+sub(du),'tn','start','var(--text-secondary)',' style="font-size:9px;opacity:'+u1.toFixed(2)+'"');}
+  for(i=0;i<S;i++)s+=T_(X0+i*S*CW+S*CW/2,Y0-50,'image row '+i,'tn','middle','',' style="font-size:10px"');}
+ // highlights: the hovered row (its window), the hovered column (the outputs it feeds),
+ // or the hovered entry and every entry that shares its weight
+ if(HOV&&HOV.m){
+  for(i=0;i<no;i++)for(j=0;j<ni;j++){var same=hk>=0?tap(i,j)===hk:(DIM===1&&j-i===hj-hi);
+   if(same&&!(i===hi&&j===hj))s+='<rect x="'+(X0+j*CW+1)+'" y="'+(Y0+i*RH+1)+'" width="'+(CW-2)+'" height="'+(RH-2)+'" fill="none" stroke="var(--text-primary)" stroke-width="1.6" stroke-dasharray="3 2" pointer-events="none"/>';}
+  s+='<rect x="'+(X0+hj*CW)+'" y="'+(Y0+hi*RH)+'" width="'+CW+'" height="'+RH+'" fill="none" stroke="var(--text-primary)" stroke-width="2.6" pointer-events="none"/>';}
+ if(hi>=0)s+='<rect x="'+X0+'" y="'+(Y0+hi*RH)+'" width="'+g.MW+'" height="'+RH+'" fill="none" stroke="var(--green)" stroke-width="1.6" pointer-events="none"/>';
+ if(hj>=0&&!(HOV&&HOV.m))s+='<rect x="'+(X0+hj*CW)+'" y="'+Y0+'" width="'+CW+'" height="'+(no*RH)+'" fill="none" stroke="var(--green)" stroke-width="1.6" pointer-events="none"/>';
+ // the output column, and the upstream gradient beside it
+ var YX=X0+g.MW+26,YW=58;
+ s+=T_(YX+YW/2,Y0-25,'y = Mx','tn','middle');
+ for(i=0;i<no;i++){var lit2=i===hi||(hj>=0&&!(HOV&&HOV.m)&&free(i,hj));
+  s+='<g data-y="'+i+'"><rect x="'+YX+'" y="'+(Y0+i*RH+1)+'" width="'+YW+'" height="'+(RH-2)+'" rx="4" fill="var(--surface)" stroke="'+(lit2?'var(--green)':'var(--border)')+'" stroke-width="'+(lit2?2.2:1)+'"/>';
+  if(RH>=13)s+=T_(YX+YW/2,Y0+i*RH+RH/2+4,f2(y[i]),RH<20?'cvs':'cv','middle','var(--green-ink)');s+='</g>';}
+ if(grad){var DX0=YX+YW+14;s+=T_(DX0+YW/2,Y0-25,'∂L/∂y','tn','middle');
+  for(i=0;i<no;i++){s+='<rect x="'+DX0+'" y="'+(Y0+i*RH+1)+'" width="'+YW+'" height="'+(RH-2)+'" rx="4" fill="var(--surface-1)" stroke="var(--border)"/>';
+   if(RH>=13)s+=T_(DX0+YW/2,Y0+i*RH+RH/2+4,f2(DY[i%DY.length]),RH<20?'cvs':'cv','middle');}}
+ // what the hovered entry is
+ var info='';
+ if(HOV&&HOV.m){
+  if(DIM===1)info='entry ('+hi+', '+hj+'): offset j − i = '+(hj-hi)+(hk>=0?(u2>0.5?' → weight w'+sub(hk)+'; dashed: same j − i, same weight':'; dashed: same j − i, which convolution will tie to one weight'):u1>0.5?', outside the band: fixed at 0':'');
+  else info='entry ('+hi+', '+hj+')'+(hk>=0?': kernel cell ('+Math.floor(hk/K2)+', '+hk%K2+')'+(u2>0.5?' → weight w'+sub(hk)+'; dashed: same weight':'; dashed: entries convolution will tie to it'):u1>0.5?': outside every window, fixed at 0':'');}
+ else info=grad?'cells show each entry’s gradient ∂L/∂M[i, j] = ∂L/∂yᵢ · xⱼ':'';
+ // one clause per line, so it fits a phone
+ info.split('; ').forEach(function(l,q){s+=T_(X0,Y0+no*RH+22+q*(g.m?22:17),l,'tn','start');});
+ var left=s;s='';
+ // right: parameter counts, and the kernel
+ var RX=g.RX,RY=g.RY,c0=ni*no,c1=no*NK(),c2=NK(),BW=g.m?300:240;
+ var rows=[['fully connected',DIM===1?'outputs · inputs = '+no+'·'+ni:'(outputs)·(pixels) = '+no+'·'+ni,c0],
+  ['locally connected',DIM===1?'outputs · K = '+no+'·'+K1:no+' outputs · '+K2+'×'+K2,c1],
+  ['convolution',DIM===1?'K = '+K1:'K×K = '+K2+'×'+K2,c2]];
+ s+=T_(RX,RY+20,'free parameters, per channel pair','ts','start');
+ rows.forEach(function(r,q){var yy=RY+44+q*44,on=q===stage;
+  s+=T_(RX,yy,r[0]+': '+r[1]+' = <tspan style="font-weight:600;fill:var(--text-primary)">'+r[2]+'</tspan>','tn','start',on?'var(--text-primary)':'');
+  s+='<rect x="'+RX+'" y="'+(yy+6)+'" width="'+BW+'" height="10" fill="var(--surface-1)"/>';
+  s+='<rect x="'+RX+'" y="'+(yy+6)+'" width="'+Math.max(2,BW*r[2]/c0).toFixed(1)+'" height="10" fill="'+(on?'var(--pink)':'var(--text-muted)')+'"/>';});
+ // the kernel (and, in 2D, the image it slides over)
+ var KY=RY+188,kc=DIM===1?Math.min(34,(g.m?520:290)/K1):34;
+ var gshow=grad&&stage===2&&!anim;
+ s+=T_(RX,KY-10,'the kernel w'+(gshow&&DIM===1?', with ∂L/∂w under each weight':''),'ts','start');
+ for(k=0;k<NK();k++){var kx=RX+(DIM===1?k:k%K2)*kc,ky=KY+(DIM===1?0:Math.floor(k/K2))*kc,on2=hk===k;
+  s+='<g data-w="'+k+'" style="cursor:ns-resize"><rect x="'+(kx+1)+'" y="'+(ky+1)+'" width="'+(kc-2)+'" height="'+(kc-2)+'" rx="4" fill="var(--surface)" stroke="'+COLK[k%10]+'" stroke-width="'+(on2?3.4:2)+'" opacity="'+(0.35+0.65*u2).toFixed(2)+'"/>'+
+   T_(kx+kc/2,ky+kc/2+4,f2(w[k]),kc<30?'cvs':'cv','middle')+'</g>';
+  if(gshow&&DIM===1)s+=T_(kx+kc/2,ky+kc+14,f2(gw(k)),'cvs','middle','var(--pink-ink)');}
+ if(DIM===2){var IX=RX+Math.max(K2*34,100)+30,ic=24;
+  if(gshow){for(k=0;k<NK();k++)s+=T_(RX,KY+K2*34+16+k*14,'∂L/∂w'+sub(k)+' = '+f2(gw(k)),'cvs','start','var(--pink-ink)');}
+  s+=T_(IX,KY-10,'the 4×4 image x','ts','start');
+  for(j=0;j<16;j++){var lit3=hi>=0&&tap(hi,j)>=0&&u1>0.5;
+   s+='<rect x="'+(IX+(j%S)*ic)+'" y="'+(KY+Math.floor(j/S)*ic)+'" width="'+ic+'" height="'+ic+'" fill="var(--text-primary)" opacity="'+(0.12+0.3*x[j]).toFixed(2)+'"/>'+
+    '<rect x="'+(IX+(j%S)*ic+0.5)+'" y="'+(KY+Math.floor(j/S)*ic+0.5)+'" width="'+(ic-1)+'" height="'+(ic-1)+'" fill="none" stroke="'+(lit3?'var(--green)':'var(--border)')+'" stroke-width="'+(lit3?2.2:0.8)+'"/>'+
+    T_(IX+(j%S)*ic+ic/2,KY+Math.floor(j/S)*ic+ic/2+4,f2(x[j]),'cvs','middle');}
+  s+=T_(IX,KY+S*ic+16,'read row by row into x','tn','start');}
+ var svg=document.getElementById('fig');svg.setAttribute('viewBox',g.vb);svg.classList.toggle('m',!!g.m);
+ document.getElementById('stage').innerHTML=g.m?left+'<g>'+s+'</g>':left+s;
+ readout(y);
+}
+function readout(y){
+ var t=T,st=Math.round(t),h='',no=NO(),k,i;
+ if(anim)h='Imposing the constraints&hellip;';
+ else if(st===0)h='<b>Fully connected.</b> Every one of the <b>'+NI()*no+'</b> entries is its own weight, so every output reads every input: y<sub>i</sub> = &Sigma;<sub>j</sub> M<sub>ij</sub> x<sub>j</sub>.';
+ else if(st===1)h='<b>Locally connected.</b> Locality: output '+(DIM===1?'i':'(r, c)')+' may only read the '+(DIM===1?K1+' inputs starting at position i':K2+'×'+K2+' patch at (r, c)')+
+  ', so everything outside the band is fixed at 0 (hatched). <b>'+no*NK()+'</b> free weights remain, and each row is its own little kernel.';
+ else{var sl=slide(),ok=sl.every(function(v,q){return Math.abs(v-y[q])<1e-9;});
+  h='<b>Convolution.</b> Stationarity: every row uses the <i>same</i> kernel, so entries with the same '+(DIM===1?'offset j &minus; i':'kernel cell')+' are one weight. <b>'+NK()+'</b> free weights. '+
+   'Check: Mx = ('+y.map(f2).join(', ')+') and sliding w along x gives ('+sl.map(f2).join(', ')+')'+(ok?' <b style="color:var(--green-ink)">&mdash; identical</b>.':'.');}
+ if(!anim&&document.getElementById('grad').checked){
+  if(st===2){var parts=[];for(k=0;k<Math.min(NK(),DIM===1?3:4);k++){var terms=[];
+    for(i=0;i<no;i++)for(var j=0;j<NI();j++)if(tap(i,j)===k)terms.push(par(DY[i%DY.length])+'&middot;'+par(X()[j]));
+    parts.push('&part;L/&part;w<sub>'+k+'</sub> = '+(terms.length<=10?terms.join(' + '):'('+terms.length+' terms)')+' = <b>'+f2(gw(k))+'</b>');}
+   h+='<div>Backprop gives each entry &part;L/&part;y<sub>i</sub>&middot;x<sub>j</sub>; a tied weight collects the sum over '+(DIM===1?'its whole diagonal':'every entry it appears in')+': '+parts.join('; ')+(NK()>parts.length?'; &hellip;':'')+'.</div>';}
+  else h+='<div>Each entry&rsquo;s gradient is &part;L/&part;y<sub>i</sub>&middot;x<sub>j</sub>, the outer product of the upstream gradient and the input'+(st===1?'; the hatched zeros are not parameters and get no update.':'.')+'</div>';}
+ if(MSG){h+='<div style="color:var(--pink-ink)">'+MSG+'</div>';}
+ if(DIM===1&&K1===X1.length)h+='<div><b>K = '+K1+' = W<sub>in</sub>:</b> one output, and all three stages are the same layer. A fully connected layer with one output <i>is</i> a convolution whose kernel is the whole input; with C<sub>out</sub> outputs, it is C<sub>out</sub> such kernels.</div>';
+ document.getElementById('readout').innerHTML=h;
+}
+function caption(){
+ document.getElementById('caption').innerHTML=
+ '<b>Two constraints, two priors.</b> Zeroing everything outside the band says <i>locality</i>: a feature depends only on nearby pixels. Tying each diagonal says <i>stationarity</i>: the same feature is worth detecting everywhere, '+
+ 'which is also what makes the layer <a href="equivariance.html">equivariant</a>. This is the parameter reduction LeCun et al. 1989 argue for: fewer free weights from built-in knowledge about images, with the same data. '+
+ 'It is also why a convolution&rsquo;s parameter count does not depend on the image size at all (K, or C<sub>out</sub>&middot;C<sub>in</sub>&middot;K&middot;K with <a href="tensors.html">channels</a>), while the dense matrix grows with the square of it.'+
+ '<div style="margin-top:4px"><b>Toeplitz matrices.</b> A matrix whose every diagonal is constant, so that M[i, j] depends only on j &minus; i, is called <b>Toeplitz</b>. '+
+ 'The convolution matrix is one: M[i, j] = w[j &minus; i] for 0 &le; j &minus; i &lt; K, and 0 otherwise. A general n&times;m Toeplitz matrix has at most n + m &minus; 1 free numbers, one per diagonal, instead of n&middot;m; '+
+ 'a convolution uses only K of those diagonals. With circular padding, the diagonals wrap around and the matrix becomes <i>circulant</i>, which is why the Fourier transform diagonalizes convolution. '+
+ 'In 2D, reading the image row by row, the matrix is <b>block Toeplitz with Toeplitz blocks</b> (doubly block Toeplitz): the block for output row r and image row r + u is the Toeplitz matrix of kernel row u, labeled B<sub>u</sub>.</div>'+
+ '<div style="margin-top:4px"><b>Training a tied weight.</b> Backprop does not need to know about the ties: it computes &part;L/&part;M[i, j] = &part;L/&part;y<sub>i</sub>&middot;x<sub>j</sub> for every entry, exactly as for a dense layer, '+
+ 'and a shared weight receives the sum over every entry it appears in, &part;L/&part;w<sub>k</sub> = &Sigma;<sub>i</sub> &part;L/&part;M[i, i + k]. '+
+ 'Nobody builds the matrix in practice (it is almost all zeros); the <a href="conv1d.html">sliding window</a> computes the same product directly. The matrix view is the one that connects a convolution to <a href="../quiz0/matvec.html">every other linear layer</a>.</div>';
+}
+
+/* ---------- controls ---------- */
+function markSeg(){Array.from(document.getElementById('stg').children).forEach(function(b){b.classList.toggle('on',!anim&&+b.dataset.s===Math.round(T));});
+ Array.from(document.getElementById('dim').children).forEach(function(b){b.classList.toggle('on',+b.dataset.d===DIM);});
+ var ks=document.getElementById('ks');ks.max=DIM===1?X1.length:S;ks.value=K();document.getElementById('kv').textContent=DIM===1?K1:K2+'×'+K2;}
+function goTo(target,then){if(anim)cancelAnimationFrame(anim.raf);var t0=T,tm=performance.now(),dur=Math.max(300,Math.abs(target-t0)*900);MSG='';
+ anim={};(function f(n){var u=cl((n-tm)/dur),e=u<0.5?2*u*u:1-Math.pow(-2*u+2,2)/2;T=lerp(t0,target,e);draw();
+  if(u<1)anim.raf=requestAnimationFrame(f);else{anim=null;T=target;markSeg();draw();if(then)then();}})(tm);markSeg();}
+// Play: dense, then the zeros, a pause, then the ties.
+function play(){if(anim)return;T=0;markSeg();draw();setTimeout(function(){goTo(1,function(){setTimeout(function(){goTo(2);},700);});},500);}
+document.getElementById('stg').addEventListener('click',function(e){var b=e.target.closest('button');if(b)goTo(+b.dataset.s);});
+document.getElementById('dim').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;DIM=+b.dataset.d;HOV=null;MSG='';markSeg();draw();});
+function setK(k){if(DIM===1){K1=k;var d={1:[1],2:[-1,1],3:[-0.5,1,-0.5]};W1=d[k]?d[k].slice():W1.slice(0,k);while(W1.length<k)W1.push(hr(5,W1.length,k));}
+ else{K2=k;var d2={1:[1],2:[1,-1,1,-1],3:[-0.5,1,-0.5,-0.5,1,-0.5,-0.5,1,-0.5]};W2=d2[k]?d2[k].slice():[];while(W2.length<k*k)W2.push(hr(6,W2.length,k));}
+ HOV=null;MSG='';markSeg();draw();}
+function randomize(){SEED++;FED={};var w=W();for(var k=0;k<w.length;k++)w[k]=hr(9,k,SEED);MSG='';draw();}
+function reset(){DIM=1;K1=3;W1=[-0.5,1,-0.5];X1=[0,0,1,2,1,0,1,1,0,0];FED={};SEED=0;HOV=null;MSG='';T=2;markSeg();draw();}
+function setEntry(kind,a,b,v){v=Math.max(-9,Math.min(9,Math.round(v*10)/10));var st=Math.round(T);MSG='';
+ if(kind==='x'){X()[a]=v;}
+ else if(kind==='w'){W()[a]=v;}
+ else{var k=tap(a,b);
+  if(st>=1&&k<0){MSG='That entry is outside the band: locality fixes it at 0, so it is not a parameter.';}
+  else if(st===2)W()[k]=v;
+  else FED[DIM+':'+K()+':'+a+','+b]=v;}
+ draw();}
+function valOf(kind,a,b){if(kind==='x')return X()[a];if(kind==='w')return W()[a];var k=tap(a,b),st=Math.round(T);
+ return st===2&&k>=0?W()[k]:st>=1&&k<0?0:Fv(a,b);}
+// Hover shows structure; a vertical drag edits.  The handlers sit on the svg,
+// which outlives the redraws.
+(function(){var svg=document.getElementById('fig'),d=null;
+ function hit(e){var el=document.elementFromPoint(e.clientX,e.clientY);return el&&el.closest?el.closest('[data-m],[data-x],[data-y],[data-w]'):null;}
+ svg.addEventListener('pointermove',function(e){
+  if(d){var n=Math.round((d.y-e.clientY)/10);if(n!==d.n){d.n=n;setEntry(d.kind,d.a,d.b,d.v0+n*0.1);}return;}
+  var g=hit(e),h=null;
+  if(g){if(g.dataset.m){var p=g.dataset.m.split(',');h={m:1,i:+p[0],j:+p[1]};}
+   else if(g.dataset.x)h={c:+g.dataset.x};else if(g.dataset.y)h={r:+g.dataset.y};}
+  if(JSON.stringify(h)!==JSON.stringify(HOV)){HOV=h;if(!h)MSG='';draw();}});
+ svg.addEventListener('pointerleave',function(){if(!d&&HOV){HOV=null;draw();}});
+ svg.addEventListener('pointerdown',function(e){if(anim)return;var g=hit(e);if(!g||g.dataset.y)return;
+  var kind=g.dataset.m?'m':g.dataset.x?'x':'w',p=(g.dataset.m||g.dataset.x||g.dataset.w).split(',');
+  d={kind:kind,a:+p[0],b:+(p[1]||0),y:e.clientY,n:0,v0:valOf(kind,+p[0],+(p[1]||0))};
+  if(kind==='m'){HOV={m:1,i:d.a,j:d.b};if(Math.round(T)>=1&&tap(d.a,d.b)<0){MSG='That entry is outside the band: locality fixes it at 0, so it is not a parameter.';d=null;draw();return;}}
+  svg.setPointerCapture(e.pointerId);e.preventDefault();});
+ var up=function(){d=null;};svg.addEventListener('pointerup',up);svg.addEventListener('pointercancel',up);})();
+document.addEventListener('keydown',function(e){if(e.target.tagName==='INPUT')return;
+ if(e.key===' '){e.preventDefault();play();}
+ else if(e.key==='ArrowLeft'&&!anim)goTo(Math.max(0,Math.round(T)-1));
+ else if(e.key==='ArrowRight'&&!anim)goTo(Math.min(2,Math.round(T)+1));});
+window.addEventListener('resize',draw);
+markSeg();caption();draw();
+</script>
+</body>
+</html>
