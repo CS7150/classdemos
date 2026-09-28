@@ -135,8 +135,8 @@ svg text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,
   PyTorch also keeps <code>.grad</code> only on leaves (call <code>retain_grad()</code> to keep an intermediate one) and stores plain
   Python numbers like <code>4</code> inside the operation instead of making nodes for them. Here every node shows its gradient, and
   constants are drawn as dashed boxes that get no gradient.</div>
- <div><b>What you can type.</b> <code>+ - * / **</code>, parentheses, <code>sin cos exp log tanh sigmoid relu sqrt abs pow</code> as functions
-  (<code>sin(x)</code>, <code>torch.sin(x)</code>) or methods (<code>x.sin()</code>, <code>y.pow(2)</code>), and several lines of
+ <div><b>What you can type.</b> <code>+ - * / **</code>, parentheses, <code>sin cos exp log tanh sigmoid relu sqrt abs pow square</code>,
+  and <code>add sub mul div neg</code>, each as a function (<code>sin(x)</code>, <code>torch.pow(x, y)</code>) or a method (<code>x.sin()</code>, <code>x.pow(y)</code>), and several lines of
   assignments; the last one is the loss. Every unassigned name is a leaf tensor with <code>requires_grad=True</code>.
   Keys: &rarr; step, &larr; back, space play.</div>
 </div>
@@ -173,7 +173,9 @@ var OPS={
 };
 var GLYPH={sigmoid:'\u03c3',relu:'ReLU',sqrt:'\u221a',abs:'|\u00b7|'};
 function glyph(op){return OPS[op].ar===2?OPS[op].sym:(GLYPH[op]||op);}
-var CALLABLE={sin:1,cos:1,exp:1,log:1,tanh:1,sigmoid:1,relu:1,sqrt:1,abs:1,pow:1};
+var CALLABLE={sin:1,cos:1,exp:1,log:1,tanh:1,sigmoid:1,relu:1,sqrt:1,abs:1,pow:1,add:1,sub:1,mul:1,div:1,neg:1};
+// every operator also has a function and a method form: torch.mul(x, y), x.mul(y), x.neg(), x.square()
+var ALIAS={subtract:'sub',multiply:'mul',divide:'div',true_divide:'div',negative:'neg'};
 var NS={torch:1,F:1,nn:1,functional:1,math:1,np:1};
 
 var PRESETS=[
@@ -236,6 +238,11 @@ function parseProgram(src){
  function arglist(){var a=[];if(isop(')'))return a;a.push(expr());while(isop(',')){p++;a.push(expr());}return a;}
  function call(fname,args,form,s,e,tok){
   var base=fname.split('.').pop();
+  base=ALIAS[base]||base;
+  if(base==='square'){
+   if(args.length!==1)throw new PErr(fname+' needs '+(form==='meth'?0:1)+' argument'+(form==='meth'?'s':''),tok.s);
+   return {k:'op',op:'pow',form:form,fname:fname,args:[args[0],{k:'num',v:2,x:'2',s:e,e:e}],s:s,e:e};
+  }
   if(!CALLABLE[base])throw new PErr('I don’t know the function “'+fname+'”',tok.s);
   var need=OPS[base].ar;
   if(args.length!==need)throw new PErr(fname+' needs '+(form==='meth'?need-1:need)+' argument'+((form==='meth'?need-1:need)===1?'':'s'),tok.s);
