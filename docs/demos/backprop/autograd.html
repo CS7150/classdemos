@@ -136,7 +136,7 @@ svg text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,
   Python numbers like <code>4</code> inside the operation instead of making nodes for them. Here every node shows its gradient, and
   constants are drawn as dashed boxes that get no gradient.</div>
  <div><b>What you can type.</b> <code>+ - * / **</code>, parentheses, <code>sin cos exp log tanh sigmoid relu sqrt abs pow</code> as functions
-  (<code>sin(x)</code>, <code>torch.sin(x)</code>) or methods (<code>x.sin()</code>, <code>y.pow(w*x)</code>), and several lines of
+  (<code>sin(x)</code>, <code>torch.sin(x)</code>) or methods (<code>x.sin()</code>, <code>y.pow(2)</code>), and several lines of
   assignments; the last one is the loss. Every unassigned name is a leaf tensor with <code>requires_grad=True</code>.
   Keys: &rarr; step, &larr; back, space play.</div>
 </div>
@@ -177,7 +177,6 @@ var CALLABLE={sin:1,cos:1,exp:1,log:1,tanh:1,sigmoid:1,relu:1,sqrt:1,abs:1,pow:1
 var NS={torch:1,F:1,nn:1,functional:1,math:1,np:1};
 
 var PRESETS=[
- {name:'The example: w*x + 4*sin(x**2) − y.pow(w*x)',src:'loss = w*x + 4*sin(x**2) - y.pow(w*x)',vals:{w:0.5,x:1.5,y:2}},
  {name:'Johnson’s first graph: (x + y) * z',src:'f = (x + y) * z',vals:{x:-2,y:5,z:-4}},
  {name:'cosh from the slides: (exp(x) + exp(−x)) / 2',src:'cosh = (exp(x) + exp(-x)) / 2',vals:{x:0.6931}},
  {name:'tanh by hand, three lines',src:'e1 = x.exp()\ne2 = (-x).exp()\ny = (e1 - e2) / (e1 + e2)',vals:{x:0.6931}},
