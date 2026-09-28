@@ -178,6 +178,7 @@ var NS={torch:1,F:1,nn:1,functional:1,math:1,np:1};
 
 var PRESETS=[
  {name:'Johnson’s first graph: (x + y) * z',src:'f = (x + y) * z',vals:{x:-2,y:5,z:-4}},
+ {name:'Squared error of a line: (w*x \u2212 y)**2',src:'loss = (w*x - y)**2',vals:{w:0.5,x:2,y:3}},
  {name:'cosh from the slides: (exp(x) + exp(−x)) / 2',src:'cosh = (exp(x) + exp(-x)) / 2',vals:{x:0.6931}},
  {name:'tanh by hand, three lines',src:'e1 = x.exp()\ne2 = (-x).exp()\ny = (e1 - e2) / (e1 + e2)',vals:{x:0.6931}},
  {name:'One sigmoid neuron, squared error',src:'loss = (sigmoid(w1*x1 + w2*x2 + b) - t)**2',vals:{w1:0.5,x1:1,w2:-1,x2:2,b:0.5,t:1}},
