@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Backprop, step by step</title>
+<meta name="description" content="Type a PyTorch-style expression and watch autograd build its computation graph, run the forward pass in topological order, and run loss.backward() one node at a time, with the upstream, local and downstream gradients at each node.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+:root{--val:#0F6E56;--grad:#C0392B;--loc:#5B52C9;--cur:#378ADD;--code-bg:#f1efe8;--mark:#fde9b8}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--val:#4fbb99;--grad:#f0807a;--loc:#a49dea;--code-bg:#2c2c2a;--mark:#5a4a1f}}
+:root[data-theme="dark"]{--val:#4fbb99;--grad:#f0807a;--loc:#a49dea;--code-bg:#2c2c2a;--mark:#5a4a1f}
+body{gap:12px}
+.intro{font-size:15.5px;color:var(--text-secondary);line-height:1.6;margin:0;max-width:95ch}
+.intro b{color:var(--text-primary);font-weight:500}
+code,pre,textarea,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+#src{flex:1 1 420px;min-width:0;height:auto;min-height:40px;font-size:16px;padding:8px 10px;border:1px solid var(--border-strong);
+ border-radius:8px;background:var(--surface);color:var(--text-primary);resize:vertical;line-height:1.45}
+#src:focus{outline:none;border-color:var(--blue)}
+#leafs{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+#leafs label{display:flex;gap:6px;align-items:center;font-size:16px;color:var(--text-secondary)}
+.mini{width:78px;height:34px;text-align:center;font-size:15px;font-variant-numeric:tabular-nums;border:1px solid var(--border-strong);
+ border-radius:7px;background:var(--surface);color:var(--text-primary);font-family:inherit;padding:0 4px}
+.mini:focus{outline:none;border-color:var(--blue)}
+#err{color:var(--grad);font-size:14.5px;min-height:0}
+#err:empty{display:none}
+@media (max-width:640px){#src{min-height:66px}}
+.card0{background:var(--surface);border:1px solid var(--border);border-radius:12px}
+#gwrap{overflow-x:auto;padding:4px 6px}
+#graph{min-width:620px;max-height:62vh}
+#grid{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:12px;align-items:start}
+@media (max-width:980px){#grid{grid-template-columns:1fr}}
+#zwrap{padding:8px 10px 4px}
+#zoom .lv,#zoom .lg2,#zoom .ll{font-size:17px}
+#zoom .cap2{font-size:12.5px}
+#zoom .ts{font-size:16px}
+#zoom .sm{font-size:15px}
+#zwrap .hd,#panel .hd{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-muted);margin:0 0 2px}
+#panel{padding:10px 14px 12px;font-size:15.5px;line-height:1.6;color:var(--text-secondary)}
+#panel h3{font-size:17px;margin:2px 0 6px;color:var(--text-primary);font-weight:600}
+#panel p{margin:6px 0}
+#panel b{color:var(--text-primary);font-weight:500}
+#codev{background:var(--code-bg);border-radius:8px;padding:7px 10px;font-size:14.5px;margin:0 0 8px;white-space:pre-wrap;word-break:break-word;color:var(--text-primary)}
+#codev mark{background:var(--mark);color:inherit;border-radius:3px;padding:0 1px}
+.eq{font-size:17px;color:var(--text-primary);margin:3px 0 3px 10px;font-variant-numeric:tabular-nums}
+.eq sup{font-size:.72em}
+.v{color:var(--val)} .g{color:var(--grad)} .l{color:var(--loc)}
+.v,.g,.l{font-weight:500}
+pre.node{background:var(--code-bg);border-radius:8px;padding:6px 10px;font-size:13.5px;margin:8px 0 0;line-height:1.5;color:var(--text-secondary);overflow-x:auto}
+pre.node .k{color:var(--text-muted)}
+.aside{font-size:14.5px;color:var(--text-muted);border-left:3px solid var(--border-strong);padding-left:9px}
+table.fd{border-collapse:collapse;font-size:15px;font-variant-numeric:tabular-nums;margin:6px 0}
+table.fd th{font-weight:400;color:var(--text-muted);text-align:right;padding:2px 12px 2px 0}
+table.fd td{text-align:right;padding:2px 12px 2px 0}
+.ctl .seg button{padding:0 12px}
+#stepv{min-width:150px}
+/* ---------- svg ---------- */
+svg text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
+.edge{fill:none;stroke:var(--border-strong);stroke-width:1.8}
+.edge.cedge{stroke-dasharray:4 4}
+.edge.efwd{stroke:var(--val);stroke-width:2.6}
+.edge.ebwd{stroke:var(--grad);stroke-width:2.6}
+.edge.eptr{stroke:var(--cur);stroke-width:2.4}
+.nd{fill:var(--surface);stroke:var(--text-secondary);stroke-width:1.8}
+.nd.leaf{fill:var(--surface-1)}
+.nd.const{fill:var(--bg);stroke:var(--border-strong);stroke-dasharray:3 3}
+.nd.cur{stroke:var(--cur);stroke-width:3.4}
+.ring{fill:none;stroke:var(--cur);stroke-width:7;opacity:.18}
+.op{font-size:17px;fill:var(--text-primary);text-anchor:middle;dominant-baseline:central}
+.op.w{font-size:13.5px}
+.nm{font-size:15px;fill:var(--text-secondary);font-style:italic;text-anchor:middle}
+.lv{font-size:14px;fill:var(--val);font-weight:500;font-variant-numeric:tabular-nums}
+.lg2{font-size:14px;fill:var(--grad);font-weight:500;font-variant-numeric:tabular-nums}
+.lc{font-size:12.5px;fill:var(--grad);font-variant-numeric:tabular-nums}
+.ll{font-size:14px;fill:var(--loc);font-weight:500;font-variant-numeric:tabular-nums}
+.cap2{font-size:11.5px;letter-spacing:.04em}
+.mut{fill:var(--text-muted)}
+.badge{fill:var(--surface-1);stroke:var(--border-strong);stroke-width:1}
+.badgt{font-size:11px;fill:var(--text-secondary);text-anchor:middle;dominant-baseline:central}
+.callout{fill:var(--code-bg);stroke:var(--cur);stroke-width:1.4}
+.callt{font-size:14px;fill:var(--text-primary);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.h{paint-order:stroke;stroke:var(--surface);stroke-width:4px;stroke-linejoin:round}
+.dotv{fill:var(--val)} .dotg{fill:var(--grad)}
+.pop{animation:pop .45s ease-out both;transform-box:fill-box;transform-origin:center}
+.fade{animation:fade .6s ease-out both}
+.draw{animation:drawback .7s ease-out both}
+.late{animation-delay:.55s}
+@keyframes pop{from{opacity:0;transform:scale(.5)}}
+@keyframes fade{from{opacity:0}}
+@keyframes drawback{from{stroke-dashoffset:-1}}
+@media (prefers-reduced-motion:reduce){.pop,.fade,.draw{animation:none}}
+</style>
+</head>
+<body>
+<div class="nav"><a href="../../">&larr; CS7150 class demos</a></div>
+<h1>Backprop, step by step<span>: what <code>loss.backward()</code> actually does</span></h1>
+<p class="intro">Type an expression the way you would in PyTorch. The page runs it the way an autograd
+ engine does, in three phases: <b>build</b> the graph as Python evaluates each operation, run the
+ <b>forward</b> pass in topological order, then run the <b>backward</b> pass in reverse order.
+ At every node, the chain rule multiplies the <span class="g">upstream gradient</span> by the node's
+ <span class="l">local gradient</span> to get the <span class="g">downstream gradient</span> for each input.</p>
+
+<div class="row">
+ <textarea id="src" rows="1" spellcheck="false" aria-label="expression"></textarea>
+ <select id="preset" aria-label="examples"></select>
+</div>
+<div class="row"><span class="klab">leaf values</span><div id="leafs"></div></div>
+<div id="err"></div>
+
+<div class="card0" id="gwrap"><svg id="graph" role="img" aria-label="computation graph"></svg></div>
+
+<div class="row ctl">
+ <div class="seg" id="phases">
+  <button data-p="0">1 &middot; Build graph</button><button data-p="1">2 &middot; Forward</button><button data-p="2">3 &middot; Backward</button>
+ </div>
+ <button onclick="go(0)" title="start (Home)">&#x23EE;</button>
+ <button onclick="go(K-1)" title="back (&larr;)">&#x25C0; Back</button>
+ <button class="main" id="stepb" onclick="stepF()" title="step (&rarr;)">Step &#x25B6;</button>
+ <button id="playb" onclick="togglePlay()" title="play (space)">Play</button>
+ <input type="range" id="scrub" min="0" max="1" value="0" aria-label="step">
+ <span class="klab num" id="stepv"></span>
+</div>
+
+<div id="grid">
+ <div class="card0" id="zwrap"><div class="hd" id="zhd">Zoom in to one node</div><svg id="zoom" viewBox="0 0 760 300" role="img" aria-label="one node, zoomed in"></svg></div>
+ <div class="card0" id="panel"><div class="hd">What happens at this step</div><pre id="codev"></pre><div id="expl"></div></div>
+</div>
+
+<div class="cap">
+ <div><b>Colors.</b> <span class="v">Green</span> numbers are values from the forward pass. <span class="g">Red</span> numbers are
+  gradients of the loss, &part;<i>L</i>/&part;(&middot;), flowing backward; where a node feeds several others, the small red numbers on its edges are the share each one sends back,
+  before they are added up. <span class="l">Violet</span> numbers are local gradients, which a node can work out from its own inputs alone.</div>
+ <div><b>Where this differs from PyTorch.</b> PyTorch computes each operation the moment Python reaches it, so building the graph and
+  the forward pass happen together. They are split here, as in the homework's autograd, so you can see the graph before any number moves.
+  PyTorch also keeps <code>.grad</code> only on leaves (call <code>retain_grad()</code> to keep an intermediate one) and stores plain
+  Python numbers like <code>4</code> inside the operation instead of making nodes for them. Here every node shows its gradient, and
+  constants are drawn as dashed boxes that get no gradient.</div>
+ <div><b>What you can type.</b> <code>+ - * / **</code>, parentheses, <code>sin cos exp log tanh sigmoid relu sqrt abs pow</code> as functions
+  (<code>sin(x)</code>, <code>torch.sin(x)</code>) or methods (<code>x.sin()</code>, <code>y.pow(w*x)</code>), and several lines of
+  assignments; the last one is the loss. Every unassigned name is a leaf tensor with <code>requires_grad=True</code>.
+  Keys: &rarr; step, &larr; back, space play.</div>
+</div>
+
+<script>
+/* ================= operations ================= */
+// Each op knows its forward function, its local gradient with respect to each input
+// (as a number, and as a formula in the input names), and what it saves for backward.
+var OPS={
+ add:{cls:'AddBackward0',sym:'+',d:'__add__',rd:'__radd__',ar:2,f:function(a,b){return a+b},
+  loc:[function(){return 1},function(){return 1}],ls:[function(){return '1'},function(){return '1'}],sv:''},
+ sub:{cls:'SubBackward0',sym:'−',d:'__sub__',rd:'__rsub__',ar:2,f:function(a,b){return a-b},
+  loc:[function(){return 1},function(){return -1}],ls:[function(){return '1'},function(){return '−1'}],sv:''},
+ mul:{cls:'MulBackward0',sym:'×',d:'__mul__',rd:'__rmul__',ar:2,f:function(a,b){return a*b},
+  loc:[function(a,b){return b},function(a,b){return a}],ls:[function(A,B){return B},function(A){return A}],sv:'in'},
+ div:{cls:'DivBackward0',sym:'÷',d:'__truediv__',rd:'__rtruediv__',ar:2,f:function(a,b){return a/b},
+  loc:[function(a,b){return 1/b},function(a,b){return -a/(b*b)}],
+  ls:[function(A,B){return '1/'+B},function(A,B){return '−'+A+'/'+B+'<sup>2</sup>'}],sv:'in'},
+ pow:{cls:'PowBackward1',sym:'**',d:'__pow__',rd:'__rpow__',ar:2,f:function(a,b){return Math.pow(a,b)},
+  loc:[function(a,b){return b*Math.pow(a,b-1)},function(a,b,z){return z*Math.log(a)}],
+  ls:[function(A,B){return B+'·'+A+'<sup>'+B+'−1</sup>'},function(A,B,Z){return Z+'·ln '+A}],sv:'inout'},
+ neg:{cls:'NegBackward0',sym:'neg',ar:1,f:function(a){return -a},loc:[function(){return -1}],ls:[function(){return '−1'}],sv:''},
+ sin:{cls:'SinBackward0',ar:1,f:Math.sin,loc:[function(a){return Math.cos(a)}],ls:[function(A){return 'cos('+A+')'}],sv:'in'},
+ cos:{cls:'CosBackward0',ar:1,f:Math.cos,loc:[function(a){return -Math.sin(a)}],ls:[function(A){return '−sin('+A+')'}],sv:'in'},
+ exp:{cls:'ExpBackward0',ar:1,f:Math.exp,loc:[function(a,b,z){return z}],ls:[function(A,B,Z){return 'exp('+A+') = '+Z}],sv:'out'},
+ log:{cls:'LogBackward0',ar:1,f:Math.log,loc:[function(a){return 1/a}],ls:[function(A){return '1/'+A}],sv:'in'},
+ tanh:{cls:'TanhBackward0',ar:1,f:Math.tanh,loc:[function(a,b,z){return 1-z*z}],ls:[function(A,B,Z){return '1 − '+Z+'<sup>2</sup>'}],sv:'out'},
+ sigmoid:{cls:'SigmoidBackward0',ar:1,f:function(a){return 1/(1+Math.exp(-a))},loc:[function(a,b,z){return z*(1-z)}],
+  ls:[function(A,B,Z){return Z+'(1 − '+Z+')'}],sv:'out'},
+ relu:{cls:'ReluBackward0',ar:1,f:function(a){return Math.max(0,a)},loc:[function(a){return a>0?1:0}],
+  ls:[function(A){return '1 if '+A+' &gt; 0 else 0'}],sv:'out'},
+ sqrt:{cls:'SqrtBackward0',ar:1,f:Math.sqrt,loc:[function(a,b,z){return 1/(2*z)}],ls:[function(A,B,Z){return '1/(2'+Z+')'}],sv:'out'},
+ abs:{cls:'AbsBackward0',ar:1,f:Math.abs,loc:[function(a){return a>0?1:(a<0?-1:0)}],ls:[function(A){return 'sign('+A+')'}],sv:'in'}
+};
+var GLYPH={sigmoid:'\u03c3',relu:'ReLU',sqrt:'\u221a',abs:'|\u00b7|'};
+function glyph(op){return OPS[op].ar===2?OPS[op].sym:(GLYPH[op]||op);}
+var CALLABLE={sin:1,cos:1,exp:1,log:1,tanh:1,sigmoid:1,relu:1,sqrt:1,abs:1,pow:1};
+var NS={torch:1,F:1,nn:1,functional:1,math:1,np:1};
+
+var PRESETS=[
+ {name:'The example: w*x + 4*sin(x**2) − y.pow(w*x)',src:'loss = w*x + 4*sin(x**2) - y.pow(w*x)',vals:{w:0.5,x:1.5,y:2}},
+ {name:'Johnson’s first graph: (x + y) * z',src:'f = (x + y) * z',vals:{x:-2,y:5,z:-4}},
+ {name:'cosh from the slides: (exp(x) + exp(−x)) / 2',src:'cosh = (exp(x) + exp(-x)) / 2',vals:{x:0.6931}},
+ {name:'tanh by hand, three lines',src:'e1 = x.exp()\ne2 = (-x).exp()\ny = (e1 - e2) / (e1 + e2)',vals:{x:0.6931}},
+ {name:'One sigmoid neuron, squared error',src:'loss = (sigmoid(w1*x1 + w2*x2 + b) - t)**2',vals:{w1:0.5,x1:1,w2:-1,x2:2,b:0.5,t:1}},
+ {name:'A multiply gate reused: x*x + x',src:'loss = x*x + x',vals:{x:3}}
+];
+
+/* ================= formatting ================= */
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function fmt(v){
+ if(v===undefined||v===null)return 'None';
+ if(Number.isNaN(v))return 'nan';
+ if(!isFinite(v))return (v<0?'−':'')+'∞';
+ if(v===0)return '0';
+ var a=Math.abs(v),s=(a>=1e5||a<1e-3)?v.toExponential(2):String(parseFloat(v.toPrecision(4)));
+ return s.replace('-','−');
+}
+function pn(v){return v<0?'('+fmt(v)+')':fmt(v);}
+
+/* ================= parser ================= */
+function PErr(msg,pos){this.msg=msg;this.pos=pos;}
+function tokenize(src){
+ var T=[],i=0,m;
+ while(i<src.length){
+  var c=src[i],rest=src.slice(i);
+  if(c===' '||c==='\t'||c==='\r'){i++;continue;}
+  if(c==='#'){while(i<src.length&&src[i]!=='\n')i++;continue;}
+  if(c==='\n'||c===';'){T.push({t:'nl',s:i,e:i+1});i++;continue;}
+  if((m=/^(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?/.exec(rest))){T.push({t:'num',v:parseFloat(m[0]),x:m[0],s:i,e:i+m[0].length});i+=m[0].length;continue;}
+  if((m=/^[A-Za-z_]\w*/.exec(rest))){T.push({t:'id',x:m[0],s:i,e:i+m[0].length});i+=m[0].length;continue;}
+  if(rest.slice(0,2)==='**'){T.push({t:'op',x:'**',s:i,e:i+2});i+=2;continue;}
+  if('+-*/(),.='.indexOf(c)>=0){T.push({t:'op',x:c,s:i,e:i+1});i++;continue;}
+  throw new PErr('I don’t know the character “'+c+'”',i);
+ }
+ T.push({t:'eof',s:src.length,e:src.length});
+ return T;
+}
+function parseProgram(src){
+ var T=tokenize(src),p=0;
+ function isop(x){return T[p].t==='op'&&T[p].x===x;}
+ function txt(t){return t.t==='eof'?'the end':'“'+src.slice(t.s,t.e)+'”';}
+ function expect(x){if(!isop(x))throw new PErr('Expected “'+x+'” but found '+txt(T[p]),T[p].s);return T[p++];}
+ function S(a){return a.ps!==undefined?a.ps:a.s;}
+ function E(a){return a.pe!==undefined?a.pe:a.e;}
+ function bin(op,sym,l,r){return {k:'op',op:op,form:'bin',sym:sym,args:[l,r],s:S(l),e:E(r)};}
+ function expr(){var l=term();while(isop('+')||isop('-')){var o=T[p++].x,r=term();l=bin(o==='+'?'add':'sub',o,l,r);}return l;}
+ function term(){var l=unary();while(isop('*')||isop('/')){var o=T[p++].x,r=unary();l=bin(o==='*'?'mul':'div',o,l,r);}return l;}
+ function unary(){
+  if(isop('-')){var t=T[p++],a=unary();
+   if(a.k==='num'&&a.ps===undefined)return {k:'num',v:-a.v,x:'-'+a.x,s:t.s,e:a.e};
+   return {k:'op',op:'neg',form:'un',args:[a],s:t.s,e:E(a)};}
+  if(isop('+')){p++;return unary();}
+  return power();
+ }
+ function power(){var b=postfix();if(isop('**')){p++;var ex=unary();return bin('pow','**',b,ex);}return b;}
+ function arglist(){var a=[];if(isop(')'))return a;a.push(expr());while(isop(',')){p++;a.push(expr());}return a;}
+ function call(fname,args,form,s,e,tok){
+  var base=fname.split('.').pop();
+  if(!CALLABLE[base])throw new PErr('I don’t know the function “'+fname+'”',tok.s);
+  var need=OPS[base].ar;
+  if(args.length!==need)throw new PErr(fname+' needs '+(form==='meth'?need-1:need)+' argument'+((form==='meth'?need-1:need)===1?'':'s'),tok.s);
+  return {k:'op',op:base,form:form,fname:fname,args:args,s:s,e:e};
+ }
+ function postfix(){
+  var a=atom();
+  while(isop('.')){
+   p++;var id=T[p++];if(id.t!=='id')throw new PErr('Expected a method name after “.”',id.s);
+   expect('(');var args=arglist(),cl=expect(')');
+   a=call(id.x,[a].concat(args),'meth',S(a),cl.e,id);
+  }
+  return a;
+ }
+ function atom(){
+  var t=T[p];
+  if(t.t==='num'){p++;return {k:'num',v:t.v,x:t.x,s:t.s,e:t.e};}
+  if(isop('(')){var o=T[p++],a=expr(),c=expect(')');a.ps=o.s;a.pe=c.e;return a;}
+  if(t.t==='id'){
+   p++;var fname=t.x;
+   if(NS[t.x]&&isop('.')){
+    while(isop('.')){p++;var id=T[p++];if(id.t!=='id')throw new PErr('Expected a name after “.”',id.s);fname+='.'+id.x;if(!NS[id.x])break;}
+    if(!isop('('))throw new PErr('Expected “(” after '+fname,T[p].s);
+   }
+   if(isop('(')){p++;var args=arglist(),c2=expect(')');return call(fname,args,'fn',t.s,c2.e,t);}
+   return {k:'var',name:t.x,s:t.s,e:t.e};
+  }
+  throw new PErr(t.t==='eof'?'The expression ends too soon':'Unexpected '+txt(t),t.s);
+ }
+ var stmts=[];
+ while(T[p].t!=='eof'){
+  if(T[p].t==='nl'){p++;continue;}
+  var name=null;
+  if(T[p].t==='id'&&T[p+1].t==='op'&&T[p+1].x==='='){name=T[p].x;p+=2;}
+  var ast=expr();
+  if(T[p].t!=='nl'&&T[p].t!=='eof')throw new PErr('Unexpected '+txt(T[p]),T[p].s);
+  stmts.push({name:name,ast:ast});
+ }
+ if(!stmts.length)throw new PErr('Type an expression',0);
+ return stmts;
+}
+
+/* ================= graph ================= */
+function buildGraph(src){
+ var stmts=parseProgram(src);
+ var all=[],env={},leaves={},decl={};
+ function mk(n){n.id=all.length;all.push(n);return n;}
+ function b(ast){
+  if(ast.k==='num')return mk({kind:'const',value:ast.v,label:ast.x.replace('-','−')});
+  if(ast.k==='var'){
+   if(env[ast.name])return env[ast.name];
+   if(!leaves[ast.name])leaves[ast.name]=mk({kind:'leaf',name:ast.name});
+   return leaves[ast.name];
+  }
+  var ins=ast.args.map(b);
+  if(ins.every(function(c){return c.kind==='const';})){   // Python folds number-only arithmetic before torch sees it
+   var v=OPS[ast.op].f.apply(null,ins.map(function(c){return c.value;}));
+   return mk({kind:'const',value:v,label:fmt(v)});
+  }
+  return mk({kind:'op',op:ast.op,inputs:ins,s:ast.s,e:ast.e,expr:src.slice(ast.s,ast.e),form:ast.form,fname:ast.fname,sym:ast.sym});
+ }
+ var out=null;
+ stmts.forEach(function(st){
+  if(st.name&&st.ast.k==='num'&&!env[st.name]){decl[st.name]=st.ast.v;return;}
+  var n=b(st.ast);
+  if(st.name){if(n.kind==='op'&&!n.name)n.name=st.name;env[st.name]=n;}
+  out=n;
+ });
+ if(!out||out.kind!=='op')throw new PErr('The last line should compute something from the leaves',-1);
+ // keep what the loss depends on, in topological order (depth-first, inputs first)
+ var seen={},topo=[];
+ (function dfs(n){if(seen[n.id])return;seen[n.id]=1;(n.inputs||[]).forEach(dfs);topo.push(n);})(out);
+ var nodes=all.filter(function(n){return seen[n.id];});
+ var ops=nodes.filter(function(n){return n.kind==='op';});
+ var lv=nodes.filter(function(n){return n.kind==='leaf';});
+ if(!lv.length)throw new PErr('The loss has to depend on at least one variable',-1);
+ // names for the unnamed intermediate nodes
+ var used={};lv.forEach(function(n){used[n.name]=1;});ops.forEach(function(n){if(n.name)used[n.name]=1;});
+ for(var k in NS)used[k]=1;
+ var pool='abcdfghkmnpqrsuvz'.split('').filter(function(c){return !used[c];}),ti=1;
+ if(!out.name){out.name=used.loss?'out':'loss';used[out.name]=1;}
+ ops.forEach(function(n){if(!n.name){if(pool.length)n.name=pool.shift();else{while(used['t'+ti])ti++;n.name='t'+ti++;}}});
+ nodes.forEach(function(n){n.parents=[];n.rg=n.kind==='leaf';});
+ topo.forEach(function(n){if(n.kind==='op')n.rg=n.inputs.some(function(c){return c.rg;});});
+ ops.forEach(function(n){n.inputs.forEach(function(c,i){c.parents.push({n:n,i:i});});});
+ var order=topo.filter(function(n){return n.kind!=='const';});
+ order.forEach(function(n,i){n.ord=i+1;});
+ var G={src:src,nodes:nodes,ops:ops,leaves:lv,out:out,topo:topo,order:order,decl:decl};
+ G.creation=ops.slice().sort(function(a,b){return a.id-b.id;});
+ G.bwd=order.filter(function(n){return n.kind==='op'&&n.rg;}).reverse();
+ layout(G);buildSteps(G);
+ return G;
+}
+function evalAll(G,vals){
+ var v={};
+ G.topo.forEach(function(n){
+  if(n.kind==='const')v[n.id]=n.value;
+  else if(n.kind==='leaf')v[n.id]=vals[n.name];
+  else v[n.id]=OPS[n.op].f.apply(null,n.inputs.map(function(c){return v[c.id];}));
+ });
+ return v;
+}
+function localOf(n,i,v){var a=v[n.inputs[0].id],b=n.inputs[1]?v[n.inputs[1].id]:undefined;return OPS[n.op].loc[i](a,b,v[n.id]);}
+
+/* ================= layout ================= */
+var R=22,GX=185,GY=96;
+function hw(n){return n.kind==='op'?R:n.kind==='leaf'?Math.max(20,8+4.6*n.name.length):Math.max(14,6+4.4*n.label.length);}
+function layout(G){
+ var rank={};
+ G.topo.forEach(function(n){
+  if(n.kind==='leaf')rank[n.id]=0;
+  else if(n.kind==='op'){var m=0;n.inputs.forEach(function(c){if(c.kind!=='const')m=Math.max(m,rank[c.id]+1);});rank[n.id]=Math.max(m,1);}
+ });
+ // leaves and constants sit one column before their first user
+ G.nodes.forEach(function(n){if(n.kind!=='op')rank[n.id]=Math.max(0,Math.min.apply(null,n.parents.map(function(p){return rank[p.n.id];}))-1);});
+ var cols={},maxr=0;
+ G.nodes.forEach(function(n){(cols[rank[n.id]]=cols[rank[n.id]]||[]).push(n);maxr=Math.max(maxr,rank[n.id]);});
+ var y={};
+ for(var r in cols)cols[r].forEach(function(n,i){y[n.id]=i*GY;});
+ function nb(n){var s=(n.inputs||[]).slice();n.parents.forEach(function(p){s.push(p.n);});return s;}
+ for(var it=0;it<60;it++){
+  for(var rr=0;rr<=maxr;rr++){
+   var col=cols[it%2?maxr-rr:rr];if(!col)continue;
+   var t={};
+   col.forEach(function(n){var s=nb(n);t[n.id]=s.length?s.reduce(function(a,m){return a+y[m.id];},0)/s.length:y[n.id];});
+   col.sort(function(a,b){return t[a.id]-t[b.id]||a.id-b.id;});
+   var ys=col.map(function(n){return t[n.id];});
+   for(var i=1;i<ys.length;i++)ys[i]=Math.max(ys[i],ys[i-1]+GY);
+   var sh=(col.reduce(function(a,n){return a+t[n.id];},0)-ys.reduce(function(a,b){return a+b;},0))/ys.length;
+   col.forEach(function(n,i){y[n.id]=ys[i]+sh;});
+  }
+ }
+ var mn=Infinity;G.nodes.forEach(function(n){mn=Math.min(mn,y[n.id]);});
+ G.pos={};G.nodes.forEach(function(n){G.pos[n.id]={x:rank[n.id]*GX,y:y[n.id]-mn};});
+ var X0=Infinity,X1=-Infinity,Y1=0;
+ G.nodes.forEach(function(n){var P=G.pos[n.id];X0=Math.min(X0,P.x-hw(n));X1=Math.max(X1,P.x+hw(n));Y1=Math.max(Y1,P.y);});
+ G.vb=[X0-28,-86,(X1-X0)+28+96,Y1+86+52];
+}
+function port(n,i){
+ var P=G.pos[n.id];if(n.inputs.length<2)return [P.x-R,P.y];
+ var off=i?11:-11;return [P.x-Math.sqrt(R*R-off*off),P.y+off];
+}
+function edgePts(c,n,i){
+ var A=G.pos[c.id],x0=A.x+hw(c),y0=A.y,q=port(n,i),x1=q[0],y1=q[1],dx=Math.max(30,(x1-x0)*0.5);
+ if(x1<x0+10){dx=40;}
+ // a long edge that would run through a node in a column it skips arches around it
+ var off=0;
+ if(x1-x0>GX*1.4)G.nodes.forEach(function(m){
+  var M=G.pos[m.id];if(m===c||m===n||M.x<=x0+R||M.x>=x1-R)return;
+  var t=(M.x-x0)/(x1-x0),yl=y0+(y1-y0)*(3*t*t-2*t*t*t);
+  if(Math.abs(yl-M.y)<R+16&&!off)off=(yl>=M.y?1:-1)*GY*0.62;
+ });
+ return [x0,y0,x0+dx,y0+off,x1-dx,y1+off,x1,y1];
+}
+function pathD(p){return 'M'+p[0].toFixed(1)+' '+p[1].toFixed(1)+'C'+p[2].toFixed(1)+' '+p[3].toFixed(1)+' '+p[4].toFixed(1)+' '+p[5].toFixed(1)+' '+p[6].toFixed(1)+' '+p[7].toFixed(1);}
+function atX(p,x){var lo=0,hi=1;for(var q=0;q<24;q++){var tm=(lo+hi)/2;if(bez(p,tm)[0]<x)lo=tm;else hi=tm;}return bez(p,lo);}
+function bez(p,t){var u=1-t;return [u*u*u*p[0]+3*u*u*t*p[2]+3*u*t*t*p[4]+t*t*t*p[6],u*u*u*p[1]+3*u*u*t*p[3]+3*u*t*t*p[5]+t*t*t*p[7]];}
+
+/* ================= steps ================= */
+function buildSteps(G){
+ var s=[{ph:0,kind:'leaves'}];
+ G.creation.forEach(function(n){s.push({ph:0,kind:'make',node:n});});
+ s.push({ph:1,kind:'topo'});
+ s.push({ph:1,kind:'fleaves'});
+ G.order.forEach(function(n){if(n.kind==='op')s.push({ph:1,kind:'fwd',node:n});});
+ s.push({ph:2,kind:'seed',node:G.out});
+ G.bwd.forEach(function(n){
+  if(n!==G.out)s.push({ph:2,kind:'bwd',node:n,sub:0});
+  s.push({ph:2,kind:'bwd',node:n,sub:1});
+  s.push({ph:2,kind:'bwd',node:n,sub:2});
+ });
+ s.push({ph:2,kind:'done'});
+ G.steps=s;
+ G.phase0=[0,s.findIndex(function(t){return t.ph===1;}),s.findIndex(function(t){return t.ph===2;})];
+}
+function stateAt(k){
+ var S={made:{},ord:false,val:{},grad:{},con:{},recv:{},fwdCount:0};
+ for(var i=0;i<=k;i++){
+  var st=G.steps[i],n=st.node;
+  if(st.kind==='leaves')G.leaves.forEach(function(l){S.made[l.id]=1;});
+  else if(st.kind==='make'){S.made[n.id]=1;n.inputs.forEach(function(c){S.made[c.id]=1;});}
+  else if(st.kind==='topo')S.ord=true;
+  else if(st.kind==='fleaves')G.nodes.forEach(function(m){if(m.kind!=='op')S.val[m.id]=V[m.id];});
+  else if(st.kind==='fwd'){S.val[n.id]=V[n.id];S.fwdCount++;}
+  else if(st.kind==='seed')S.grad[n.id]=1;
+  else if(st.kind==='bwd'&&st.sub===2){
+   n.inputs.forEach(function(c,j){
+    if(!c.rg)return;
+    var x=S.grad[n.id]*localOf(n,j,V);
+    S.con[n.id+'_'+j]=x;S.grad[c.id]=(S.grad[c.id]||0)+x;S.recv[c.id]=(S.recv[c.id]||0)+1;
+   });
+  }
+ }
+ return S;
+}
+
+/* ================= state ================= */
+var G=null,V={},VALS={},K=0,ANIM=false,timer=null;
+var $=function(id){return document.getElementById(id);};
+function nmH(n){return n.kind==='const'?n.label:'<i>'+esc(n.name)+'</i>';}
+function nmC(n){return n.kind==='const'?n.label.replace('−','-'):n.name;}
+function outH(){return G.out.name==='loss'?'<i>L</i>':nmH(G.out);}
+function dn(n){return n===G.out?outH():nmH(n);}
+// the same names for use inside svg text
+function nmS(n){return n.kind==='const'?n.label:'<tspan font-style="italic">'+esc(n.name)+'</tspan>';}
+function outS(){return G.out.name==='loss'?'<tspan font-style="italic">L</tspan>':nmS(G.out);}
+function dnS(n){return n===G.out?outS():nmS(n);}
+function dd(a,b){return '∂'+a+'/∂'+b;}
+function localSym(n,i){
+ var A=nmH(n.inputs[0]),B=n.inputs[1]?nmH(n.inputs[1]):'',Z=nmH(n);
+ if(n.op==='pow'&&i===0&&n.inputs[1].kind==='const'){
+  var e=n.inputs[1].value;
+  return e===2?'2'+A:(n.inputs[1].label+'·'+A+'<sup>'+fmt(e-1)+'</sup>');
+ }
+ return OPS[n.op].ls[i](A,B,Z);
+}
+function fwdSym(n,useVals){
+ var a=n.inputs[0],b=n.inputs[1];
+ var A=useVals?(n.op==='pow'||n.inputs.length===1?fmt(V[a.id]):pn(V[a.id])):nmH(a);
+ var B=b?(useVals?(n.op==='pow'?fmt(V[b.id]):pn(V[b.id])):nmH(b)):'';
+ if(n.op==='pow')return (useVals&&V[a.id]<0?'('+A+')':A)+'<sup>'+B+'</sup>';
+ if(n.op==='neg')return '−'+(useVals?pn(V[a.id]):A);
+ if(OPS[n.op].ar===2)return A+' '+OPS[n.op].sym+' '+B;
+ return n.op+'('+A+')';
+}
+
+/* ================= main graph ================= */
+function T(x,y,t,cls,anc,extra){return '<text x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" class="'+cls+'"'+(anc?' text-anchor="'+anc+'"':'')+(extra||'')+'>'+t+'</text>';}
+function motion(d,cls,rev,delay){
+ return '<circle r="5.5" class="'+cls+'" opacity="0"><animateMotion dur=".75s" begin="indefinite" fill="freeze" path="'+d+'"'+
+  (rev?' keyPoints="1;0" keyTimes="0;1" calcMode="linear"':'')+' data-delay="'+(delay||0)+'"/>'+
+  '<animate attributeName="opacity" values="0;1;1;0" keyTimes="0;.1;.85;1" dur=".75s" begin="indefinite" fill="freeze" data-delay="'+(delay||0)+'"/></circle>';
+}
+function renderGraph(S,st){
+ var s='',cur=st.node,an=ANIM;
+ var defs='<defs>'+['ar:var(--border-strong)','arV:var(--val)','arG:var(--grad)','arC:var(--cur)'].map(function(q){var a=q.split(':');
+  return '<marker id="'+a[0]+'" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1.5L9 5L1 8.5z" style="fill:'+a[1]+'"/></marker>';}).join('')+'</defs>';
+ var lab='',dots='';
+ G.ops.forEach(function(n){
+  if(!S.made[n.id])return;
+  n.inputs.forEach(function(c,i){
+   var p=edgePts(c,n,i),d=pathD(p),cls='edge',mk='ar';
+   if(c.kind==='const')cls+=' cedge';
+   if(n===cur&&st.kind==='fwd'){cls+=' efwd';mk='arV';if(an)dots+=motion(d,'dotv',false);}
+   else if(n===cur&&st.kind==='bwd'&&st.sub===2&&c.rg){cls+=' ebwd';mk='arG';if(an)dots+=motion(d,'dotg',true);}
+   else if(n===cur&&st.kind==='make'){cls+=' eptr';mk='arC';}
+   var drw=(n===cur&&st.kind==='make'&&an&&c.kind!=='const');
+   s+='<path class="'+cls+(drw?' draw':'')+'" d="'+d+'"'+(drw?' pathLength="1" style="stroke-dasharray:1 1"':'')+' marker-end="url(#'+mk+')"/>';
+   var key=n.id+'_'+i;
+   if(S.con[key]!==undefined&&c.parents.length>1){   // a single user's share is just the total, already on the node
+    // near the parent: its two inputs arrive at separate ports, the top one labelled above, the bottom one below
+    var m=atX(p,p[6]-44),nw=(n===cur&&st.kind==='bwd'&&an),below=true;
+    if(n.inputs.length===2){var o=atX(edgePts(n.inputs[1-i],n,1-i),p[6]-44);below=m[1]>=o[1];}
+    lab+=T(m[0],m[1]+(below?15:-6),fmt(S.con[key]),'lc h'+(nw?' pop late':''),'middle');
+   }
+  });
+ });
+ var nd='';
+ G.nodes.forEach(function(n){
+  if(!S.made[n.id])return;
+  var P=G.pos[n.id],w=hw(n),isc=(n===cur&&st.kind!=='seed'&&st.kind!=='done')||(st.kind==='seed'&&n===G.out);
+  var born=an&&st.kind==='make'&&(n===cur||(cur&&cur.inputs.indexOf(n)>=0&&n.kind==='const'))||an&&st.kind==='leaves'&&n.kind==='leaf';
+  var g='<g'+(born?' class="pop"':'')+'><title>'+esc(n.kind==='op'?n.name+' = '+n.expr:n.kind==='leaf'?n.name+' (leaf)':n.label+' (constant)')+'</title>';
+  if(isc)g+=n.kind==='op'?'<circle class="ring" cx="'+P.x+'" cy="'+P.y+'" r="'+(R+5)+'"/>':'<rect class="ring" x="'+(P.x-w-5)+'" y="'+(P.y-22)+'" width="'+(2*w+10)+'" height="44" rx="10"/>';
+  if(n.kind==='op'){
+   var sym=glyph(n.op);
+   g+='<circle class="nd'+(isc?' cur':'')+'" cx="'+P.x+'" cy="'+P.y+'" r="'+R+'"/>'+T(P.x,P.y,sym,'op'+(sym.length>3?' w':''));
+   g+=T(P.x,P.y-R-8,esc(n.name),'nm');
+  }else if(n.kind==='leaf'){
+   g+='<rect class="nd leaf'+(isc?' cur':'')+'" x="'+(P.x-w)+'" y="'+(P.y-17)+'" width="'+2*w+'" height="34" rx="8"/>'+T(P.x,P.y,'<tspan font-style="italic">'+esc(n.name)+'</tspan>','op');
+  }else{
+   g+='<rect class="nd const" x="'+(P.x-w)+'" y="'+(P.y-12)+'" width="'+2*w+'" height="24" rx="6"/>'+T(P.x,P.y,n.label,'op w mut');
+  }
+  g+='</g>';
+  if(S.val[n.id]!==undefined&&n.kind!=='const'){
+   var nv=an&&((st.kind==='fwd'&&n===cur)||st.kind==='fleaves');
+   g+=T(P.x+w+5,P.y-9,fmt(S.val[n.id]),'lv h'+(nv?' pop late':''),'start');
+  }
+  if(S.grad[n.id]!==undefined){
+   var ng=an&&((st.kind==='seed'&&n===G.out)||(st.kind==='bwd'&&st.sub===2&&cur.inputs.indexOf(n)>=0));
+   var txt=fmt(S.grad[n.id]);
+   if(n.kind==='leaf'&&st.kind==='done')txt='<tspan font-weight="700">'+txt+'</tspan>';
+   g+=T(P.x+w+5,P.y+20,txt,'lg2 h'+(ng?' pop late':''),'start');
+  }
+  if(S.ord&&n.kind!=='const'){
+   var bx=P.x-w-1,by=P.y+(n.kind==='op'?R-1:16);
+   g+='<g'+(an&&st.kind==='topo'?' class="pop" style="animation-delay:'+(n.ord*0.06).toFixed(2)+'s"':'')+'><circle class="badge" cx="'+bx+'" cy="'+by+'" r="9"/>'+T(bx,by,n.ord,'badgt')+'</g>';
+  }
+  nd+=g;
+ });
+ var co='';
+ if(st.kind==='make'){
+  var P=G.pos[cur.id],tx=cur.name+' = '+cur.expr.replace(/\s*\n\s*/g,' '),tw=tx.length*8.4+18;
+  var cx=Math.min(Math.max(P.x-tw/2,G.vb[0]+4),G.vb[0]+G.vb[2]-tw-4),cy=P.y-R-66;
+  co='<g'+(an?' class="fade"':'')+'><rect class="callout" x="'+cx+'" y="'+cy+'" width="'+tw+'" height="28" rx="6"/>'+
+   T(cx+9,cy+19,esc(tx),'callt')+'<path d="M'+P.x+' '+(cy+28)+'L'+P.x+' '+(P.y-R-26)+'" stroke="var(--cur)" stroke-width="1.4"/></g>';
+ }
+ var svg=$('graph');
+ svg.setAttribute('viewBox',G.vb.join(' '));
+ svg.style.maxWidth=Math.round(G.vb[2]*1.3)+'px';svg.style.margin='0 auto';
+ svg.innerHTML=defs+s+nd+lab+co+dots;
+}
+
+/* ================= zoom ================= */
+function zoomChips(items,note){
+ var s='',n=items.length,per=Math.min(n,6),bw=Math.min(116,700/per-8),rows=Math.ceil(n/per);
+ items.forEach(function(it,i){
+  var r=Math.floor(i/per),c=i%per,inrow=Math.min(per,n-r*per);
+  var x=380-(inrow*(bw+8)-8)/2+c*(bw+8),y=rows>1?40+r*112:80;
+  s+='<g'+(ANIM?' class="pop" style="animation-delay:'+(i*0.05).toFixed(2)+'s"':'')+'><rect class="nd'+(it.leaf?' leaf':'')+'" x="'+x+'" y="'+y+'" width="'+bw+'" height="96" rx="9"/>';
+  s+=T(x+bw/2,y+22,it.title,'op'+(it.small?' w':''),null);
+  it.lines.forEach(function(l,j){s+=T(x+bw/2,y+48+j*20,l[0],l[1],'middle');});
+  s+='</g>';
+ });
+ if(note)s+=T(380,rows>1?rows*112+56:216,note,'ts mut','middle');
+ return s;
+}
+function zoomNode(S,st){
+ var n=st.node,cx=500,cy=150,Rz=40,k=n.inputs.length,ys=k===1?[cy]:[80,220],s='',an=ANIM;
+ var defs='<defs>'+['zr:var(--border-strong)','zv:var(--val)','zg:var(--grad)','zc:var(--cur)'].map(function(q){var a=q.split(':');
+  return '<marker id="'+a[0]+'" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1.5L9 5L1 8.5z" style="fill:'+a[1]+'"/></marker>';}).join('')+'</defs>';
+ var build=st.kind==='make',fwd=st.kind==='fwd',bwd=st.kind==='bwd',sub=bwd?st.sub:-1;
+ var OUT=outS(),Z=dnS(n),dots='';
+ n.inputs.forEach(function(c,i){
+  var y=ys[i],off=k===2?(i?16:-16):0,px=cx-Math.sqrt(Rz*Rz-off*off),py=cy+off;
+  var d='M96 '+y+'L350 '+y+'C'+(px-50)+' '+y+' '+(px-40)+' '+py+' '+px+' '+py;
+  var cls='edge'+(c.kind==='const'?' cedge':''),mk='zr';
+  if(fwd){cls+=' efwd';mk='zv';if(an)dots+=motion(d,'dotv',false);}
+  if(bwd&&sub===2&&c.rg){cls+=' ebwd';mk='zg';if(an)dots+=motion(d,'dotg',true);}
+  if(build){
+   var dp='M'+px+' '+py+'C'+(px-40)+' '+py+' '+(px-50)+' '+y+' 350 '+y+'L100 '+y;
+   s+='<path class="edge eptr'+(an?' draw':'')+'" d="'+dp+'" pathLength="1" style="stroke-dasharray:'+(an?'1 1':'none')+'" marker-end="url(#zc)"/>';
+  }else s+='<path class="'+cls+'" d="'+d+'" marker-end="url(#'+mk+')"/>';
+  // the input's box
+  var w=c.kind==='const'?30:Math.max(28,10+5*nmC(c).length);
+  s+='<rect class="nd '+(c.kind==='const'?'const':c.kind==='leaf'?'leaf':'')+'" x="'+(60-w)+'" y="'+(y-18)+'" width="'+2*w+'" height="36" rx="8"/>'+
+     T(60,y,c.kind==='const'?c.label:'<tspan font-style="italic">'+esc(c.name)+'</tspan>','op'+(c.kind==='const'?' mut':''));
+  if(build){s+=T(225,y-10,'input_nodes['+i+']','cap2 mut','middle');return;}
+  if(S.val[c.id]!==undefined||fwd)s+=T(102,y-11,(c.kind==='const'?'':nmS(c)+' = ')+fmt(V[c.id]),'lv'+(fwd&&an?' pop':''),'start');
+  if(bwd&&sub>=1){
+   var lt=c.rg?dd(Z,nmS(c))+' = '+fmt(localOf(n,i,V)):'no grad needed';
+   s+=T(372,y-11,lt,(c.rg?'ll':'ts mut')+(sub===1&&an?' pop':''),'end');
+   if(c.rg)s+=T(372,y-31,'local gradient','cap2 ll'+(sub===1&&an?' pop':''),'end');
+  }
+  if(bwd&&sub===2&&c.rg){
+   var dy=y+26,dx=102,cls2=an?' pop late':'';
+   s+=T(dx,dy,dd(OUT,nmS(c))+' = '+fmt(S.con[n.id+'_'+i]),'lg2'+cls2,'start');
+   s+=T(dx,dy+16,'downstream gradient','cap2 lg2'+cls2,'start');
+  }
+ });
+ // the node itself
+ var sym=glyph(n.op);
+ s+='<circle class="ring" cx="'+cx+'" cy="'+cy+'" r="'+(Rz+6)+'"/><circle class="nd cur" cx="'+cx+'" cy="'+cy+'" r="'+Rz+'"'+(build&&an?' class="nd cur pop"':'')+'/>'+
+    T(cx,cy,sym,'op" style="font-size:'+(sym.length>2?20:28)+'px');
+ s+=T(cx,cy-Rz-12,esc(n.name),'nm" style="font-size:19px');
+ s+=T(cx,cy+Rz+20,OPS[n.op].cls,'cap2 mut','middle');
+ // output edge
+ if(build){
+  s+=T(cx+Rz+20,cy-10,'result: None','ts mut','start')+T(cx+Rz+20,cy+14,'gradient: None','ts mut','start');
+ }else{
+  s+='<path class="edge'+(fwd?' efwd':'')+'" d="M'+(cx+Rz)+' '+cy+'L752 '+cy+'" marker-end="url(#'+(fwd?'zv':'zr')+')"/>';
+  var to=n===G.out?'the loss':'to '+n.parents.map(function(p){return p.n.name;}).filter(function(v,i,a){return a.indexOf(v)===i;}).join(', ');
+  s+=T(752,cy+46,esc(to),'cap2 mut','end');
+  if(S.val[n.id]!==undefined)s+=T(cx+Rz+14,cy-11,nmS(n)+' = '+fmt(V[n.id]),'lv'+(fwd&&an?' pop late':''),'start');
+  if(bwd||st.kind==='seed'){
+   var upn=an&&(sub===0||st.kind==='seed');
+   s+=T(cx+Rz+14,cy+25,dd(OUT,Z)+' = '+fmt(S.grad[n.id]),'lg2'+(upn?' pop':''),'start');
+   s+=T(cx+Rz+14,cy+41,'upstream gradient','cap2 lg2'+(upn?' pop':''),'start');
+  }
+ }
+ return defs+s+dots;
+}
+function renderZoom(S,st){
+ var s,z=$('zoom'),hd='Zoom in to one node';
+ if(st.kind==='make'||st.kind==='fwd'||st.kind==='bwd'){s=zoomNode(S,st);hd='Zoom in: node '+st.node.name+' ('+OPS[st.node.op].cls+')';}
+ else if(st.kind==='leaves')s=zoomChips(G.leaves.map(function(l){return {title:'<tspan font-style="italic">'+esc(l.name)+'</tspan>',leaf:1,
+   lines:[['value '+fmt(VALS[l.name]),'lv sm'],['requires_grad','cap2 mut'],['grad: None','cap2 mut']]};}),'Leaf tensors: they hold data and have no inputs.');
+ else if(st.kind==='topo')s=zoomChips(G.order.map(function(m){return {title:m.ord+' · '+'<tspan font-style="italic">'+esc(m.name)+'</tspan>',leaf:m.kind==='leaf',
+   lines:[[m.kind==='leaf'?'leaf':'inputs: '+m.inputs.map(function(c){return nmC(c);}).join(', '),'cap2 mut'],[m.kind==='leaf'?'':esc(m.expr.length>14?m.expr.slice(0,13)+'…':m.expr),'cap2 mut']]};}),
+   'Topological order: every node comes after all of its inputs.');
+ else if(st.kind==='fleaves')s=zoomChips(G.leaves.map(function(l){return {title:'<tspan font-style="italic">'+esc(l.name)+'</tspan>',leaf:1,lines:[['result '+fmt(V[l.id]),'lv sm']]};}),
+   'Nodes 1 to '+G.leaves.length+' are leaves: their result is just their value.');
+ else if(st.kind==='seed'){
+  s='<path class="edge" d="M330 140L700 140" marker-end="url(#zr0)"/>'+
+   '<defs><marker id="zr0" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1.5L9 5L1 8.5z" style="fill:var(--border-strong)"/></marker></defs>'+
+   '<circle class="ring" cx="290" cy="140" r="46"/><circle class="nd cur" cx="290" cy="140" r="40"/>'+T(290,140,glyph(G.out.op),'op" style="font-size:26px')+
+   T(290,88,esc(G.out.name),'nm" style="font-size:19px')+T(350,128,nmS(G.out)+' = '+fmt(V[G.out.id]),'lv','start')+
+   T(350,166,dd(outS(),outS())+' = 1','lg2'+(ANIM?' pop':''),'start')+T(350,182,'the seed of the backward pass','cap2 lg2','start');
+ }else{
+  s=zoomChips(G.leaves.map(function(l){return {title:'<tspan font-style="italic">'+esc(l.name)+'.grad</tspan>',leaf:1,small:1,
+   lines:[['value '+fmt(V[l.id]),'lv sm'],['grad '+fmt(S.grad[l.id]===undefined?0:S.grad[l.id]),'lg2 sm']]};}),'What loss.backward() leaves behind: one gradient per leaf.');
+ }
+ $('zhd').textContent=hd;
+ z.innerHTML=s;
+}
+
+/* ================= explanation panel ================= */
+function nodeCard(n,S){
+ var k=function(t){return '<span class="k">'+t+'</span>';};
+ if(n.kind==='leaf')return '<pre class="node">'+esc(n.name)+': leaf tensor\n  '+k('requires_grad')+' True\n  '+k('value        ')+fmt(V[n.id])+'\n  '+k('grad         ')+fmt(S.grad[n.id])+'</pre>';
+ return '<pre class="node">'+esc(n.name)+'.grad_fn = '+OPS[n.op].cls+'\n  '+k('expr    ')+esc(n.expr.replace(/\s*\n\s*/g,' '))+
+  '\n  '+k('inputs  ')+'['+n.inputs.map(function(c){return esc(nmC(c));}).join(', ')+']'+
+  '\n  '+k('result  ')+(S.val[n.id]===undefined?'None':'<span class="v">'+fmt(S.val[n.id])+'</span>')+
+  '\n  '+k('grad    ')+(S.grad[n.id]===undefined?'None':'<span class="g">'+fmt(S.grad[n.id])+'</span>')+'</pre>';
+}
+function callDesc(n){
+ var a=n.inputs[0],b=n.inputs[1],A=esc(nmC(a)),B=b?esc(nmC(b)):'',o=OPS[n.op];
+ if(n.form==='bin'){
+  if(a.kind==='const')return 'A Python number doesn’t know how to <code>'+esc(n.sym)+'</code> a tensor, so Python asks the tensor instead: <code>'+B+'.'+o.rd+'('+A+')</code>.';
+  return 'Python calls <code>'+A+'.'+o.d+'('+B+')</code>, which the tensor class overloads.';
+ }
+ if(n.form==='un')return 'Python calls <code>'+A+'.__neg__()</code>, which the tensor class overloads.';
+ if(n.form==='meth')return 'Python calls the tensor method <code>'+A+'.'+esc(n.fname)+'('+B+')</code>.';
+ return 'Python calls <code>'+esc(n.fname)+'('+n.inputs.map(function(c){return esc(nmC(c));}).join(', ')+')</code>.';
+}
+function saves(n){
+ var sv=OPS[n.op].sv,ins=n.inputs.filter(function(c){return c.kind!=='const';}).map(nmH);
+ if(n.op==='pow'&&n.inputs[1].kind==='const')ins=[nmH(n.inputs[0])];
+ if(sv==='')return 'It saves nothing for backward: its local gradients are constants.';
+ var L=sv==='in'?ins:sv==='out'?[nmH(n)]:ins.concat(n.inputs[1].kind==='const'?[]:[nmH(n)]);
+ return 'It saves '+L.join(' and ')+' for the backward pass, since its local gradient'+(n.inputs.length>1?'s need':' needs')+' '+(L.length>1?'them':'it')+'.';
+}
+function explain(S,st){
+ var n=st.node,h='',OUT=outH(),N=G.steps.length;
+ if(st.kind==='leaves'){
+  h+='<h3>The leaves come first</h3><p>Before the expression runs, each variable is a leaf tensor made with <code>requires_grad=True</code>: '+
+   G.leaves.map(function(l){return nmH(l)+' = <span class="v">'+fmt(VALS[l.name])+'</span>';}).join(', ')+
+   '. A leaf has no inputs. Its <code>grad</code> is <code>None</code> until the backward pass fills it in.</p>'+
+   '<p>Press <b>Step</b> to let Python evaluate the expression one operation at a time.</p>';
+ }else if(st.kind==='make'){
+  var i=G.creation.indexOf(n)+1;
+  h+='<h3>Build '+i+' of '+G.creation.length+': <code>'+esc(n.expr.replace(/\s*\n\s*/g,' '))+'</code></h3><p>'+callDesc(n)+
+   ' That returns a new tensor, called '+nmH(n)+' here, whose <code>grad_fn</code> is a new <b>'+OPS[n.op].cls+'</b> node. The node keeps pointers to its inputs, '+
+   n.inputs.map(nmH).join(' and ')+', which is all the backward pass will need to find its way back.</p>';
+  var cs=n.inputs.filter(function(c){return c.kind==='const';});
+  if(cs.length)h+='<p class="aside">'+cs.map(function(c){return c.label;}).join(', ')+' is a plain Python number. PyTorch stores it inside the operation; it gets no gradient.</p>';
+  h+=nodeCard(n,S);
+ }else if(st.kind==='topo'){
+  var fan=G.nodes.filter(function(m){return m.kind!=='const'&&m.parents.length>1;});
+  h+='<h3>Put the nodes in order</h3><p>A node can only run after its inputs have run. A depth-first search from '+nmH(G.out)+
+   ' that numbers each node after all of its inputs gives a <b>topological order</b>: the small numbers. The forward pass runs 1&nbsp;&rarr;&nbsp;'+G.order.length+
+   '; the backward pass will run the other way.</p>';
+  if(fan.length)h+='<p>'+fan.map(function(m){return nmH(m)+' feeds '+m.parents.length+' nodes';}).join(', ')+
+   ', yet each node runs once. Plain recursion from the loss would compute '+nmH(fan[0])+' once per path.</p>';
+ }else if(st.kind==='fleaves'){
+  h+='<h3>Forward: the leaves</h3><p>The first nodes in the order are the leaves; their result is just their value. Constants are already known.</p>';
+ }else if(st.kind==='fwd'){
+  h+='<h3>Forward, node '+n.ord+' of '+G.order.length+': '+nmH(n)+'</h3>'+
+   '<p>Its inputs, '+n.inputs.map(nmH).join(' and ')+', come earlier in the order, so their results are ready.</p>'+
+   '<div class="eq">'+nmH(n)+' = '+fwdSym(n,false)+'</div><div class="eq">&nbsp;&nbsp;= '+fwdSym(n,true)+'</div><div class="eq">&nbsp;&nbsp;= <span class="v">'+fmt(V[n.id])+'</span></div>'+
+   '<p>'+saves(n)+'</p>';
+  if(n===G.out)h+='<p>That is the loss. The forward pass is done.</p>';
+  h+=nodeCard(n,S);
+ }else if(st.kind==='seed'){
+  h+='<h3>Backward starts: <code>'+esc(G.out.name)+'.backward()</code></h3><p>The goal is '+
+   G.leaves.map(function(l){return dd(OUT,nmH(l));}).join(', ')+'. The engine starts at the output with</p>'+
+   '<div class="eq">'+dd(OUT,OUT)+' = <span class="g">1</span></div>'+
+   (G.out.name==='loss'?'<p>(writing <i>L</i> for <code>loss</code>)</p>':'')+
+   '<p>and then visits the nodes in <b>reverse</b> topological order, '+G.bwd.map(function(m){return m.ord;}).join(', ')+
+   '. That way a node runs only after every node that uses it has sent back its share of the gradient.</p>';
+ }else if(st.kind==='bwd'){
+  var Z=nmH(n),ZD=dn(n),up=S.grad[n.id],who=n.parents;
+  h+='<h3>Backward at '+Z+' ('+OPS[n.op].cls+'), part '+(st.sub+1)+' of 3</h3>';
+  if(st.sub===0){
+   h+='<p><b>Upstream gradient.</b> '+Z+' is used by '+who.map(function(p){return nmH(p.n);}).join(' and ')+'. ';
+   if(who.length>1)h+='Each sent back its own share, and the shares add up:</p><div class="eq">'+dd(OUT,ZD)+' = '+
+    who.map(function(p){return '<span class="g">'+fmt(S.con[p.n.id+'_'+p.i])+'</span>';}).join(' + ')+' = <span class="g">'+fmt(up)+'</span></div>'+
+    '<p>This is the multivariable chain rule: '+Z+' moves the loss through every path out of it.</p>';
+   else h+='It already sent back</p><div class="eq">'+dd(OUT,ZD)+' = <span class="g">'+fmt(up)+'</span></div>';
+   h+='<p>It is complete now, because every user of '+Z+' comes later in the order and has already run.</p>';
+  }else if(st.sub===1){
+   h+='<p><b>Local gradients.</b> How much does '+Z+' itself move when one input moves? That depends only on this node and the values it saved on the way forward. It knows nothing about the loss.</p>';
+   n.inputs.forEach(function(c,i){
+    if(!c.rg){h+='<div class="eq mut">'+nmH(c)+': constant, no gradient needed</div>';return;}
+    var ls=localSym(n,i),lv=fmt(localOf(n,i,V));
+    h+='<div class="eq">'+dd(ZD,nmH(c))+' = '+ls+(ls===lv?'':' = <span class="l">'+lv+'</span>')+'</div>';
+   });
+   if(n.op==='add')h+='<p class="aside">An add node is a gradient copier: both local gradients are 1.</p>';
+   if(n.op==='mul'&&n.inputs.every(function(c){return c.kind!=='const';}))h+='<p class="aside">A multiply node swaps: each input’s local gradient is the other input.</p>';
+  }else{
+   h+='<p><b>Downstream = upstream &times; local.</b> Each input gets its share, added into its gradient.</p>';
+   n.inputs.forEach(function(c,i){
+    if(!c.rg)return;
+    var x=S.con[n.id+'_'+i],tot=S.grad[c.id],got=0;
+    n.inputs.forEach(function(c2,j){if(c2===c&&j>i)got++;});
+    var rec=S.recv[c.id]-got,prev=tot-x;
+    n.inputs.forEach(function(c2,j){if(c2===c&&j>i)prev-=S.con[n.id+'_'+j];});
+    h+='<div class="eq">'+dd(OUT,nmH(c))+' += '+dd(OUT,ZD)+' · '+dd(ZD,nmH(c))+' = <span class="g">'+fmt(up)+'</span> × <span class="l">'+pn(localOf(n,i,V))+'</span> = <span class="g">'+fmt(x)+'</span></div>';
+    var tot2=prev+x,np=c.parents.length;
+    var note=rec===1?'first share':('adds to '+fmt(prev)+' already there, making <span class="g">'+fmt(tot2)+'</span>');
+    note+=np>1?' (share '+rec+' of '+np+')':'';
+    if(c.kind==='leaf')note+='; '+nmH(c)+' is a leaf, so this lands in <code>'+esc(c.name)+'.grad</code>';
+    h+='<div class="eq" style="font-size:15px;color:var(--text-muted);margin-left:28px">'+note+'</div>';
+   });
+  }
+  h+=nodeCard(n,S);
+ }else{
+  var eps=1e-5;
+  h+='<h3>Done</h3><p><code>'+esc(G.out.name)+'.backward()</code> has visited every node once. The leaves hold their gradients. A check by finite differences, (<i>L</i>(v+&epsilon;) &minus; <i>L</i>(v&minus;&epsilon;))/2&epsilon;:</p>';
+  h+='<table class="fd"><tr><th>leaf</th><th>value</th><th>backprop</th><th>finite diff.</th></tr>';
+  G.leaves.forEach(function(l){
+   var up=Object.assign({},VALS),dn=Object.assign({},VALS);up[l.name]+=eps;dn[l.name]-=eps;
+   var fd=(evalAll(G,up)[G.out.id]-evalAll(G,dn)[G.out.id])/(2*eps);
+   h+='<tr><td>'+nmH(l)+'</td><td class="v">'+fmt(V[l.id])+'</td><td class="g">'+fmt(S.grad[l.id]||0)+'</td><td>'+fmt(fd)+'</td></tr>';
+  });
+  h+='</table><p class="aside">The same thing in PyTorch:<br><code>'+G.leaves.map(function(l){return esc(l.name)+' = torch.tensor('+VALS[l.name]+', requires_grad=True)';}).join('<br>')+
+   '<br>'+esc(G.src).replace(/\n/g,'<br>')+'<br>'+esc(G.out.name)+'.backward()<br>'+G.leaves.map(function(l){return 'print('+esc(l.name)+'.grad)';}).join('; ')+'</code></p>';
+ }
+ $('expl').innerHTML=h;
+ // code view with the current node's source highlighted
+ var src=G.src;
+ if(n&&n.kind==='op'&&st.kind!=='seed')$('codev').innerHTML=esc(src.slice(0,n.s))+'<mark>'+esc(src.slice(n.s,n.e))+'</mark>'+esc(src.slice(n.e));
+ else $('codev').innerHTML=esc(src);
+}
+
+/* ================= driver ================= */
+function render(){
+ var st=G.steps[K],S=stateAt(K);
+ renderGraph(S,st);renderZoom(S,st);explain(S,st);
+ $('scrub').max=G.steps.length-1;$('scrub').value=K;
+ var ph=['Build','Forward','Backward'][st.ph];
+ $('stepv').textContent='step '+(K+1)+' / '+G.steps.length+' · '+ph;
+ [].forEach.call($('phases').children,function(b,i){b.classList.toggle('on',i===st.ph);});
+ $('stepb').disabled=K>=G.steps.length-1;
+ if(ANIM){
+  [].forEach.call(document.querySelectorAll('animateMotion,animate'),function(a){
+   var d=+a.getAttribute('data-delay')||0;
+   setTimeout(function(){try{a.beginElement();}catch(e){}},d);
+  });
+ }
+ ANIM=false;
+}
+function go(k,anim){
+ if(!G)return;
+ k=Math.max(0,Math.min(G.steps.length-1,k));
+ ANIM=!!anim;K=k;render();
+}
+function stepF(){if(K<G.steps.length-1)go(K+1,true);else stopPlay();}
+function stopPlay(){if(timer){clearInterval(timer);timer=null;}$('playb').textContent='Play';}
+function togglePlay(){
+ if(timer){stopPlay();return;}
+ if(K>=G.steps.length-1)go(0);
+ $('playb').textContent='Pause';
+ timer=setInterval(function(){if(K>=G.steps.length-1)stopPlay();else stepF();},1700);
+}
+function leafInputs(){
+ var h='';
+ G.leaves.forEach(function(l){
+  h+='<label><i>'+esc(l.name)+'</i><input class="mini" type="number" step="0.1" data-n="'+esc(l.name)+'" value="'+VALS[l.name]+'"></label>';
+ });
+ $('leafs').innerHTML=h;
+ [].forEach.call($('leafs').querySelectorAll('input'),function(inp){
+  inp.addEventListener('input',function(){
+   var v=parseFloat(inp.value);if(!isFinite(v))return;
+   VALS[inp.getAttribute('data-n')]=v;V=evalAll(G,VALS);render();
+  });
+ });
+}
+function rebuild(keepStep){
+ var src=$('src').value,g;
+ try{g=buildGraph(src);}
+ catch(e){
+  if(!(e instanceof PErr))throw e;
+  var line=src.slice(0,e.pos).split('\n').length,col=e.pos-src.lastIndexOf('\n',e.pos-1);
+  $('err').textContent=e.msg+(e.pos<0?'':src.indexOf('\n')>=0?' (line '+line+', column '+col+')':' (at column '+col+')')+'.';
+  return;
+ }
+ $('err').textContent='';
+ stopPlay();
+ G=g;
+ var pv=PRESETS[+$('preset').value]||{};
+ G.leaves.forEach(function(l){
+  if(G.decl[l.name]!==undefined)VALS[l.name]=G.decl[l.name];
+  else if(VALS[l.name]===undefined)VALS[l.name]=(pv.vals&&pv.vals[l.name]!==undefined)?pv.vals[l.name]:1;
+ });
+ V=evalAll(G,VALS);
+ leafInputs();
+ go(keepStep?Math.min(K,G.steps.length-1):0);
+}
+function fitArea(){var t=$('src');t.rows=Math.max(1,t.value.split('\n').length);}
+(function init(){
+ var sel=$('preset');
+ PRESETS.forEach(function(p,i){var o=document.createElement('option');o.value=i;o.textContent=p.name;sel.appendChild(o);});
+ sel.addEventListener('change',function(){var p=PRESETS[+sel.value];VALS=Object.assign({},p.vals);$('src').value=p.src;fitArea();rebuild();});
+ var deb=null;
+ $('src').addEventListener('input',function(){fitArea();clearTimeout(deb);deb=setTimeout(function(){rebuild();},450);});
+ $('scrub').addEventListener('input',function(){stopPlay();go(+$('scrub').value);});
+ [].forEach.call($('phases').children,function(b){b.addEventListener('click',function(){stopPlay();go(G.phase0[+b.getAttribute('data-p')],true);});});
+ document.addEventListener('keydown',function(e){
+  var t=e.target.tagName;if(t==='TEXTAREA'||t==='INPUT'||t==='SELECT')return;
+  if(e.key==='ArrowRight'){e.preventDefault();stopPlay();stepF();}
+  else if(e.key==='ArrowLeft'){e.preventDefault();stopPlay();go(K-1);}
+  else if(e.key===' '){e.preventDefault();togglePlay();}
+  else if(e.key==='Home'){e.preventDefault();stopPlay();go(0);}
+  else if(e.key==='End'){e.preventDefault();stopPlay();go(G.steps.length-1);}
+ });
+ VALS=Object.assign({},PRESETS[0].vals);$('src').value=PRESETS[0].src;fitArea();rebuild();
+})();
+</script>
+</body>
+</html>
