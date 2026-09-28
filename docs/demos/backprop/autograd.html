@@ -95,8 +95,9 @@ svg text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,
 <div class="nav"><a href="./">&larr; Backpropagation, explained</a> &middot; <a href="../../">CS7150 class demos</a></div>
 <h1>Backprop, step by step<span>: what <code>loss.backward()</code> actually does</span></h1>
 <p class="intro">Type an expression the way you would in PyTorch. The page runs it the way an autograd
- engine does, in three phases: <b>build</b> the graph as Python evaluates each operation, run the
- <b>forward</b> pass in topological order, then run the <b>backward</b> pass in reverse order.
+ engine does, one node at a time and in four passes: <b>build</b> the graph as Python evaluates the
+ expression left to right, <b>sort</b> the nodes into topological order, run the <b>forward</b> pass in that
+ order, then run the <b>backward</b> pass in reverse.
  At every node, the chain rule multiplies the <span class="g">upstream gradient</span> by the node's
  <span class="l">local gradient</span> to get the <span class="g">downstream gradient</span> for each input.</p>
 
@@ -111,7 +112,7 @@ svg text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,
 
 <div class="row ctl">
  <div class="seg" id="phases">
-  <button data-p="0">1 &middot; Build graph</button><button data-p="1">2 &middot; Forward</button><button data-p="2">3 &middot; Backward</button>
+  <button data-p="0">1 &middot; Build graph</button><button data-p="1">2 &middot; Sort</button><button data-p="2">3 &middot; Forward</button><button data-p="3">4 &middot; Backward</button>
  </div>
  <button onclick="go(0)" title="start (Home)">&#x23EE;</button>
  <button onclick="go(K-1)" title="back (&larr;)">&#x25C0; Back</button>
@@ -132,6 +133,7 @@ svg text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,
   before they are added up. <span class="l">Violet</span> numbers are local gradients, which a node can work out from its own inputs alone.</div>
  <div><b>Where this differs from PyTorch.</b> PyTorch computes each operation the moment Python reaches it, so building the graph and
   the forward pass happen together. They are split here, as in the homework's autograd, so you can see the graph before any number moves.
+  PyTorch's backward engine also never numbers the nodes: it counts how many gradients each node is still waiting for, which visits them in the same kind of order.
   PyTorch also keeps <code>.grad</code> only on leaves (call <code>retain_grad()</code> to keep an intermediate one) and stores plain
   Python numbers like <code>4</code> inside the operation instead of making nodes for them. Here every node shows its gradient, and
   constants are drawn as dashed boxes that get no gradient.</div>
@@ -294,7 +296,7 @@ function buildGraph(src){
   if(ast.k==='num')return mk({kind:'const',value:ast.v,label:ast.x.replace('-','−')});
   if(ast.k==='var'){
    if(env[ast.name])return env[ast.name];
-   if(!leaves[ast.name])leaves[ast.name]=mk({kind:'leaf',name:ast.name});
+   if(!leaves[ast.name])leaves[ast.name]=mk({kind:'leaf',name:ast.name,s:ast.s,e:ast.e});
    return leaves[ast.name];
   }
   var ins=ast.args.map(b);
@@ -331,7 +333,7 @@ function buildGraph(src){
  var order=topo.filter(function(n){return n.kind!=='const';});
  order.forEach(function(n,i){n.ord=i+1;});
  var G={src:src,nodes:nodes,ops:ops,leaves:lv,out:out,topo:topo,order:order,decl:decl};
- G.creation=ops.slice().sort(function(a,b){return a.id-b.id;});
+ G.creation=nodes.filter(function(n){return n.kind!=='const';});   // in the order Python first reaches them
  G.bwd=order.filter(function(n){return n.kind==='op'&&n.rg;}).reverse();
  layout(G);buildSteps(G);
  return G;
@@ -403,29 +405,26 @@ function bez(p,t){var u=1-t;return [u*u*u*p[0]+3*u*u*t*p[2]+3*u*t*t*p[4]+t*t*t*p
 
 /* ================= steps ================= */
 function buildSteps(G){
- var s=[{ph:0,kind:'leaves'}];
+ var s=[{ph:0,kind:'start'}];
  G.creation.forEach(function(n){s.push({ph:0,kind:'make',node:n});});
- s.push({ph:1,kind:'topo'});
- s.push({ph:1,kind:'fleaves'});
- G.order.forEach(function(n){if(n.kind==='op')s.push({ph:1,kind:'fwd',node:n});});
- s.push({ph:2,kind:'seed',node:G.out});
+ G.order.forEach(function(n){s.push({ph:1,kind:'topo',node:n});});
+ G.order.forEach(function(n){s.push({ph:2,kind:'fwd',node:n});});
+ s.push({ph:3,kind:'seed',node:G.out});
  G.bwd.forEach(function(n){
-  if(n!==G.out)s.push({ph:2,kind:'bwd',node:n,sub:0});
-  s.push({ph:2,kind:'bwd',node:n,sub:1});
-  s.push({ph:2,kind:'bwd',node:n,sub:2});
+  if(n!==G.out)s.push({ph:3,kind:'bwd',node:n,sub:0});
+  s.push({ph:3,kind:'bwd',node:n,sub:1});
+  s.push({ph:3,kind:'bwd',node:n,sub:2});
  });
- s.push({ph:2,kind:'done'});
+ s.push({ph:3,kind:'done'});
  G.steps=s;
- G.phase0=[0,s.findIndex(function(t){return t.ph===1;}),s.findIndex(function(t){return t.ph===2;})];
+ G.phase0=[0,1,2,3].map(function(p){return s.findIndex(function(t){return t.ph===p;});});
 }
 function stateAt(k){
- var S={made:{},ord:false,val:{},grad:{},con:{},recv:{},fwdCount:0};
+ var S={made:{},ord:{},val:{},grad:{},con:{},recv:{},fwdCount:0};
  for(var i=0;i<=k;i++){
   var st=G.steps[i],n=st.node;
-  if(st.kind==='leaves')G.leaves.forEach(function(l){S.made[l.id]=1;});
-  else if(st.kind==='make'){S.made[n.id]=1;n.inputs.forEach(function(c){S.made[c.id]=1;});}
-  else if(st.kind==='topo')S.ord=true;
-  else if(st.kind==='fleaves')G.nodes.forEach(function(m){if(m.kind!=='op')S.val[m.id]=V[m.id];});
+  if(st.kind==='make'){S.made[n.id]=1;(n.inputs||[]).forEach(function(c){if(c.kind==='const')S.made[c.id]=1;});}
+  else if(st.kind==='topo')S.ord[n.id]=1;
   else if(st.kind==='fwd'){S.val[n.id]=V[n.id];S.fwdCount++;}
   else if(st.kind==='seed')S.grad[n.id]=1;
   else if(st.kind==='bwd'&&st.sub===2){
@@ -504,7 +503,7 @@ function renderGraph(S,st){
  G.nodes.forEach(function(n){
   if(!S.made[n.id])return;
   var P=G.pos[n.id],w=hw(n),isc=(n===cur&&st.kind!=='seed'&&st.kind!=='done')||(st.kind==='seed'&&n===G.out);
-  var born=an&&st.kind==='make'&&(n===cur||(cur&&cur.inputs.indexOf(n)>=0&&n.kind==='const'))||an&&st.kind==='leaves'&&n.kind==='leaf';
+  var born=an&&st.kind==='make'&&(n===cur||(cur.kind==='op'&&cur.inputs.indexOf(n)>=0&&n.kind==='const'));
   var g='<g'+(born?' class="pop"':'')+'><title>'+esc(n.kind==='op'?n.name+' = '+n.expr:n.kind==='leaf'?n.name+' (leaf)':n.label+' (constant)')+'</title>';
   if(isc)g+=n.kind==='op'?'<circle class="ring" cx="'+P.x+'" cy="'+P.y+'" r="'+(R+5)+'"/>':'<rect class="ring" x="'+(P.x-w-5)+'" y="'+(P.y-22)+'" width="'+(2*w+10)+'" height="44" rx="10"/>';
   if(n.kind==='op'){
@@ -518,7 +517,7 @@ function renderGraph(S,st){
   }
   g+='</g>';
   if(S.val[n.id]!==undefined&&n.kind!=='const'){
-   var nv=an&&((st.kind==='fwd'&&n===cur)||st.kind==='fleaves');
+   var nv=an&&st.kind==='fwd'&&n===cur;
    g+=T(P.x+w+5,P.y-9,fmt(S.val[n.id]),'lv h'+(nv?' pop late':''),'start');
   }
   if(S.grad[n.id]!==undefined){
@@ -527,18 +526,19 @@ function renderGraph(S,st){
    if(n.kind==='leaf'&&st.kind==='done')txt='<tspan font-weight="700">'+txt+'</tspan>';
    g+=T(P.x+w+5,P.y+20,txt,'lg2 h'+(ng?' pop late':''),'start');
   }
-  if(S.ord&&n.kind!=='const'){
+  if(S.ord[n.id]){
    var bx=P.x-w-1,by=P.y+(n.kind==='op'?R-1:16);
-   g+='<g'+(an&&st.kind==='topo'?' class="pop" style="animation-delay:'+(n.ord*0.06).toFixed(2)+'s"':'')+'><circle class="badge" cx="'+bx+'" cy="'+by+'" r="9"/>'+T(bx,by,n.ord,'badgt')+'</g>';
+   g+='<g'+(an&&st.kind==='topo'&&n===cur?' class="pop"':'')+'><circle class="badge" cx="'+bx+'" cy="'+by+'" r="9"/>'+T(bx,by,n.ord,'badgt')+'</g>';
   }
   nd+=g;
  });
  var co='';
  if(st.kind==='make'){
-  var P=G.pos[cur.id],tx=cur.name+' = '+cur.expr.replace(/\s*\n\s*/g,' '),tw=tx.length*8.4+18;
-  var cx=Math.min(Math.max(P.x-tw/2,G.vb[0]+4),G.vb[0]+G.vb[2]-tw-4),cy=P.y-R-66;
+  var P=G.pos[cur.id],lf=cur.kind==='leaf',tx=lf?cur.name+'  (leaf tensor)':cur.name+' = '+cur.expr.replace(/\s*\n\s*/g,' '),tw=tx.length*8.4+18;
+  var top=lf?P.y-21:P.y-R-26;
+  var cx=Math.min(Math.max(P.x-tw/2,G.vb[0]+4),G.vb[0]+G.vb[2]-tw-4),cy=top-40;
   co='<g'+(an?' class="fade"':'')+'><rect class="callout" x="'+cx+'" y="'+cy+'" width="'+tw+'" height="28" rx="6"/>'+
-   T(cx+9,cy+19,esc(tx),'callt')+'<path d="M'+P.x+' '+(cy+28)+'L'+P.x+' '+(P.y-R-26)+'" stroke="var(--cur)" stroke-width="1.4"/></g>';
+   T(cx+9,cy+19,esc(tx),'callt')+'<path d="M'+P.x+' '+(cy+28)+'L'+P.x+' '+top+'" stroke="var(--cur)" stroke-width="1.4"/></g>';
  }
  var svg=$('graph');
  svg.setAttribute('viewBox',G.vb.join(' '));
@@ -564,7 +564,7 @@ function zoomNode(S,st){
  var n=st.node,cx=500,cy=150,Rz=40,k=n.inputs.length,ys=k===1?[cy]:[80,220],s='',an=ANIM;
  var defs='<defs>'+['zr:var(--border-strong)','zv:var(--val)','zg:var(--grad)','zc:var(--cur)'].map(function(q){var a=q.split(':');
   return '<marker id="'+a[0]+'" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1.5L9 5L1 8.5z" style="fill:'+a[1]+'"/></marker>';}).join('')+'</defs>';
- var build=st.kind==='make',fwd=st.kind==='fwd',bwd=st.kind==='bwd',sub=bwd?st.sub:-1;
+ var build=st.kind==='make',topo=st.kind==='topo',fwd=st.kind==='fwd',bwd=st.kind==='bwd',sub=bwd?st.sub:-1;
  var OUT=outS(),Z=dnS(n),dots='';
  n.inputs.forEach(function(c,i){
   var y=ys[i],off=k===2?(i?16:-16):0,px=cx-Math.sqrt(Rz*Rz-off*off),py=cy+off;
@@ -581,6 +581,11 @@ function zoomNode(S,st){
   s+='<rect class="nd '+(c.kind==='const'?'const':c.kind==='leaf'?'leaf':'')+'" x="'+(60-w)+'" y="'+(y-18)+'" width="'+2*w+'" height="36" rx="8"/>'+
      T(60,y,c.kind==='const'?c.label:'<tspan font-style="italic">'+esc(c.name)+'</tspan>','op'+(c.kind==='const'?' mut':''));
   if(build){s+=T(225,y-10,'input_nodes['+i+']','cap2 mut','middle');return;}
+  if(topo){
+   if(c.kind==='const')s+=T(102,y-11,'a constant, not sorted','ts mut','start');
+   else s+=badge(60-w-2,y+16,c.ord,false)+T(102,y-11,'already number '+c.ord,'ts mut','start');
+   return;
+  }
   if(S.val[c.id]!==undefined||fwd)s+=T(102,y-11,(c.kind==='const'?'':nmS(c)+' = ')+fmt(V[c.id]),'lv'+(fwd&&an?' pop':''),'start');
   if(bwd&&sub>=1){
    var lt=c.rg?dd(Z,nmS(c))+' = '+fmt(localOf(n,i,V)):'no grad needed';
@@ -602,6 +607,8 @@ function zoomNode(S,st){
  // output edge
  if(build){
   s+=T(cx+Rz+20,cy-10,'result: None','ts mut','start')+T(cx+Rz+20,cy+14,'gradient: None','ts mut','start');
+ }else if(topo){
+  s+=badge(cx-Rz+4,cy+Rz-4,n.ord,an)+T(cx+Rz+20,cy+6,'so it gets number '+n.ord,'ts'+(an?' pop':''),'start');
  }else{
   s+='<path class="edge'+(fwd?' efwd':'')+'" d="M'+(cx+Rz)+' '+cy+'L752 '+cy+'" marker-end="url(#'+(fwd?'zv':'zr')+')"/>';
   var to=n===G.out?'the loss':'to '+n.parents.map(function(p){return p.n.name;}).filter(function(v,i,a){return a.indexOf(v)===i;}).join(', ');
@@ -615,16 +622,23 @@ function zoomNode(S,st){
  }
  return defs+s+dots;
 }
+function badge(x,y,k,pop){return '<g'+(pop?' class="pop"':'')+'><circle class="badge" cx="'+x+'" cy="'+y+'" r="12"/>'+T(x,y,k,'badgt" style="font-size:14px')+'</g>';}
+function zoomLeaf(S,st){
+ var n=st.node,x=300,y=150,w=Math.max(40,14+8*n.name.length),s='',an=ANIM,L=[];
+ s+='<rect class="ring" x="'+(x-w-6)+'" y="'+(y-36)+'" width="'+(2*w+12)+'" height="72" rx="14"/>';
+ s+='<rect class="nd leaf cur'+(st.kind==='make'&&an?' pop':'')+'" x="'+(x-w)+'" y="'+(y-30)+'" width="'+2*w+'" height="60" rx="10"/>'+
+    T(x,y,'<tspan font-style="italic">'+esc(n.name)+'</tspan>','op" style="font-size:28px');
+ if(st.kind==='make')L=[['leaf tensor, no inputs','ts'],['value = '+fmt(V[n.id]),'lv'],['requires_grad = True','ts mut'],['grad = None','ts mut']];
+ else if(st.kind==='topo'){L=[['no inputs to wait for,','ts'],['so it gets number '+n.ord,'ts']];s+=badge(x-w-2,y+28,n.ord,an);}
+ else L=[['a leaf: its result','ts'],['is just its value','ts'],['result = '+fmt(V[n.id]),'lv']];
+ L.forEach(function(l,i){s+=T(x+w+36,y-(L.length-1)*13+i*26+5,l[0],l[1]+(an&&(l[1]==='lv'||st.kind==='topo')?' pop':''),'start');});
+ return s;
+}
 function renderZoom(S,st){
  var s,z=$('zoom'),hd='Zoom in to one node';
- if(st.kind==='make'||st.kind==='fwd'||st.kind==='bwd'){s=zoomNode(S,st);hd='Zoom in: node '+st.node.name+' ('+OPS[st.node.op].cls+')';}
- else if(st.kind==='leaves')s=zoomChips(G.leaves.map(function(l){return {title:'<tspan font-style="italic">'+esc(l.name)+'</tspan>',leaf:1,
-   lines:[['value '+fmt(VALS[l.name]),'lv sm'],['requires_grad','cap2 mut'],['grad: None','cap2 mut']]};}),'Leaf tensors: they hold data and have no inputs.');
- else if(st.kind==='topo')s=zoomChips(G.order.map(function(m){return {title:m.ord+' · '+'<tspan font-style="italic">'+esc(m.name)+'</tspan>',leaf:m.kind==='leaf',
-   lines:[[m.kind==='leaf'?'leaf':'inputs: '+m.inputs.map(function(c){return nmC(c);}).join(', '),'cap2 mut'],[m.kind==='leaf'?'':esc(m.expr.length>14?m.expr.slice(0,13)+'…':m.expr),'cap2 mut']]};}),
-   'Topological order: every node comes after all of its inputs.');
- else if(st.kind==='fleaves')s=zoomChips(G.leaves.map(function(l){return {title:'<tspan font-style="italic">'+esc(l.name)+'</tspan>',leaf:1,lines:[['result '+fmt(V[l.id]),'lv sm']]};}),
-   'Nodes 1 to '+G.leaves.length+' are leaves: their result is just their value.');
+ if(st.node&&st.node.kind==='leaf'){s=zoomLeaf(S,st);hd='Zoom in: leaf '+st.node.name;}
+ else if(st.kind==='make'||st.kind==='topo'||st.kind==='fwd'||st.kind==='bwd'){s=zoomNode(S,st);hd='Zoom in: node '+st.node.name+' ('+OPS[st.node.op].cls+')';}
+ else if(st.kind==='start')s=T(380,150,'Nothing yet: the graph is empty.','ts mut','middle');
  else if(st.kind==='seed'){
   s='<path class="edge" d="M330 140L700 140" marker-end="url(#zr0)"/>'+
    '<defs><marker id="zr0" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1.5L9 5L1 8.5z" style="fill:var(--border-strong)"/></marker></defs>'+
@@ -667,28 +681,41 @@ function saves(n){
 }
 function explain(S,st){
  var n=st.node,h='',OUT=outH(),N=G.steps.length;
- if(st.kind==='leaves'){
-  h+='<h3>The leaves come first</h3><p>Before the expression runs, each variable is a leaf tensor made with <code>requires_grad=True</code>: '+
-   G.leaves.map(function(l){return nmH(l)+' = <span class="v">'+fmt(VALS[l.name])+'</span>';}).join(', ')+
-   '. A leaf has no inputs. Its <code>grad</code> is <code>None</code> until the backward pass fills it in.</p>'+
-   '<p>Press <b>Step</b> to let Python evaluate the expression one operation at a time.</p>';
+ if(st.kind==='start'){
+  h+='<h3>An empty graph</h3><p>Python evaluates <code>'+esc(G.src.replace(/\n/g,'; '))+'</code> from left to right, innermost '+
+   'operands first. Each name it meets for the first time becomes a leaf; each operation becomes a new node. Press <b>Step</b>.</p>';
+ }else if(st.kind==='make'&&n.kind==='leaf'){
+  var i0=G.creation.indexOf(n)+1;
+  h+='<h3>Build '+i0+' of '+G.creation.length+': <code>'+esc(n.name)+'</code></h3><p>Python meets '+nmH(n)+' for the first time. It is a '+
+   '<b>leaf</b> tensor, made with <code>requires_grad=True</code>, holding the value <span class="v">'+fmt(V[n.id])+'</span>. '+
+   'It has no inputs and no <code>grad_fn</code>; its <code>grad</code> stays <code>None</code> until the backward pass fills it in.</p>';
+  if(n.parents.length>1)h+='<p class="aside">'+nmH(n)+' shows up '+n.parents.length+' times in the expression. Later uses point to this same node; no copy is made.</p>';
+  h+=nodeCard(n,S);
  }else if(st.kind==='make'){
   var i=G.creation.indexOf(n)+1;
-  h+='<h3>Build '+i+' of '+G.creation.length+': <code>'+esc(n.expr.replace(/\s*\n\s*/g,' '))+'</code></h3><p>'+callDesc(n)+
+  h+='<h3>Build '+i+' of '+G.creation.length+': <code>'+esc(n.expr.replace(/\s*\n\s*/g,' '))+'</code></h3><p>'+(i===G.creation.length?'':'Its operands are ready, so ')+callDesc(n)+
    ' That returns a new tensor, called '+nmH(n)+' here, whose <code>grad_fn</code> is a new <b>'+OPS[n.op].cls+'</b> node. The node keeps pointers to its inputs, '+
    n.inputs.map(nmH).join(' and ')+', which is all the backward pass will need to find its way back.</p>';
   var cs=n.inputs.filter(function(c){return c.kind==='const';});
   if(cs.length)h+='<p class="aside">'+cs.map(function(c){return c.label;}).join(', ')+' is a plain Python number. PyTorch stores it inside the operation; it gets no gradient.</p>';
+  if(i===G.creation.length)h+='<p>That was the last operation: the graph is built. Nothing has been computed yet.</p>';
   h+=nodeCard(n,S);
  }else if(st.kind==='topo'){
-  var fan=G.nodes.filter(function(m){return m.kind!=='const'&&m.parents.length>1;});
-  h+='<h3>Put the nodes in order</h3><p>A node can only run after its inputs have run. A depth-first search from '+nmH(G.out)+
-   ' that numbers each node after all of its inputs gives a <b>topological order</b>: the small numbers. The forward pass runs 1&nbsp;&rarr;&nbsp;'+G.order.length+
-   '; the backward pass will run the other way.</p>';
-  if(fan.length)h+='<p>'+fan.map(function(m){return nmH(m)+' feeds '+m.parents.length+' nodes';}).join(', ')+
-   ', yet each node runs once. Plain recursion from the loss would compute '+nmH(fan[0])+' once per path.</p>';
- }else if(st.kind==='fleaves'){
-  h+='<h3>Forward: the leaves</h3><p>The first nodes in the order are the leaves; their result is just their value. Constants are already known.</p>';
+  var first=n.ord===1,last=n.ord===G.order.length;
+  h+='<h3>Sort, number '+n.ord+' of '+G.order.length+': '+nmH(n)+'</h3>';
+  if(first)h+='<p>A node can only be computed after its inputs. So before running anything, the engine does a depth-first search from '+nmH(G.out)+
+   ', visiting each node\u2019s inputs left to right and giving a node its number only once all its inputs have one. That is a <b>topological order</b>.</p>';
+  if(n.kind==='leaf')h+='<p>'+nmH(n)+' is a leaf with no inputs, so nothing needs to come before it: it gets number <b>'+n.ord+'</b>.</p>';
+  else{
+   var ins=n.inputs.filter(function(c){return c.kind!=='const';});
+   h+='<p>Its inputs '+ins.map(function(c){return nmH(c)+' (number '+c.ord+')';}).join(' and ')+' are already numbered, so '+nmH(n)+' gets number <b>'+n.ord+'</b>.</p>';
+   var shared=ins.filter(function(c){return c.parents.length>1&&c.parents[0].n!==n;});
+   if(shared.length)h+='<p class="aside">The search reached '+shared.map(nmH).join(' and ')+' again through '+nmH(n)+', but '+(shared.length>1?'they were already numbered, so neither was':'it was already numbered, so it was not')+' visited twice. Each node runs once, however many paths lead to it.</p>';
+  }
+  if(last)h+='<p>Every node has a number. The forward pass will run 1&nbsp;&rarr;&nbsp;'+G.order.length+'; the backward pass, '+G.order.length+'&nbsp;&rarr;&nbsp;1.</p>';
+ }else if(st.kind==='fwd'&&n.kind==='leaf'){
+  h+='<h3>Forward, node '+n.ord+' of '+G.order.length+': '+nmH(n)+'</h3><p>'+nmH(n)+' is a leaf, so its result is just its value:</p>'+
+   '<div class="eq">'+nmH(n)+' = <span class="v">'+fmt(V[n.id])+'</span></div>';
  }else if(st.kind==='fwd'){
   h+='<h3>Forward, node '+n.ord+' of '+G.order.length+': '+nmH(n)+'</h3>'+
    '<p>Its inputs, '+n.inputs.map(nmH).join(' and ')+', come earlier in the order, so their results are ready.</p>'+
@@ -754,7 +781,7 @@ function explain(S,st){
  $('expl').innerHTML=h;
  // code view with the current node's source highlighted
  var src=G.src;
- if(n&&n.kind==='op'&&st.kind!=='seed')$('codev').innerHTML=esc(src.slice(0,n.s))+'<mark>'+esc(src.slice(n.s,n.e))+'</mark>'+esc(src.slice(n.e));
+ if(n&&n.s!==undefined&&st.kind!=='seed')$('codev').innerHTML=esc(src.slice(0,n.s))+'<mark>'+esc(src.slice(n.s,n.e))+'</mark>'+esc(src.slice(n.e));
  else $('codev').innerHTML=esc(src);
 }
 
@@ -763,7 +790,7 @@ function render(){
  var st=G.steps[K],S=stateAt(K);
  renderGraph(S,st);renderZoom(S,st);explain(S,st);
  $('scrub').max=G.steps.length-1;$('scrub').value=K;
- var ph=['Build','Forward','Backward'][st.ph];
+ var ph=['Build','Sort','Forward','Backward'][st.ph];
  $('stepv').textContent='step '+(K+1)+' / '+G.steps.length+' · '+ph;
  [].forEach.call($('phases').children,function(b,i){b.classList.toggle('on',i===st.ph);});
  $('stepb').disabled=K>=G.steps.length-1;
