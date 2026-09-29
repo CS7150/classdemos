@@ -28,6 +28,7 @@ code,pre,textarea,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,m
 .card0{background:var(--surface);border:1px solid var(--border);border-radius:12px}
 #gwrap{overflow-x:auto;padding:4px 6px}
 #graph{min-width:620px;max-height:62vh}
+#graph g[data-id]{cursor:pointer}
 #grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:12px;align-items:start}
 @media (max-width:980px){#grid{grid-template-columns:1fr}}
 #zwrap{padding:8px 10px 4px}
@@ -544,7 +545,7 @@ function renderGraph(S,st){
   if(!S.made[n.id])return;
   var P=G.pos[n.id],w=hw(n),isc=(n===cur&&st.kind!=='seed'&&st.kind!=='done')||(st.kind==='seed'&&n===G.out);
   var born=an&&st.kind==='make'&&(n===cur||(cur.kind==='op'&&cur.inputs.indexOf(n)>=0&&n.kind==='const'));
-  var g='<g'+(born?' class="pop"':'')+'><title>'+esc(n.kind==='op'?n.name+' = '+n.expr:n.kind==='leaf'?n.name+' (leaf)':n.label+' (constant)')+'</title>';
+  var g='<g'+(born?' class="pop"':'')+(n.kind!=='const'?' data-id="'+n.id+'"':'')+'><title>'+esc(n.kind==='op'?n.name+' = '+n.expr:n.kind==='leaf'?n.name+' (leaf)':n.label+' (constant)')+'</title>';
   if(isc)g+=n.kind==='op'?'<circle class="ring" cx="'+P.x+'" cy="'+P.y+'" r="'+(R+5)+'"/>':'<rect class="ring" x="'+(P.x-w-5)+'" y="'+(P.y-22)+'" width="'+(2*w+10)+'" height="44" rx="10"/>';
   if(n.kind==='op'){
    var sym=glyph(n.op);
@@ -898,6 +899,27 @@ function render(){
  }
  ANIM=false;
 }
+// the step that shows node n in phase ph; a leaf has no backward step of its own, so it gets the one
+// that finishes its gradient. -1 if n has no step in that phase.
+function stepFor(n,ph){
+ var k=G.steps.findIndex(function(t){return t.ph===ph&&t.node===n;});
+ if(k<0&&ph===3&&n.kind==='leaf')for(var i=G.steps.length-1;i>=0;i--){
+  var t=G.steps[i];if(t.kind==='bwd'&&t.sub===2&&t.node.inputs.indexOf(n)>=0){k=i;break;}
+ }
+ return k;
+}
+// a phase button keeps the selected node and shows it in that phase
+var PICK=null;   // a clicked leaf, while the step shown for it belongs to its consumer
+function goPhase(ph){
+ var st=G.steps[K],n=(PICK&&stepFor(PICK,st.ph)===K)?PICK:st.node,k=n?stepFor(n,ph):-1;
+ go(k>=0?k:G.phase0[ph],true);
+}
+// clicking a node zooms into it: its backward step while in the backward phase, else its forward step
+function pickNode(n){
+ var bw=G.steps[K].ph===3,k=stepFor(n,bw?3:2);
+ if(k<0)k=stepFor(n,bw?2:3);
+ if(k>=0){go(k,true);PICK=n;}
+}
 function go(k,anim){
  if(!G)return;
  k=Math.max(0,Math.min(G.steps.length-1,k));
@@ -953,7 +975,12 @@ function fitArea(){var t=$('src');t.rows=Math.max(1,t.value.split('\n').length);
  var deb=null;
  $('src').addEventListener('input',function(){fitArea();clearTimeout(deb);deb=setTimeout(function(){rebuild();},450);});
  $('scrub').addEventListener('input',function(){stopPlay();go(+$('scrub').value);});
- [].forEach.call($('phases').children,function(b){b.addEventListener('click',function(){stopPlay();go(G.phase0[+b.getAttribute('data-p')],true);});});
+ [].forEach.call($('phases').children,function(b){b.addEventListener('click',function(){stopPlay();goPhase(+b.getAttribute('data-p'));});});
+ $('graph').addEventListener('click',function(e){
+  var g=e.target.closest&&e.target.closest('g[data-id]');if(!g||!G)return;
+  var id=+g.getAttribute('data-id'),n=G.nodes.filter(function(m){return m.id===id;})[0];
+  if(n){stopPlay();pickNode(n);}
+ });
  document.addEventListener('keydown',function(e){
   var t=e.target.tagName;if(t==='TEXTAREA'||t==='INPUT'||t==='SELECT')return;
   if(e.key==='ArrowRight'){e.preventDefault();stopPlay();stepF();}
