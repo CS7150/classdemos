@@ -45,7 +45,16 @@ code,pre,textarea,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,m
 #zoom .zn{font-size:23px;fill:var(--val);font-style:italic}
 #zoom .zval{font-size:23px;fill:var(--val)}
 #zoom .zgr{fill:var(--grad);font-weight:500}
-#zoom .bandt{font-size:19px;fill:#fff}
+#zoom .bandt{font-size:15px;fill:#fff}
+#zoom .zedge.efwd{stroke:var(--val);stroke-width:4}
+#zoom .zedge.ebwd{stroke:var(--grad);stroke-width:4}
+#zoom .znd{fill:var(--surface);stroke:var(--text-secondary);stroke-width:2.6}
+#zoom .znd.leaf{fill:var(--surface-1)}
+#zoom .znd.const{fill:var(--bg);stroke:var(--border-strong);stroke-dasharray:6 6}
+#zoom .zv{font-size:18px;fill:var(--val);font-weight:500}
+#zoom .zhit{fill:none;stroke:transparent;stroke-width:22;pointer-events:stroke;cursor:pointer}
+#zoom g[data-id]{cursor:pointer}
+.zcam{fill:var(--cur);fill-opacity:.05;stroke:var(--cur);stroke-width:1.4;stroke-dasharray:5 4;opacity:.8;pointer-events:none}
 #zwrap .hd,#panel .hd{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-muted);margin:0 0 2px}
 #panel{padding:10px 14px 12px;font-size:15.5px;line-height:1.6;color:var(--text-secondary)}
 #panel h3{font-size:17px;margin:2px 0 6px;color:var(--text-primary);font-weight:600}
@@ -138,7 +147,7 @@ svg text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,
 </div>
 
 <div id="grid">
- <div class="card0" id="zwrap"><div class="hd" id="zhd">Zoom in to one node</div><svg id="zoom" viewBox="0 0 760 484" role="img" aria-label="one node, zoomed in"></svg></div>
+ <div class="card0" id="zwrap"><div class="hd" id="zhd">Zoom in to one node</div><svg id="zoom" viewBox="0 0 760 520" role="img" aria-label="one node, zoomed in"></svg></div>
  <div class="card0" id="panel"><div class="hd">What happens at this step</div><pre id="codev"></pre><div id="expl"></div></div>
 </div>
 
@@ -157,7 +166,7 @@ svg text{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,
  <div><b>What you can type.</b> <code>+ - * / **</code>, parentheses, <code>sin cos exp log tanh sigmoid relu sqrt abs pow square</code>,
   and <code>add sub mul div neg</code>, each as a function (<code>sin(x)</code>, <code>torch.pow(x, y)</code>) or a method (<code>x.sin()</code>, <code>x.pow(y)</code>), and several lines of
   assignments; the last one is the loss. Every unassigned name is a leaf tensor with <code>requires_grad=True</code>.
-  Keys: &rarr; step, &larr; back, space play.</div>
+  Keys: &rarr; step, &larr; back, space play. Click a node to zoom into it, or an edge in the zoom to follow it; the dashed box on the graph shows where the zoom is looking.</div>
 </div>
 
 <script>
@@ -371,7 +380,7 @@ function evalAll(G,vals){
 function localOf(n,i,v){var a=v[n.inputs[0].id],b=n.inputs[1]?v[n.inputs[1].id]:undefined;return OPS[n.op].loc[i](a,b,v[n.id]);}
 
 /* ================= layout ================= */
-var R=22,GX=185,GY=96;
+var R=22,GX=210,GY=96;
 function hw(n){return n.kind==='op'?R:n.kind==='leaf'?Math.max(20,8+4.6*n.name.length):Math.max(14,6+4.4*n.label.length);}
 function layout(G){
  var rank={};
@@ -404,25 +413,59 @@ function layout(G){
  G.nodes.forEach(function(n){var P=G.pos[n.id];X0=Math.min(X0,P.x-hw(n));X1=Math.max(X1,P.x+hw(n));Y1=Math.max(Y1,P.y);});
  G.vb=[X0-28,-86,(X1-X0)+28+96,Y1+86+52];
 }
+// Edges are angular: a short flat run out of the source, a straight leg, and a longer flat run into the
+// target, the way the lecture slides draw them. The zoom draws these very shapes, only bigger, and writes
+// a node's value and gradient on the flat runs.
+var PA=35*Math.PI/180,FL0=30,FL1=70;
 function port(n,i){
  var P=G.pos[n.id];if(n.inputs.length<2)return [P.x-R,P.y];
  var off=i?11:-11;return [P.x-Math.sqrt(R*R-off*off),P.y+off];
 }
-function edgePts(c,n,i){
- var A=G.pos[c.id],x0=A.x+hw(c),y0=A.y,q=port(n,i),x1=q[0],y1=q[1],dx=Math.max(30,(x1-x0)*0.5);
- if(x1<x0+10){dx=40;}
- // a long edge that would run through a node in a column it skips arches around it
- var off=0;
- if(x1-x0>GX*1.4)G.nodes.forEach(function(m){
-  var M=G.pos[m.id];if(m===c||m===n||M.x<=x0+R||M.x>=x1-R)return;
-  var t=(M.x-x0)/(x1-x0),yl=y0+(y1-y0)*(3*t*t-2*t*t*t);
-  if(Math.abs(yl-M.y)<R+16&&!off)off=(yl>=M.y?1:-1)*GY*0.62;
- });
- return [x0,y0,x0+dx,y0+off,x1-dx,y1+off,x1,y1];
+function route(x0,y0,q,lane){
+ var t=Math.tan(PA),av=q[0]-x0,a=x0+Math.min(FL0,av*0.2),b=q[0]-Math.min(FL1,av*0.4),pts=[[x0,y0],[a,y0]];
+ if(lane===undefined){
+  if(Math.abs(q[1]-y0)<0.5)return [[x0,y0],q];
+  pts.push([a+Math.min(Math.abs(q[1]-y0)/t,b-a),q[1]]);
+ }else{
+  var room=(b-a)/3;
+  pts.push([a+Math.min(Math.abs(lane-y0)/t,room),lane],[b-Math.min(Math.abs(q[1]-lane)/t,room),lane],[b,q[1]]);
+ }
+ pts.push(q);
+ return pts;
 }
-function pathD(p){return 'M'+p[0].toFixed(1)+' '+p[1].toFixed(1)+'C'+p[2].toFixed(1)+' '+p[3].toFixed(1)+' '+p[4].toFixed(1)+' '+p[5].toFixed(1)+' '+p[6].toFixed(1)+' '+p[7].toFixed(1);}
-function atX(p,x){var lo=0,hi=1;for(var q=0;q<24;q++){var tm=(lo+hi)/2;if(bez(p,tm)[0]<x)lo=tm;else hi=tm;}return bez(p,lo);}
-function bez(p,t){var u=1-t;return [u*u*u*p[0]+3*u*u*t*p[2]+3*u*t*t*p[4]+t*t*t*p[6],u*u*u*p[1]+3*u*u*t*p[3]+3*u*t*t*p[5]+t*t*t*p[7]];}
+function segDist(M,a,b){
+ var dx=b[0]-a[0],dy=b[1]-a[1],L=dx*dx+dy*dy,t=L?Math.max(0,Math.min(1,((M.x-a[0])*dx+(M.y-a[1])*dy)/L)):0;
+ return Math.hypot(a[0]+t*dx-M.x,a[1]+t*dy-M.y);
+}
+function blocked(pts,c,n){
+ return G.nodes.some(function(m){
+  if(m===c||m===n)return false;
+  var M=G.pos[m.id],r=(m.kind==='op'?R:hw(m))+10;
+  for(var i=1;i<pts.length;i++)if(segDist(M,pts[i-1],pts[i])<r)return true;
+  return false;
+ });
+}
+// a list of [x,y] corners; an edge that would cross a node takes a lane half a row above or below
+function edgePts(c,n,i){
+ var A=G.pos[c.id],x0=A.x+hw(c),q=port(n,i),pts=route(x0,A.y,q);
+ if(!blocked(pts,c,n)){return pts;}
+ var sg=q[1]>=A.y?1:-1;
+ for(var k=0;k<4;k++){
+  var lane=A.y+(k%2?-sg:sg)*GY*(k<2?0.5:1),alt=route(x0,A.y,q,lane);
+  if(!blocked(alt,c,n))return alt;
+ }
+ return pts;
+}
+function pathD(p){return 'M'+p.map(function(q){return q[0].toFixed(1)+' '+q[1].toFixed(1);}).join('L');}
+function endX(p){return p[p.length-1][0];}
+// the point on an edge at a given x
+function atX(p,x){
+ for(var i=1;i<p.length;i++){
+  var a=p[i-1],b=p[i];
+  if(x<=b[0]||i===p.length-1){var t=b[0]===a[0]?1:Math.max(0,Math.min(1,(x-a[0])/(b[0]-a[0])));return [a[0]+t*(b[0]-a[0]),a[1]+t*(b[1]-a[1])];}
+ }
+ return p[0];
+}
 
 /* ================= steps ================= */
 function buildSteps(G){
@@ -534,8 +577,8 @@ function renderGraph(S,st){
    var key=n.id+'_'+i;
    if(S.con[key]!==undefined&&c.parents.length>1){   // a single user's share is just the total, already on the node
     // near the parent: its two inputs arrive at separate ports, the top one labelled above, the bottom one below
-    var m=atX(p,p[6]-44),nw=(n===cur&&st.kind==='bwd'&&an),below=true;
-    if(n.inputs.length===2){var o=atX(edgePts(n.inputs[1-i],n,1-i),p[6]-44);below=m[1]>=o[1];}
+    var m=atX(p,endX(p)-44),nw=(n===cur&&st.kind==='bwd'&&an),below=true;
+    if(n.inputs.length===2){var o=atX(edgePts(n.inputs[1-i],n,1-i),endX(p)-44);below=m[1]>=o[1];}
     lab+=T(m[0],m[1]+(below?15:-6),fmt(S.con[key]),'lc h'+(nw?' pop late':''),'middle');
    }
   });
@@ -586,7 +629,7 @@ function renderGraph(S,st){
  var svg=$('graph');
  svg.setAttribute('viewBox',G.vb.join(' '));
  svg.style.maxWidth=Math.round(G.vb[2]*1.3)+'px';svg.style.margin='0 auto';
- svg.innerHTML=defs+s+nd+lab+co+dots;
+ svg.innerHTML=defs+s+nd+lab+co+dots+'<rect id="zcam" class="zcam" rx="6"/>';
 }
 
 /* ================= zoom ================= */
@@ -629,122 +672,186 @@ function row(x,y,parts,cls,size,anchor){
  return s;
 }
 function band(fwd,on){
- var d=fwd?'M170 10H690V0L754 26L690 52V42H170Z':'M752 438H234V428L170 454L234 480V470H752Z';
- return '<path d="'+d+'" fill="'+(fwd?'#4472C4':'#ED7D31')+'" opacity="'+(on?1:0.22)+'"/>'+
-  T(fwd?440:490,fwd?33:461,fwd?'Forward pass (activations)':'Backward pass (gradients)','bandt','middle');
+ var d=fwd?'M150 9H690V2L748 20L690 38V31H150Z':'M752 489H212V482L154 500L212 518V511H752Z';
+ return '<g pointer-events="none"><path d="'+d+'" fill="'+(fwd?'#4472C4':'#ED7D31')+'" opacity="'+(on?1:0.22)+'"/>'+
+  T(fwd?420:482,fwd?25:505,fwd?'Forward pass (activations)':'Backward pass (gradients)','bandt','middle')+'</g>';
 }
-// The node zoomed in, as in the lecture slides: a big circle holding the operation, its formula in local
-// names and its local gradients; values ride above the edges, gradients below them.
-function zoomNode(S,st){
- var n=st.node,cx=430,cy=228,Rz=124,k=n.inputs.length,s='',an=ANIM;
- var defs='<defs>'+['zr:var(--zs)','zv:var(--val)','zg:var(--grad)','zc:var(--cur)'].map(function(q){var a=q.split(':');
-  return '<marker id="'+a[0]+'" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:'+a[1]+'"/></marker>';}).join('')+'</defs>';
- var build=st.kind==='make',topo=st.kind==='topo',fwd=st.kind==='fwd',bwd=st.kind==='bwd',seed=st.kind==='seed',sub=bwd?st.sub:-1;
- var named=!!S.ord[n.id],dots='';
- function inN(i){return named?xH(n,i):(n.inputs[i].kind==='const'?n.inputs[i].label:nmH(n.inputs[i]));}
- var ZN=named?yH(n):nmH(n),L0=outH();
- s+=band(true,build||topo||fwd)+band(false,bwd||seed);
- // where the inputs come in: a flat run, then a bend into the circle
- function port(a){a=a*Math.PI/180;return [cx+Rz*Math.cos(a),cy-Rz*Math.sin(a)];}
- var IN=k===1?[{hy:100,p:port(145)}]:[{hy:100,p:port(145)},{hy:312,p:port(212)}];
- n.inputs.forEach(function(c,i){
-  var hy=IN[i].hy,P=IN[i].p,d='M0 '+hy+'H250L'+P[0].toFixed(1)+' '+P[1].toFixed(1);
-  // the node the input comes from, cut off at the panel's edge
-  if(c.kind==='op')s+='<circle cx="-40" cy="'+hy+'" r="62" class="bigc"/>';
-  else if(c.kind==='leaf')s+='<rect x="-60" y="'+(hy-30)+'" width="84" height="60" rx="10" class="bigc"/>';
-  if(build)s+='<path class="zedge eptr'+(an?' draw':'')+'" d="M'+P[0].toFixed(1)+' '+P[1].toFixed(1)+'L250 '+hy+'H30" pathLength="1" style="stroke-dasharray:'+(an?'1 1':'none')+'" marker-end="url(#zc)"/>';
-  else{
-   s+='<path class="zedge'+(c.kind==='const'?' cedge':'')+'" d="'+d+'" marker-end="url(#zr)"/>';
-   if(fwd&&an)dots+=motion(d,'dotv',false);
-   if(bwd&&sub===2&&c.rg&&an)dots+=motion(d,'dotg',true);
-  }
-  // the input's local name at the arrow tip, and where it comes from
-  var tipx=i===0?P[0]-58:P[0]-52,tipy=i===0?P[1]-40:P[1]-22;
-  s+=T(tipx,tipy,svgify(inN(i)),'zn','start');
-  s+=T(34,hy+(i===0?-44:-44),c.kind==='const'?'a constant':'from '+(c.kind==='leaf'?'leaf ':'')+esc(c.name),'cap2 mut','start');
-  if(topo&&c.kind!=='const')s+=T(34,hy-12,'number '+c.ord,'ts mut','start');
-  if(!build&&!topo)s+=T(34,hy-12,fmt(V[c.id]),'zval'+(fwd&&an?' pop':''),'start');
-  if(bwd&&sub===2){
-   var cl=an?' pop late':'';
-   if(!c.rg){s+=T(34,hy+34,'constant: no gradient','ts mut'+cl,'start');return;}
-   var X=xH(n,i),Y=yH(n),loc=localOf(n,i,V);
-   s+='<g class="'+cl+'"><path d="M200 '+(hy+12)+'H44" class="garr" marker-end="url(#zg)"/>'+
-     row(30,hy+46,[['∂'+L0,'∂'+X],'=',['∂'+Y,'∂'+X],['∂'+L0,'∂'+Y]],'zgr',20)+
-     row(30,hy+100,[fmt(S.con[n.id+'_'+i])+' = '+pn(loc)+' · '+pn(S.grad[n.id])],'zgr',19)+'</g>';
-  }
- });
- if(bwd&&sub===2)s+=T(34,IN[0].hy+128,'downstream gradient'+(k>1?'s':''),'cap2 zgr'+(an?' pop late':''),'start');
- // the circle and what is written inside it
- s+='<circle class="ring" cx="'+cx+'" cy="'+cy+'" r="'+(Rz+7)+'"/><circle class="bigc big'+(build&&an?' pop':'')+'" cx="'+cx+'" cy="'+cy+'" r="'+Rz+'"/>';
- var sym=glyph(n.op);
- s+=T(cx,cy-74,sym,'op','middle',' style="font-size:'+(sym.length>2?24:34)+'px"');
- s+=T(cx,cy-34,svgify(ZN+' = '+form(n,inN(0),k>1?inN(1):'')),'zval','middle');
- if(build){s+=T(cx,cy+8,'result: None','ts mut','middle')+T(cx,cy+34,'grad: None','ts mut','middle');}
- else if(topo){s+=T(cx,cy+10,'number '+n.ord,'ts'+(an?' pop':''),'middle',' style="font-size:20px"')+
-   T(cx,cy+38,'its output is now '+svgify(yH(n)),'ts'+(an?' pop':''),'middle');}
- else if(fwd||(!bwd&&!seed))s+=T(cx,cy+2,svgify('= '+fwdSym(n,true)),'zval'+(fwd&&an?' pop':''),'middle',' style="font-size:17px"');
- if(bwd&&sub>=1){
-  var li=0,ys=n.inputs.filter(function(c){return c.rg;}).length>1?[cy+22,cy+86]:[cy+38];
-  s+=T(cx,cy-6,'“local” gradient'+(ys.length>1?'s':''),'cap2 zgr'+(sub===1&&an?' pop':''),'middle');
+// The zoom is the same graph, with the same layout and the same edges, drawn ZS times bigger. A camera pans
+// over it to the node in focus, and that node carries the full working: values above its edges, gradients
+// below them, its formula and local gradients inside the circle.
+var ZS=4.4,ZW=760,ZH=520,CAM=null,CAMSC=1,camRaf=0;
+function zP(n){var P=G.pos[n.id];return [P.x*ZS,P.y*ZS];}
+function zEdge(c,n,i){return edgePts(c,n,i).map(function(q){return [q[0]*ZS,q[1]*ZS];});}
+function focusNode(){var st=G.steps[K];return (PICK&&stepFor(PICK,st.ph)===K)?PICK:st.node;}
+function zFlags(st){return {build:st.kind==='make',topo:st.kind==='topo',fwd:st.kind==='fwd',bwd:st.kind==='bwd',seed:st.kind==='seed',sub:st.kind==='bwd'?st.sub:-1};}
+// what is written inside the focused operation's circle
+function zInside(S,st,n){
+ var P=zP(n),cx=P[0],cy=P[1],Rz=R*ZS,k=n.inputs.length,f=zFlags(st),an=ANIM,s='';
+ var named=!!S.ord[n.id];
+ function inN(i){var c=n.inputs[i];return c.kind==='const'?c.label:named?xH(n,i):nmH(c);}
+ var ZN=named?yH(n):nmH(n),loc=f.bwd&&f.sub>=1,sym=glyph(n.op);
+ s+='<circle class="ring" cx="'+cx+'" cy="'+cy+'" r="'+(Rz+8)+'"/><circle class="bigc" cx="'+cx+'" cy="'+cy+'" r="'+Rz+'"/>';
+ s+=T(cx,cy-(loc?64:52),sym,'op','middle',' style="font-size:'+(sym.length>2?20:30)+'px"');
+ s+=T(cx,cy-(loc?36:17),svgify(ZN+' = '+form(n,inN(0),k>1?inN(1):'')),'zval','middle',' style="font-size:19px"');
+ if(f.build)s+=T(cx,cy+14,'result: None','ts mut','middle')+T(cx,cy+38,'grad: None','ts mut','middle');
+ else if(f.topo)s+=T(cx,cy+16,'number '+n.ord,'ts'+(an?' pop':''),'middle',' style="font-size:19px"');
+ else if(!loc&&S.val[n.id]!==undefined)s+=T(cx,cy+14,svgify('= '+fwdSym(n,true)),'zval'+(f.fwd&&an?' pop':''),'middle',' style="font-size:16px"');
+ if(loc){
+  var rg=n.inputs.filter(function(c){return c.rg;}).length,ys=rg>1?[cy+20,cy+63]:[cy+30],li=0;
+  s+=T(cx,cy-12,'“local” gradient'+(rg>1?'s':''),'cap2 zgr'+(f.sub===1&&an?' pop':''),'middle');
   n.inputs.forEach(function(c,i){
    if(!c.rg)return;
-   var X=xH(n,i),Y=yH(n),ls=localSymN(n,i,xH(n,0),k>1?xH(n,1):'',Y),lv=fmt(localOf(n,i,V));
-   var parts=[['∂'+Y,'∂'+X],'= '+ls+(ls===lv?'':' = '+lv)],yy=ys[li++],g='';
-   if(tw(ls+lv,17)>150&&ls!==lv){g=row(cx,yy-8,[['∂'+Y,'∂'+X],'= '+ls],'zgr',17,'middle')+row(cx,yy+28,['= '+lv],'zgr',17,'middle');}
-   else g=row(cx,yy,parts,'zgr',17,'middle');
-   s+='<g class="'+(sub===1&&an?'pop':'')+'">'+g+'</g>';
+   var X=xH(n,i),Y=yH(n),ls=localSymN(n,i,xH(n,0),k>1?xH(n,1):'',Y),lv=fmt(localOf(n,i,V)),yy=ys[li++],g;
+   if(rg===1&&ls!==lv&&tw(ls+lv,15)>120)g=row(cx,yy-12,[['∂'+Y,'∂'+X],'= '+ls],'zgr',15,'middle')+row(cx,yy+26,['= '+lv],'zgr',15,'middle');
+   else g=row(cx,yy,[['∂'+Y,'∂'+X],'= '+ls+(ls===lv?'':' = '+lv)],'zgr',15,'middle');
+   s+='<g class="'+(f.sub===1&&an?'pop':'')+'">'+g+'</g>';
   });
- }
- if(!(bwd&&sub>=1))s+=T(cx,cy+Rz-16,OPS[n.op].cls,'cap2 mut','middle');
- // outputs: one edge per use, as in the slides; each bends into its own run carrying the user's input name
- if(!build&&!topo){
-  var ox=cx+Rz,outs=n===G.out?[null]:n.parents,m=outs.length,ex=744,gap=m>2?100:80;
-  var eys=m===1?[cy]:outs.map(function(p,j){return cy+(j-(m-1)/2)*(m>2?110:190);});
-  outs.forEach(function(pp,j){
-   var ey=eys[j],d=m===1?'M'+ox+' '+cy+'H'+ex:'M'+ox+' '+cy+'L620 '+ey+'H'+ex;
-   s+='<path class="zedge" d="'+d+'" marker-end="url(#zr)"/>';
-   var tip=pp?(S.ord[pp.n.id]?svgify(xH(pp.n,pp.i)):'')+'<tspan class="mut" font-size="13" font-style="normal"> → '+esc(pp.n.name)+'</tspan>':L0+'<tspan class="mut" font-size="13" font-style="normal"> the loss</tspan>';
-   s+=T(ex-6,m===1?ey-44:ey-12,tip,'zn','end');
-   if(pp&&m>1&&(bwd||seed)&&S.con[pp.n.id+'_'+pp.i]!==undefined)
-    s+='<g class="'+(an&&sub===0?'pop':'')+'">'+row(ex,ey+30,[['∂'+L0,'∂'+xH(pp.n,pp.i)],'= '+fmt(S.con[pp.n.id+'_'+pp.i])],'zgr',16,'end')+'</g>';
-  });
-  var hasv=S.val[n.id]!==undefined,vx=m===1?ox+14:ex,va=m===1?'start':'end',vy=m===1?cy-12:cy-18;
-  s+=T(vx,vy,svgify(yH(n))+(hasv?'<tspan class="zval" font-style="normal"'+(fwd&&an?'':'')+'> = '+fmt(V[n.id])+'</tspan>':''),'zn'+(fwd&&an?' pop late':''),va);
-  if(bwd||seed){
-   var upn=an&&(sub===0||seed);
-   s+='<g class="'+(upn?'pop':'')+'">';
-   if(m===1)s+=row(ox+6,cy+46,[['∂'+L0,'∂'+yH(n)],'= '+fmt(S.grad[n.id])],'zgr',19)+T(ox+14,cy+96,'upstream gradient','cap2 zgr','start')+
-     '<path d="M720 '+(cy+14)+'H'+(ox+20)+'" class="garr" marker-end="url(#zg)"/>';
-   else s+=row(ex,cy+30,[['∂'+L0,'∂'+yH(n)],'= '+fmt(S.grad[n.id])],'zgr',19,'end');
-   s+='</g>';
-  }
- }else s+='<path class="zedge" d="M'+(cx+Rz)+' '+cy+'L700 '+cy+'" style="opacity:.35" marker-end="url(#zr)"/>';
- return defs+s+dots;
-}
-function badge(x,y,k,pop){return '<g'+(pop?' class="pop"':'')+'><circle class="badge" cx="'+x+'" cy="'+y+'" r="12"/>'+T(x,y,k,'badgt" style="font-size:14px')+'</g>';}
-function zoomLeaf(S,st){
- var n=st.node,x=300,y=150,w=Math.max(40,14+8*n.name.length),s='',an=ANIM,L=[];
- s+='<rect class="ring" x="'+(x-w-6)+'" y="'+(y-36)+'" width="'+(2*w+12)+'" height="72" rx="14"/>';
- s+='<rect class="nd leaf cur'+(st.kind==='make'&&an?' pop':'')+'" x="'+(x-w)+'" y="'+(y-30)+'" width="'+2*w+'" height="60" rx="10"/>'+
-    T(x,y,'<tspan font-style="italic">'+esc(n.name)+'</tspan>','op" style="font-size:28px');
- if(st.kind==='make')L=[['leaf tensor, no inputs','ts'],['value = '+fmt(V[n.id]),'lv'],['requires_grad = True','ts mut'],['grad = None','ts mut']];
- else if(st.kind==='topo'){L=[['no inputs to wait for,','ts'],['so it gets number '+n.ord,'ts']];s+=badge(x-w-2,y+28,n.ord,an);}
- else L=[['a leaf: its result','ts'],['is just its value','ts'],['result = '+fmt(V[n.id]),'lv']];
- L.forEach(function(l,i){s+=T(x+w+36,y-(L.length-1)*13+i*26+5,l[0],l[1]+(an&&(l[1]==='lv'||st.kind==='topo')?' pop':''),'start');});
+ }else s+=T(cx,cy+Rz-20,OPS[n.op].cls,'cap2 mut','middle');
  return s;
 }
+function zLeafIn(S,st,n){
+ var P=zP(n),x=P[0],y=P[1],w=hw(n)*ZS,h=17*ZS,f=zFlags(st),an=ANIM,s='',L;
+ s+='<rect class="ring" x="'+(x-w-8)+'" y="'+(y-h-8)+'" width="'+(2*w+16)+'" height="'+(2*h+16)+'" rx="44"/>'+
+    '<rect class="bigc" x="'+(x-w)+'" y="'+(y-h)+'" width="'+2*w+'" height="'+2*h+'" rx="35"/>';
+ s+=T(x,y-26,'<tspan font-style="italic">'+esc(n.name)+'</tspan>','op','middle',' style="font-size:34px"');
+ if(f.build)L=['leaf tensor','requires_grad=True'];
+ else if(f.topo)L=['no inputs:','number '+n.ord];
+ else if(f.fwd)L=['result is','its value'];
+ else L=['.grad adds up','the shares it gets'];
+ L.forEach(function(l,j){s+=T(x,y+14+j*22,l,'ts'+((f.topo||f.fwd)&&an?' pop':''),'middle',' style="font-size:14px"');});
+ return s;
+}
+// the focused node's inputs: each edge's value above it, and in the chain-rule step its downstream gradient
+function zInputs(S,st,n){
+ var k=n.inputs.length,f=zFlags(st),an=ANIM,L0=outH(),named=!!S.ord[n.id],s='';
+ var M=n.inputs.map(function(c,i){var p=zEdge(c,n,i);return atX(p,endX(p)-170);});
+ n.inputs.forEach(function(c,i){
+  var m=M[i],above=k===1||m[1]<M[1-i][1]||(m[1]===M[1-i][1]&&i===0);
+  var nm=c.kind==='const'?c.label:named?xH(n,i):nmH(c),val=S.val[c.id];
+  var txt=c.kind==='const'?c.label+' <tspan class="mut" font-size="13">constant</tspan>':svgify(nm)+(val!==undefined?' = '+fmt(val):'');
+  var yv=above?m[1]-14:m[1]+28;
+  s+=T(m[0],yv,txt,'zv h'+(f.fwd&&an?' pop':''),'middle');
+  if(f.bwd&&f.sub===2){
+   var cl=an?'pop late':'',up2=above&&k>1;
+   if(!c.rg){s+=T(m[0],up2?yv-28:(k===1?m[1]+34:yv+28),'no gradient','cap2 mut h','middle');return;}
+   var X=xH(n,i),Y=yH(n),yf,yn;
+   if(up2){yn=yv-32;yf=yn-40;}else{yf=k===1?m[1]+34:yv+30;yn=yf+44;}
+   s+='<g class="'+cl+'">'+row(m[0],yf,[['∂'+L0,'∂'+X],'=',['∂'+Y,'∂'+X],['∂'+L0,'∂'+Y]],'zgr h',17,'middle')+
+      row(m[0],yn,[fmt(S.con[n.id+'_'+i])+' = '+pn(localOf(n,i,V))+' · '+pn(S.grad[n.id])],'zgr h',17,'middle')+'</g>';
+  }
+ });
+ return s;
+}
+// the focused node's output: its value above the flat run out, its upstream gradient below, and where it
+// feeds several nodes, the share each one sends back, written beside that edge's leg
+function zOutputs(S,st,n){
+ var P=zP(n),x0=P[0]+hw(n)*ZS,y0=P[1],f=zFlags(st),an=ANIM,L0=outH(),s='',E=[];
+ if(n===G.out&&!f.build){
+  s+='<path class="zedge" d="M'+x0+' '+y0+'H'+(x0+240)+'" style="stroke-dasharray:8 7" marker-end="url(#zr)"/>'+
+     T(x0+256,y0,L0,'zn','start',' dominant-baseline="central" style="font-size:30px;font-style:normal"');
+  E.push({});
+ }
+ n.parents.forEach(function(pp){if(S.made[pp.n.id])E.push({p:zEdge(n,pp.n,pp.i),pp:pp});});
+ if(!E.length)return s;
+ var Y=S.ord[n.id]?yH(n):nmH(n),hasv=S.val[n.id]!==undefined;
+ s+=T(x0+14,y0-14,svgify(Y)+(hasv?' = '+fmt(V[n.id]):''),'zv h'+(f.fwd&&n===st.node&&an?' pop late':''),'start');
+ if(S.grad[n.id]!==undefined){
+  var pop=an&&n===st.node&&(f.seed||f.sub===0);
+  s+='<g class="'+(pop?'pop':'')+'">'+row(x0+8,y0+40,[['∂'+L0,'∂'+Y],'= '+fmt(S.grad[n.id])],'zgr h',18)+'</g>';
+  if(E.length>1)E.forEach(function(e){
+   if(!e.pp)return;
+   var key=e.pp.n.id+'_'+e.pp.i;if(S.con[key]===undefined)return;
+   var parts=[['∂'+L0,'∂'+xH(e.pp.n,e.pp.i)],'= '+fmt(S.con[key])],g;
+   if(e.p.length>3){var a=e.p[1],b=e.p[2];g=row((a[0]+b[0])/2-14,(a[1]+b[1])/2,parts,'zgr h',15,'end');}
+   else g=row(x0+170,y0+40,parts,'zgr h',15);
+   s+='<g class="'+(pop?'pop':'')+'">'+g+'</g>';
+  });
+ }
+ return s;
+}
+function zWorld(S,st){
+ var cur=st.node,an=ANIM,F=focusNode(),s='',hit='',nd='',lab='',dots='';
+ G.ops.forEach(function(n){
+  if(!S.made[n.id])return;
+  n.inputs.forEach(function(c,i){
+   var p=zEdge(c,n,i),d=pathD(p),cls='zedge',mk='zr';
+   if(c.kind==='const')cls+=' cedge';
+   if(n===cur&&st.kind==='fwd'){cls+=' efwd';mk='zv';if(an)dots+=motion(d,'dotv',false).replace('r="5.5"','r="8"');}
+   else if(n===cur&&st.kind==='bwd'&&st.sub===2&&c.rg){cls+=' ebwd';mk='zg';if(an)dots+=motion(d,'dotg',true).replace('r="5.5"','r="8"');}
+   else if(n===cur&&st.kind==='make'){cls+=' eptr';mk='zc';}
+   var drw=n===cur&&st.kind==='make'&&an&&c.kind!=='const';
+   s+='<path class="'+cls+(drw?' draw':'')+'" d="'+d+'"'+(drw?' pathLength="1" style="stroke-dasharray:1 1"':'')+' marker-end="url(#'+mk+')"/>';
+   hit+='<path class="zhit" d="'+d+'" data-a="'+c.id+'" data-b="'+n.id+'"><title>'+esc(nmC(c))+' → '+esc(n.name)+'</title></path>';
+  });
+ });
+ G.nodes.forEach(function(n){
+  if(!S.made[n.id])return;
+  var P=zP(n),x=P[0],y=P[1],w=hw(n)*ZS,isc=n===cur;
+  var born=an&&st.kind==='make'&&(n===cur||(cur.kind==='op'&&cur.inputs.indexOf(n)>=0&&n.kind==='const'));
+  var g='<g'+(born?' class="pop"':'')+(n.kind!=='const'?' data-id="'+n.id+'"':'')+'>';
+  if(n.kind==='op'){
+   if(isc)g+=zInside(S,st,n);
+   else{var sym=glyph(n.op);g+='<circle class="znd" cx="'+x+'" cy="'+y+'" r="'+R*ZS+'"/>'+T(x,y,sym,'op','middle',' style="font-size:'+(sym.length>2?24:36)+'px"');}
+   g+=T(x,y-R*ZS-16,esc(n.name),'nm','middle',' style="font-size:22px"');
+  }else if(n.kind==='leaf'){
+   if(isc)g+=zLeafIn(S,st,n);
+   else g+='<rect class="znd leaf" x="'+(x-w)+'" y="'+(y-17*ZS)+'" width="'+2*w+'" height="'+34*ZS+'" rx="35"/>'+T(x,y,'<tspan font-style="italic">'+esc(n.name)+'</tspan>','op','middle',' style="font-size:36px"');
+  }else{
+   g+='<rect class="znd const" x="'+(x-w)+'" y="'+(y-12*ZS)+'" width="'+2*w+'" height="'+24*ZS+'" rx="26"/>'+T(x,y,n.label,'op mut','middle',' style="font-size:30px"');
+  }
+  g+='</g>';
+  // a node out of focus keeps the plain numbers the graph shows
+  if(!isc&&n!==F&&n.kind!=='const'){
+   if(S.val[n.id]!==undefined)g+=T(x+w+10,y-14,fmt(S.val[n.id]),'lv h','start',' style="font-size:20px"');
+   if(S.grad[n.id]!==undefined)g+=T(x+w+10,y+32,fmt(S.grad[n.id]),'lg2 h','start',' style="font-size:20px"');
+  }
+  if(S.ord[n.id]){
+   var by=y+(n.kind==='op'?R*ZS:17*ZS)+24,yl=G.YL+sub(n.ord),bw=14+10*yl.length;
+   g+='<g'+(an&&st.kind==='topo'&&n===cur?' class="pop"':'')+'><rect class="badge" x="'+(x-bw/2)+'" y="'+(by-14)+'" width="'+bw+'" height="28" rx="14"/>'+
+      T(x,by,'<tspan font-style="italic">'+G.YL+'</tspan>'+sub(n.ord),'badgt','middle',' style="font-size:16px"')+'</g>';
+  }
+  nd+=g;
+ });
+ if(cur.kind==='op')lab+=zInputs(S,st,cur);
+ lab+=zOutputs(S,st,cur);
+ if(F&&F!==cur)lab+=zOutputs(S,st,F);
+ return s+hit+nd+lab+dots;
+}
+// the camera: centre the focused node, and on a long move pull back a little in the middle so the path shows
+function setView(){
+ var w=$('zworld'),r=$('zcam'),vw=ZW*CAMSC,vh=ZH*CAMSC;
+ if(!CAM)return;
+ if(w)w.setAttribute('viewBox',(CAM[0]-vw/2).toFixed(1)+' '+(CAM[1]-vh/2).toFixed(1)+' '+vw.toFixed(1)+' '+vh.toFixed(1));
+ if(r){r.setAttribute('x',((CAM[0]-vw/2)/ZS).toFixed(1));r.setAttribute('y',((CAM[1]-vh/2)/ZS).toFixed(1));
+  r.setAttribute('width',(vw/ZS).toFixed(1));r.setAttribute('height',(vh/ZS).toFixed(1));}
+}
+function panTo(t){
+ cancelAnimationFrame(camRaf);
+ var still=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+ if(!CAM||still||Math.hypot(t[0]-CAM[0],t[1]-CAM[1])<1){CAM=t;CAMSC=1;setView();return;}
+ var a=CAM.slice(),sc0=CAMSC,dist=Math.hypot(t[0]-a[0],t[1]-a[1]),dur=380+Math.min(520,dist*0.35),bump=Math.min(1.4,dist/700),t0=performance.now();
+ (function f(now){
+  var u=Math.min(1,Math.max(0,(now-t0)/dur)),e=u<.5?2*u*u:1-2*(1-u)*(1-u);
+  CAM=[a[0]+(t[0]-a[0])*e,a[1]+(t[1]-a[1])*e];CAMSC=sc0+(1-sc0)*e+bump*Math.sin(Math.PI*u);setView();
+  if(u<1)camRaf=requestAnimationFrame(f);
+ })(t0);
+}
 function renderZoom(S,st){
- var s,z=$('zoom'),hd='Zoom in to one node';
- if(st.node&&st.node.kind==='leaf'){s=zoomLeaf(S,st);hd='Zoom in: leaf '+st.node.name;}
- else if(st.kind==='make'||st.kind==='topo'||st.kind==='fwd'||st.kind==='bwd'){s=zoomNode(S,st);hd='Zoom in: node '+st.node.name+' ('+OPS[st.node.op].cls+')';}
- else if(st.kind==='start')s=T(380,150,'Nothing yet: the graph is empty.','ts mut','middle');
- else if(st.kind==='seed'){s=zoomNode(S,st);hd='Zoom in: node '+st.node.name+' ('+OPS[st.node.op].cls+')';}
- else{
-  s=zoomChips(G.leaves.map(function(l){return {title:'<tspan font-style="italic">'+esc(l.name)+'.grad</tspan>',leaf:1,small:1,
+ var z=$('zoom'),hd='Zoom in to one node',world='',over='',F=null;
+ var defs='<defs>'+['zr:var(--zs)','zv:var(--val)','zg:var(--grad)','zc:var(--cur)'].map(function(q){var a=q.split(':');
+  return '<marker id="'+a[0]+'" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10z" style="fill:'+a[1]+'"/></marker>';}).join('')+'</defs>';
+ if(st.kind==='start')over=T(380,250,'Nothing yet: the graph is empty.','ts mut','middle');
+ else if(st.kind==='done'){
+  over=zoomChips(G.leaves.map(function(l){return {title:'<tspan font-style="italic">'+esc(l.name)+'.grad</tspan>',leaf:1,small:1,
    lines:[['value '+fmt(V[l.id]),'lv sm'],['grad '+fmt(S.grad[l.id]===undefined?0:S.grad[l.id]),'lg2 sm']]};}),'What loss.backward() leaves behind: one gradient per leaf.');
+ }else{
+  world=zWorld(S,st);F=focusNode();
+  hd=F.kind==='leaf'?'Zoom in: leaf '+F.name:'Zoom in: node '+F.name+' ('+OPS[F.op].cls+')';
  }
  $('zhd').textContent=hd;
- z.innerHTML=s;
+ z.innerHTML=defs+'<svg id="zworld" x="0" y="0" width="'+ZW+'" height="'+ZH+'">'+world+'</svg>'+(world?band(true,st.ph<3)+band(false,st.ph===3):'')+over;
+ var r=$('zcam');if(r)r.style.display=F?'':'none';
+ if(F){var P=zP(F);panTo([P[0]+(F.kind==='leaf'?130:0),P[1]]);}
 }
 
 /* ================= explanation panel ================= */
@@ -911,19 +1018,19 @@ function stepFor(n,ph){
 // a phase button keeps the selected node and shows it in that phase
 var PICK=null;   // a clicked leaf, while the step shown for it belongs to its consumer
 function goPhase(ph){
- var st=G.steps[K],n=(PICK&&stepFor(PICK,st.ph)===K)?PICK:st.node,k=n?stepFor(n,ph):-1;
- go(k>=0?k:G.phase0[ph],true);
+ var n=focusNode(),k=n?stepFor(n,ph):-1;
+ if(k>=0)go(k,true,n);else go(G.phase0[ph],true);
 }
 // clicking a node zooms into it: its backward step while in the backward phase, else its forward step
 function pickNode(n){
  var bw=G.steps[K].ph===3,k=stepFor(n,bw?3:2);
  if(k<0)k=stepFor(n,bw?2:3);
- if(k>=0){go(k,true);PICK=n;}
+ if(k>=0)go(k,true,n);
 }
-function go(k,anim){
+function go(k,anim,pick){
  if(!G)return;
  k=Math.max(0,Math.min(G.steps.length-1,k));
- ANIM=!!anim;K=k;render();
+ ANIM=!!anim;K=k;PICK=pick||null;render();
 }
 function stepF(){if(K<G.steps.length-1)go(K+1,true);else stopPlay();}
 function stopPlay(){if(timer){clearInterval(timer);timer=null;}$('playb').textContent='Play';}
@@ -957,7 +1064,7 @@ function rebuild(keepStep){
  }
  $('err').textContent='';
  stopPlay();
- G=g;
+ G=g;PICK=null;CAM=null;
  var pv=PRESETS[+$('preset').value]||{};
  G.leaves.forEach(function(l){
   if(G.decl[l.name]!==undefined)VALS[l.name]=G.decl[l.name];
@@ -976,6 +1083,16 @@ function fitArea(){var t=$('src');t.rows=Math.max(1,t.value.split('\n').length);
  $('src').addEventListener('input',function(){fitArea();clearTimeout(deb);deb=setTimeout(function(){rebuild();},450);});
  $('scrub').addEventListener('input',function(){stopPlay();go(+$('scrub').value);});
  [].forEach.call($('phases').children,function(b){b.addEventListener('click',function(){stopPlay();goPhase(+b.getAttribute('data-p'));});});
+ // in the zoom, a node goes to that node, and an edge to its far end from the node in focus
+ $('zoom').addEventListener('click',function(e){
+  if(!G||!e.target.closest)return;
+  var g=e.target.closest('[data-id]'),h=e.target.closest('[data-a]'),id;
+  if(g)id=+g.getAttribute('data-id');
+  else if(h){var F=focusNode(),a=+h.getAttribute('data-a'),b=+h.getAttribute('data-b');id=F&&F.id===b?a:b;}
+  else return;
+  var n=G.nodes.filter(function(m){return m.id===id;})[0];
+  if(n&&n.kind!=='const'){stopPlay();pickNode(n);}
+ });
  $('graph').addEventListener('click',function(e){
   var g=e.target.closest&&e.target.closest('g[data-id]');if(!g||!G)return;
   var id=+g.getAttribute('data-id'),n=G.nodes.filter(function(m){return m.id===id;})[0];
