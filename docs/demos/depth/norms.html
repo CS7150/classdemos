@@ -18,6 +18,11 @@ h1{font-size:19px;margin-top:2px}
 #side table{border-collapse:collapse;margin-top:4px;font-variant-numeric:tabular-nums;font-size:13px}
 #side td{padding:1px 10px 1px 0}
 #side .hot td{color:var(--text-primary);font-weight:500}
+#maps{width:100%;max-width:330px;height:auto;display:block;margin-bottom:2px;touch-action:manipulation}
+#maps rect[data-c]{cursor:pointer}
+.ax{stroke:var(--text-muted);stroke-width:1.3;fill:none}
+.mk{fill:var(--text-muted)}
+.key{font-size:12.5px;line-height:1.45;margin:2px 0 8px}
 .row{gap:7px}
 button{height:30px;font-size:13px;padding:0 9px}
 .seg button{height:28px;font-size:12.5px;padding:0 10px}
@@ -32,15 +37,16 @@ input[type=range]{flex:0 1 110px;min-width:80px}
 <body>
 <div class="nav"><a href="./">&larr; Training deep networks demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
 <h1>Which axes get normalized<span>: BatchNorm, LayerNorm, InstanceNorm, GroupNorm, RMSNorm</span></h1>
-<p class="quiz">Every normalization layer subtracts a mean and divides by a standard deviation (RMSNorm skips the mean). They differ only in <b>which numbers share one mean</b>. The block is a batch of activations: N examples, C channels, and the H&times;W positions flattened into one axis. <b>Click a cell</b> to light up the cells it is normalized with; drag to turn the block.</p>
+<p class="quiz">Every normalization layer subtracts a mean and divides by a standard deviation (RMSNorm skips the mean). They differ only in <b>which numbers share one mean</b>. The block is a batch of activations, one small cube per number: N examples, C channels, and each channel&rsquo;s H&times;W feature map unrolled into one column. The grid beside it shows the same numbers the way a convolutional network holds them, one little H&times;W map per example and channel. <b>Click a cell</b> in either to light up the cells it is normalized with; drag to turn the block.</p>
 
 <div id="wrap">
 <svg id="fig" viewBox="0 0 560 440" role="img">
 <title>An activation tensor with the cells sharing one set of statistics highlighted</title>
-<desc>A block of small cubes: channels run across, examples in the batch run back, and spatial positions run up. The cells that are averaged together with the chosen cell are solid blue; the rest are faint. BatchNorm lights one channel across every example and position; LayerNorm one example across every channel and position; InstanceNorm one example and one channel; GroupNorm one example and a group of channels.</desc>
+<desc>A block of small cubes, one per number, with arrows along three edges: channels run across, examples in the batch run back, and each H by W feature map, unrolled, runs up. A grid beside it shows the same numbers as N rows of C small H by W maps. The cells that are averaged together with the chosen cell are solid blue; the rest are faint. BatchNorm lights one channel across every example and position; LayerNorm one example across every channel and position; InstanceNorm one example and one channel; GroupNorm one example and a group of channels.</desc>
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk" d="M0,1 L10,5 L0,9 z"/></marker></defs>
 <g id="stage"></g>
 </svg>
-<div id="side"></div>
+<div id="side"><svg id="maps" viewBox="0 0 300 250" role="img"><title>The same tensor as an N by C grid of H by W maps</title><defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk" d="M0,1 L10,5 L0,9 z"/></marker></defs><g id="mapg"></g></svg><div class="key" id="key"></div><div id="info"></div></div>
 </div>
 
 <div class="row">
@@ -57,7 +63,7 @@ input[type=range]{flex:0 1 110px;min-width:80px}
 <div class="cap" id="caption"></div>
 
 <script>
-var C=6,S=5,N=4,NMAX=6,K='bn',G=2,SEL=[0,1,2],PHI=-38,THE=24,rad=Math.PI/180;
+var C=6,H=2,W=3,S=H*W,N=4,NMAX=6,K='bn',G=2,SEL=[0,1,2],PHI=-38,THE=24,rad=Math.PI/180;
 // A fixed batch of activations: each channel has its own typical level and each example
 // its own overall brightness, so different groupings give visibly different statistics.
 var V=[];(function(){var seed=7;function r(){seed=(seed*16807)%2147483647;return seed/2147483647;}
@@ -66,18 +72,19 @@ var V=[];(function(){var seed=7;function r(){seed=(seed*16807)%2147483647;return
 
 // which cells share statistics with cell (n,c,s) under the current norm
 function gsize(){return C/G;}
+function tok(){return K==='tln'||K==='rms';}  // positions read as a sequence of tokens
 function same(a,b){
  if(K==='bn')return a[1]===b[1];
  if(K==='ln')return a[0]===b[0];
  if(K==='in')return a[0]===b[0]&&a[1]===b[1];
- if(K==='tln'||K==='rms')return a[0]===b[0]&&a[2]===b[2];
+ if(tok())return a[0]===b[0]&&a[2]===b[2];
  return a[0]===b[0]&&Math.floor(a[1]/gsize())===Math.floor(b[1]/gsize());}
 function groupOf(sel){var g=[],n,c,s;for(n=0;n<N;n++)for(c=0;c<C;c++)for(s=0;s<S;s++)if(same(sel,[n,c,s]))g.push([n,c,s]);return g;}
 function stats(g){var m=0,v=0;
  if(K==='rms'){g.forEach(function(p){var x=V[p[0]][p[1]][p[2]];v+=x*x;});return {m:0,sd:Math.sqrt(v/g.length)};}
  g.forEach(function(p){m+=V[p[0]][p[1]][p[2]];});m/=g.length;
  g.forEach(function(p){var d=V[p[0]][p[1]][p[2]]-m;v+=d*d;});return {m:m,sd:Math.sqrt(v/g.length)};}
-function nstats(){return K==='bn'?C:K==='ln'?N:K==='in'?N*C:K==='tln'||K==='rms'?N*S:N*G;}
+function nstats(){return K==='bn'?C:K==='ln'?N:K==='in'?N*C:tok()?N*S:N*G;}
 
 /* ---------- 3D ---------- */
 // x runs along channels, y up along positions, z back along the batch; orthographic
@@ -114,29 +121,57 @@ function draw(){
     '" fill="'+mix(col,sh)+'" fill-opacity="'+(on||sel?0.95:0.06)+'" stroke="'+(on||sel?'color-mix(in oklab, '+col+' 70%, var(--text-primary))':'var(--border-strong)')+
     '" stroke-width="'+(sel?1.6:0.6)+'" stroke-opacity="'+(on||sel?1:0.35)+'"/>';});
   o+='</g>';});
- // axis labels along three edges of the block
- // each axis is labelled on whichever of its four parallel edges sits farthest out on
- // screen, pushed a little further away from the block's centre
- var O=P([0,0,0]);
- function lab(a,b,t){var best=null,bd=-1;[[1,1],[1,-1],[-1,1],[-1,-1]].forEach(function(sg){
-   var pa=a.map(function(v,k){return v==='*'?0:v*(k===0?cx:k===1?cy:cz);}),pb=b.map(function(v,k){return v==='*'?0:v*(k===0?cx:k===1?cy:cz);}),j=0;
-   for(var k=0;k<3;k++)if(a[k]!=='*'&&a[k]===b[k]){pa[k]=pb[k]=sg[j]*(k===0?cx:k===1?cy:cz);j++;}
-   var p=P(pa),q=P(pb),m=[(p[0]+q[0])/2,(p[1]+q[1])/2],d=Math.hypot(m[0]-O[0],m[1]-O[1]);if(d>bd){bd=d;best=m;}});
-  var dx=best[0]-O[0],dy=best[1]-O[1],l=Math.hypot(dx,dy)||1;
-  return '<text class="tn gl" x="'+(best[0]+dx/l*22).toFixed(1)+'" y="'+(best[1]+dy/l*22+4).toFixed(1)+'" text-anchor="middle">'+t+'</text>';}
- // endpoints as signs of the half-extents: the varying axis runs -1 to 1, the other two
- // are chosen by lab() among the four edges
- o+=lab([-1,0,0],[1,0,0],'C channels');
- o+=lab([0,0,-1],[0,0,1],'N examples');
- o+=lab([0,-1,0],[0,1,0],K==='tln'||K==='rms'?'tokens (positions)':'H&middot;W positions');
+ // an arrow along one edge of the block for each axis, pointing the way its index grows.
+ // Of the four parallel edges, each axis uses the one that sits farthest out on screen.
+ var E=[[-cx,(C-1)*(1+GAP)+1-cx],[-cy,(S-1)*(1+GAP)+1-cy],[-cz,(N-1)*(1+GAP)+1-cz]],
+  O=P([(E[0][0]+E[0][1])/2,(E[1][0]+E[1][1])/2,(E[2][0]+E[2][1])/2]);
+ function arrow(k,t){var best=null,bd=-1;[[0,0],[0,1],[1,0],[1,1]].forEach(function(sg){
+   var pa=[0,0,0],pb=[0,0,0],j=0;
+   for(var m=0;m<3;m++){if(m===k){pa[m]=E[m][0];pb[m]=E[m][1];}else{pa[m]=pb[m]=E[m][sg[j++]];}}
+   var a=P(pa),b=P(pb),d=Math.hypot((a[0]+b[0])/2-O[0],(a[1]+b[1])/2-O[1]);if(d>bd){bd=d;best=[a,b];}});
+  var a=best[0],b=best[1],mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2,dx=mx-O[0],dy=my-O[1],l=Math.hypot(dx,dy)||1;dx/=l;dy/=l;
+  var ex=b[0]-a[0],ey=b[1]-a[1],el=Math.hypot(ex,ey)||1,sh=Math.min(6,el*0.1);
+  var x1=a[0]+dx*12+ex/el*sh,y1=a[1]+dy*12+ey/el*sh,x2=b[0]+dx*12-ex/el*sh,y2=b[1]+dy*12-ey/el*sh;
+  return '<line class="ax" x1="'+x1.toFixed(1)+'" y1="'+y1.toFixed(1)+'" x2="'+x2.toFixed(1)+'" y2="'+y2.toFixed(1)+'" marker-end="url(#ah)"/>'+
+   '<text class="tn gl" x="'+(mx+dx*30).toFixed(1)+'" y="'+(my+dy*30+5).toFixed(1)+'" text-anchor="middle">'+t+'</text>';}
+ o+=arrow(0,'C channels');
+ o+=arrow(2,'N examples');
+ o+=arrow(1,tok()?'T tokens':'H&times;W positions, unrolled');
  document.getElementById('stage').innerHTML=o;
- side(grp);readout();caption();
+ maps(inG);side(grp);readout();caption();
+}
+/* ---------- the same tensor unrolled: an N×C grid of H×W maps ---------- */
+// Position s sits at row floor(s/W), column s%W of its map (reading order), and s counts
+// up the column in the block. In the token views each map is a 1×T strip instead.
+function maps(inG){
+ var L=40,T=32,cw=(300-L)/C,mw=34,t=tok(),rw=t?S:W,rh=t?1:H,ux=mw/rw,uy=t?14:ux,mh=rh*uy,rowH=mh+10,o='',n,c,s;
+ var ht=T+NMAX*rowH;document.getElementById('maps').setAttribute('viewBox','0 0 300 '+ht.toFixed(1));
+ o+='<text class="tn" x="'+(L+(300-L)/2)+'" y="10" text-anchor="middle" style="font-size:12.5px">C channels</text>'+
+  '<line class="ax" x1="'+L+'" y1="15" x2="296" y2="15" marker-end="url(#ah2)"/>';
+ o+='<text class="tn" transform="translate(7,'+(T+N*rowH/2)+') rotate(90)" text-anchor="middle" style="font-size:12.5px">'+(N*rowH>80?'N examples':'N')+'</text>'+
+  '<line class="ax" x1="20" y1="'+T+'" x2="20" y2="'+(T+N*rowH-8)+'" marker-end="url(#ah2)"/>';
+ for(c=0;c<C;c++)o+='<text class="tn" x="'+(L+c*cw+mw/2).toFixed(1)+'" y="'+(T-5)+'" text-anchor="middle" style="font-size:11px">'+(c+1)+'</text>';
+ for(n=0;n<N;n++){o+='<text class="tn" x="'+(L-7)+'" y="'+(T+n*rowH+mh/2+4).toFixed(1)+'" text-anchor="end" style="font-size:11px">'+(n+1)+'</text>';
+  for(c=0;c<C;c++)for(s=0;s<S;s++){var key=n+','+c+','+s,on=!!inG[key],sel=key===SEL.join();
+   var col=sel?'var(--pink)':on?'var(--blue)':null;
+   o+='<rect data-c="'+key+'" x="'+(L+c*cw+(s%rw)*ux).toFixed(1)+'" y="'+(T+n*rowH+Math.floor(s/rw)*uy).toFixed(1)+'" width="'+ux.toFixed(1)+'" height="'+uy.toFixed(1)+
+    '" fill="'+(col?mix(col,sel?85:55):'var(--surface-1)')+'" stroke="'+(col?'color-mix(in oklab, '+col+' 70%, var(--text-primary))':'var(--border)')+'" stroke-width="'+(sel?1.4:0.6)+'"/>';}}
+ document.getElementById('mapg').innerHTML=o;
+ // a key: one map enlarged, its cells numbered in the order they stack up a column of the block
+ var k='<svg viewBox="0 0 '+(t?134:80)+' '+(t?36:52)+'" style="width:'+(t?134:80)+'px;height:auto;float:left;margin:2px 10px 2px 0">',u=t?18:16,x0=t?8:18,y0=t?4:14;
+ for(s=0;s<S;s++){var cx=x0+(s%(t?S:W))*u,cy=y0+Math.floor(s/(t?S:W))*u;
+  k+='<rect x="'+cx+'" y="'+cy+'" width="'+u+'" height="'+u+'" fill="var(--surface-1)" stroke="var(--border-strong)" stroke-width="0.8"/><text class="tn" x="'+(cx+u/2)+'" y="'+(cy+u/2+4)+'" text-anchor="middle" style="font-size:11px">'+(s+1)+'</text>';}
+ if(t)k+='<line class="ax" x1="8" y1="'+(y0+u+8)+'" x2="'+(8+S*u)+'" y2="'+(y0+u+8)+'" marker-end="url(#ah2)"/>';
+ else k+='<text class="tn" x="'+(x0+W*u/2)+'" y="9" text-anchor="middle" style="font-size:11px">W</text><text class="tn" x="8" y="'+(y0+H*u/2+4)+'" text-anchor="middle" style="font-size:11px">H</text>';
+ k+='</svg>';
+ document.getElementById('key').innerHTML=k+(t?'Each strip is one sequence&rsquo;s <b>T = '+S+' tokens</b> for one channel (feature). In the block they run up one column; a token is one height across all C channels.':
+  'Each tile is one example&rsquo;s <b>H&times;W = '+H+'&times;'+W+'</b> feature map for one channel. In the block its cells, in this order, stack bottom to top into one column.')+'<div style="clear:both"></div>';
 }
 function f2(v){return (v<0?'&minus;':'')+Math.abs(v).toFixed(2);}
 var NAME={bn:'BatchNorm',ln:'LayerNorm (CNN)',in:'InstanceNorm',gn:'GroupNorm',tln:'LayerNorm per token',rms:'RMSNorm'};
 function side(grp){
  var st=stats(grp),x=V[SEL[0]][SEL[1]][SEL[2]],h='';
- h+='<div><b>Cell</b>: example '+(SEL[0]+1)+', channel '+(SEL[1]+1)+', '+(K==='tln'||K==='rms'?'token ':'position ')+(SEL[2]+1)+'</div>';
+ h+='<div><b>Cell</b>: example '+(SEL[0]+1)+', channel '+(SEL[1]+1)+', '+(tok()?'token '+(SEL[2]+1):'position '+(SEL[2]+1)+' (row '+(Math.floor(SEL[2]/W)+1)+', column '+(SEL[2]%W+1)+')')+'</div>';
  h+='<div>value x = <b>'+f2(x)+'</b></div>';
  h+='<div style="margin-top:6px">'+NAME[K]+' averages it with <span class="big">'+grp.length+'</span> cells</div>';
  if(K==='rms'){h+='<div>their root mean square = <b>'+f2(st.sd)+'</b> (no mean is subtracted)</div>';
@@ -148,10 +183,10 @@ function side(grp){
  for(n=0;n<N;n++)for(c=0;c<C;c++)for(s=0;s<S;s++){var g=groupOf([n,c,s]),k=g.map(String)[0];if(!seen[k]){seen[k]=1;groups.push({g:g,a:[n,c,s]});}}
  h+='<div style="margin-top:6px">It computes <b>'+nstats()+'</b> '+(K==='rms'?'root mean squares':'means and '+nstats()+' stds')+' in all'+(groups.length>8?'; the first 8:':':')+'</div><table>';
  groups.slice(0,8).forEach(function(q){var t=stats(q.g),hot=same(q.a,SEL);
-  var nm=K==='bn'?'channel '+(q.a[1]+1):K==='ln'?'example '+(q.a[0]+1):K==='in'?'ex '+(q.a[0]+1)+', ch '+(q.a[1]+1):K==='tln'||K==='rms'?'ex '+(q.a[0]+1)+', token '+(q.a[2]+1):'ex '+(q.a[0]+1)+', group '+(Math.floor(q.a[1]/gsize())+1);
+  var nm=K==='bn'?'channel '+(q.a[1]+1):K==='ln'?'example '+(q.a[0]+1):K==='in'?'ex '+(q.a[0]+1)+', ch '+(q.a[1]+1):tok()?'ex '+(q.a[0]+1)+', token '+(q.a[2]+1):'ex '+(q.a[0]+1)+', group '+(Math.floor(q.a[1]/gsize())+1);
   h+='<tr'+(hot?' class="hot"':'')+'><td>'+nm+'</td>'+(K==='rms'?'<td>RMS '+f2(t.sd)+'</td>':'<td>&mu; '+f2(t.m)+'</td><td>&sigma; '+f2(t.sd)+'</td>')+'</tr>';});
  h+='</table>';
- document.getElementById('side').innerHTML=h;
+ document.getElementById('info').innerHTML=h;
 }
 function readout(){
  var t={bn:'<b>BatchNorm</b>: one mean per <b>channel</b>, over every example in the batch and every position. The statistics depend on which other examples are in the batch.',
@@ -160,7 +195,7 @@ function readout(){
   rms:'<b>RMSNorm</b> (Zhang and Sennrich 2019): the same per-token groups, but it only divides by the root mean square, x / &radic;(mean x&sup2;), with no mean subtracted and no shift &beta;. Most recent large language models use it.',
   in:'<b>InstanceNorm</b>: one mean per <b>example and channel</b>, over positions only. Each feature map is normalized on its own.',
   gn:'<b>GroupNorm</b> with '+G+' group'+(G>1?'s':'')+' of '+gsize()+' channel'+(gsize()>1?'s':'')+': one mean per <b>example and group</b>.'+(G===1?' With one group it is LayerNorm.':G===C?' With one channel per group it is InstanceNorm.':'')};
- var dep=K==='tln'||K==='rms'?' The batch size slider only adds or removes whole examples; each token is unchanged.':K==='bn'?' Try the batch size slider: the group grows and shrinks with N'+(N===1?', and at N = 1 it is exactly InstanceNorm':'')+'.':' The batch size slider only adds or removes whole groups; each group is unchanged.';
+ var dep=tok()?' The batch size slider only adds or removes whole examples; each token is unchanged.':K==='bn'?' Try the batch size slider: the group grows and shrinks with N'+(N===1?', and at N = 1 it is exactly InstanceNorm':'')+'.':' The batch size slider only adds or removes whole groups; each group is unchanged.';
  document.getElementById('readout').innerHTML=t[K]+dep;
 }
 function caption(){
@@ -182,6 +217,7 @@ function setN(v){N=v;draw();}
 document.getElementById('nseg').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;K=b.dataset.k;
  Array.from(this.children).forEach(function(x){x.classList.toggle('on',x===b);});draw();});
 // a press that barely moves picks a cell; one that moves turns the block
+document.getElementById('maps').addEventListener('click',function(e){var r=e.target.closest('[data-c]');if(r){SEL=r.dataset.c.split(',').map(Number);draw();}});
 (function(){var svg=document.getElementById('fig'),st=null;
  svg.addEventListener('pointerdown',function(e){st={x:e.clientX,y:e.clientY,lx:e.clientX,ly:e.clientY,moved:false,t:e.target};svg.setPointerCapture(e.pointerId);});
  svg.addEventListener('pointermove',function(e){if(!st)return;if(Math.abs(e.clientX-st.x)+Math.abs(e.clientY-st.y)>4)st.moved=true;

@@ -18,7 +18,9 @@ h1 span{font-size:17px;font-weight:400;color:var(--text-secondary);letter-spacin
 .quiz{font-size:14px;color:var(--text-muted);margin:-4px 0 0}
 .quiz b{font-weight:500;color:var(--text-secondary)}
 #wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
-svg{width:100%;height:auto;max-height:100%;display:block}
+/* figures are dragged (rotated, scrubbed, clicked); a drag that starts on one must
+   not sweep a text selection across the page */
+svg{width:100%;height:auto;max-height:100%;display:block;user-select:none;-webkit-user-select:none}
 .ts{font-size:15px;fill:var(--text-secondary)}
 .tn{font-size:14px;fill:var(--text-muted)}
 /* a halo in the page colour, so glyphs stay readable over the figure */
