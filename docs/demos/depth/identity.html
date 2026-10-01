@@ -27,9 +27,9 @@ label.cb{font-size:13px}
 <body>
 <div class="nav"><a href="./">&larr; Training deep networks demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
 <h1>Learning identity vs. learning zero<span>: what a shortcut changes about the target</span></h1>
-<p class="quiz">One block, two wirings, the <b>same random weights</b>. The plain block H(x) must be taught to copy its input; the residual block x + F(x) copies it as soon as F is zero. Press <b>Train</b>, then switch to <b>weight decay only</b>.</p>
+<p class="quiz">One block, two wirings, the <b>same random weights</b>. The plain block H(x) must be taught to copy its input; the residual block x + F(x) copies it as soon as F is zero. Press <b>Train</b>, then switch to <b>weight decay only</b>. Drag <b>view step</b> to replay a run. <b>Equivalent init</b> starts the two blocks as the same function (the residual block gets four extra relu units wired to &minus;x, since x = relu(x) &minus; relu(&minus;x)): then, without decay, they learn the identity about equally fast, and only decay tells them apart.</p>
 
-<svg id="figA" viewBox="0 0 1040 370" role="img">
+<svg id="figA" viewBox="0 0 1040 440" role="img">
 <title>A plain block and a residual block, each drawn as a warp of the plane, learning the identity</title>
 <desc>Left, the plain block H(x) = B relu(A x) drawn as the image of a square grid and of 49 colored points; middle, the residual block x + B relu(A x) with the same A and B. A faint square grid shows the target, the identity. Right, each block's distance from the identity plotted against training steps on a log scale.</desc>
 <g id="stageA"></g>
@@ -37,17 +37,30 @@ label.cb{font-size:13px}
 <div class="row">
 <button class="main" id="play" onclick="toggle()">Train</button>
 <button onclick="stepN(50)">+50 steps</button>
-<button onclick="reset(true)">New weights</button>
+<button onclick="EQUIV=false;reset(true)">New weights</button>
+<button onclick="EQUIV=true;reset(false)" title="start both blocks computing the same function">Equivalent init</button>
 <div class="seg" id="modeSeg"><button data-m="fit" class="on">fit the identity</button><button data-m="decay">weight decay only</button></div>
 <label class="cb"><input type="checkbox" id="wd" onchange="drawA()">add weight decay</label>
 <span class="klab">init scale</span>
 <input type="range" id="sc" min="0.2" max="2" step="0.1" value="1" oninput="reset(false)">
 <span class="knum" id="scv"></span>
 </div>
+<div class="row">
+<span class="klab">view step</span>
+<input type="range" id="scrub" min="0" max="0" step="1" value="0" oninput="VIEW=+this.value;if(VIEW>=SNAP.length-1)VIEW=-1;drawA()" style="flex:1 1 320px">
+<span class="knum" id="scrubv">0</span>
+</div>
 <div class="rd" id="rdA"></div>
+<p class="quiz" style="margin-top:6px"><b>The tug of war.</b> Each step is the sum of two pulls: the objective&rsquo;s, toward the identity, and weight decay&rsquo;s, toward zero weights. Below, at every point, is what one step of each would do to the block&rsquo;s <b>output</b>: <span style="color:var(--green-ink)">green</span> for the objective, <span style="color:var(--red)">red</span> for decay (shown whether or not decay is switched on). Each color is scaled on its own, since one pull can be far weaker than the other; look at the directions.</p>
+<svg id="figT" viewBox="0 0 1040 400" role="img">
+<title>The objective's pull and weight decay's pull on each block's outputs</title>
+<desc>Left and middle: the outputs of the plain and residual blocks at the viewed step, each with a green arrow for how one step of the objective would move it and a red arrow for how one step of weight decay would move it. In the plain block the red arrows point toward the origin, against the green ones; in the residual block they point the same way. Right: the agreement between the two pulls over training for each block, from plus one, pulling together, to minus one, a tug of war.</desc>
+<g id="stageT"></g>
+</svg>
+<div class="rd" id="rdT"></div>
 
 <h2>Thirty blocks deep<span>: a flow, or a scramble</span></h2>
-<svg id="figB" viewBox="0 0 1040 370" role="img">
+<svg id="figB" viewBox="0 0 1040 450" role="img">
 <title>Two spirals pushed through thirty random blocks, with and without shortcuts</title>
 <desc>Left, two interleaved spirals after a chosen number of random plain blocks; middle, the same points after the same number of residual blocks built from the same random weights, each adding a small fraction of its output to its input. Right, the share of each point's five nearest neighbours that are still its neighbours, plotted against depth for both.</desc>
 <g id="stageB"></g>
@@ -82,33 +95,62 @@ function lin(n,f){var a=[];for(var i=0;i<n;i++)a.push(f(i));return a;}
 // linear, relu, linear.  H(x) = B relu(A x) for the plain block, x + B relu(A x)
 // for the residual one.  (A single relu layer could not copy its input at all:
 // it zeros half of the plane.)  Width 8, no biases.
-var W=8,SEEDA=3,NET=null,DATA=[],HIST=[],STEP=0,MODE='fit',running=false,raf=null,LR=0.03,LAM=0.02;
+var WA=8,EQUIV=false,SEEDA=3,NET=null,DATA=[],HIST=[],SNAP=[],VIEW=-1,STEP=0,MODE='fit',running=false,raf=null,LR=0.03,LAM=0.02;
 for(var gy=0;gy<7;gy++)for(var gx=0;gx<7;gx++)DATA.push([-1.5+gx*0.5,-1.5+gy*0.5]);
 function reset(fresh){if(fresh)SEEDA++;var R=rng(SEEDA),s=+document.getElementById('sc').value;
  document.getElementById('scv').textContent=s.toFixed(1)+'×';
  // He-style scale times the slider; the plain and residual blocks start from the same draw
- var A=lin(W,function(){return [s*gauss(R),s*gauss(R)];}),B=[lin(W,function(){return s*gauss(R)/Math.sqrt(W);}),lin(W,function(){return s*gauss(R)/Math.sqrt(W);})];
+ WA=8;
+ var A=lin(WA,function(){return [s*gauss(R),s*gauss(R)];}),B=[lin(WA,function(){return s*gauss(R)/Math.sqrt(WA);}),lin(WA,function(){return s*gauss(R)/Math.sqrt(WA);})];
  NET={plain:{A:A.map(function(r){return r.slice();}),B:B.map(function(r){return r.slice();})},res:{A:A.map(function(r){return r.slice();}),B:B.map(function(r){return r.slice();})}};
- HIST=[];STEP=0;record();drawA();}
+ if(EQUIV){
+  // equivalent start: four more relu units, which can spell out the identity since
+  // x = relu(x) - relu(-x) in each coordinate. The plain block gets them with zero
+  // output weights, so H(x) is unchanged; the residual block gets them wired to -x,
+  // so x + F(x) = x + H(x) - x = H(x), the same function as the plain block
+  WA=12;var EA=[[1,0],[-1,0],[0,1],[0,-1]],EB=[[-1,1,0,0],[0,0,-1,1]];
+  EA.forEach(function(r,j){NET.plain.A.push(r.slice());NET.res.A.push(r.slice());
+   NET.plain.B[0].push(0);NET.plain.B[1].push(0);NET.res.B[0].push(EB[0][j]);NET.res.B[1].push(EB[1][j]);});
+ }
+ HIST=[];SNAP=[];VIEW=-1;STEP=0;record();drawA();}
 function fwd(n,x,res){var r=[],y=[res?x[0]:0,res?x[1]:0];
- for(var k=0;k<W;k++){var h=n.A[k][0]*x[0]+n.A[k][1]*x[1];r.push(h>0?h:0);}
- for(k=0;k<W;k++){y[0]+=n.B[0][k]*r[k];y[1]+=n.B[1][k]*r[k];}return {y:y,r:r};}
+ for(var k=0;k<WA;k++){var h=n.A[k][0]*x[0]+n.A[k][1]*x[1];r.push(h>0?h:0);}
+ for(k=0;k<WA;k++){y[0]+=n.B[0][k]*r[k];y[1]+=n.B[1][k]*r[k];}return {y:y,r:r};}
 // mean squared distance from the identity, over the 49 points
 function dist(n,res){var s=0;DATA.forEach(function(x){var y=fwd(n,x,res).y;s+=(y[0]-x[0])*(y[0]-x[0])+(y[1]-x[1])*(y[1]-x[1]);});return s/DATA.length;}
 function wdOn(){return MODE==='decay'||document.getElementById('wd').checked;}
 // one step of gradient descent, by hand: data term unless decay-only, plus (lam/2)|w|^2
-function gd(n,res){var gA=lin(W,function(){return [0,0];}),gB=[lin(W,function(){return 0;}),lin(W,function(){return 0;})],k;
+function gd(n,res){var gA=lin(WA,function(){return [0,0];}),gB=[lin(WA,function(){return 0;}),lin(WA,function(){return 0;})],k;
  if(MODE==='fit')DATA.forEach(function(x){var f=fwd(n,x,res),e=[2*(f.y[0]-x[0])/DATA.length,2*(f.y[1]-x[1])/DATA.length];
-  for(k=0;k<W;k++){gB[0][k]+=e[0]*f.r[k];gB[1][k]+=e[1]*f.r[k];
+  for(k=0;k<WA;k++){gB[0][k]+=e[0]*f.r[k];gB[1][k]+=e[1]*f.r[k];
    if(f.r[k]>0){var d=n.B[0][k]*e[0]+n.B[1][k]*e[1];gA[k][0]+=d*x[0];gA[k][1]+=d*x[1];}}});
  var lam=wdOn()?LAM:0,g2=0;
- for(k=0;k<W;k++){gA[k][0]+=lam*n.A[k][0];gA[k][1]+=lam*n.A[k][1];gB[0][k]+=lam*n.B[0][k];gB[1][k]+=lam*n.B[1][k];
+ for(k=0;k<WA;k++){gA[k][0]+=lam*n.A[k][0];gA[k][1]+=lam*n.A[k][1];gB[0][k]+=lam*n.B[0][k];gB[1][k]+=lam*n.B[1][k];
   g2+=gA[k][0]*gA[k][0]+gA[k][1]*gA[k][1]+gB[0][k]*gB[0][k]+gB[1][k]*gB[1][k];}
  // clip, so a large init scale cannot blow the step up
  var c=Math.min(1,5/Math.sqrt(g2||1)),lr=MODE==='decay'?0.25:LR;
- for(k=0;k<W;k++){n.A[k][0]-=lr*c*gA[k][0];n.A[k][1]-=lr*c*gA[k][1];n.B[0][k]-=lr*c*gB[0][k];n.B[1][k]-=lr*c*gB[1][k];}}
-function record(){HIST.push([STEP,dist(NET.plain,false),dist(NET.res,true)]);}
-function stepN(n){for(var i=0;i<n;i++){gd(NET.plain,false);gd(NET.res,true);STEP++;if(STEP%5===0)record();}drawA();}
+ for(k=0;k<WA;k++){n.A[k][0]-=lr*c*gA[k][0];n.A[k][1]-=lr*c*gA[k][1];n.B[0][k]-=lr*c*gB[0][k];n.B[1][k]-=lr*c*gB[1][k];}}
+// every 5 steps, keep the distances and a copy of both blocks' weights, so the
+// run can be scrubbed back and forth
+function cloneNet(n){return {A:n.A.map(function(r){return r.slice();}),B:n.B.map(function(r){return r.slice();})};}
+function record(){HIST.push([STEP,dist(NET.plain,false),dist(NET.res,true),agree(NET.plain,false),agree(NET.res,true)]);SNAP.push({plain:cloneNet(NET.plain),res:cloneNet(NET.res)});}
+// ---- the two pulls, seen through the outputs ----
+// the objective's pull is minus its gradient; decay's pull is -lam*w. Each is pushed
+// through the block (a small step along it, by finite difference) to see how it
+// would move every output
+function flatNet(n){var v=[];for(var k=0;k<WA;k++)v.push(n.A[k][0],n.A[k][1],n.B[0][k],n.B[1][k]);return v;}
+function unflatNet(v){var n={A:[],B:[[],[]]};for(var k=0;k<WA;k++){n.A.push([v[4*k],v[4*k+1]]);n.B[0].push(v[4*k+2]);n.B[1].push(v[4*k+3]);}return n;}
+function objPull(n,res){var gA=lin(WA,function(){return [0,0];}),gB=[lin(WA,function(){return 0;}),lin(WA,function(){return 0;})],k;
+ DATA.forEach(function(x){var f=fwd(n,x,res),e=[2*(f.y[0]-x[0])/DATA.length,2*(f.y[1]-x[1])/DATA.length];
+  for(k=0;k<WA;k++){gB[0][k]+=e[0]*f.r[k];gB[1][k]+=e[1]*f.r[k];if(f.r[k]>0){var d=n.B[0][k]*e[0]+n.B[1][k]*e[1];gA[k][0]+=d*x[0];gA[k][1]+=d*x[1];}}});
+ var g=[];for(k=0;k<WA;k++)g.push(-gA[k][0],-gA[k][1],-gB[0][k],-gB[1][k]);return g;}
+function nudges(n,res,g){var w=flatNet(n),eps=1e-4,n2=unflatNet(w.map(function(v,i){return v+eps*g[i];}));
+ return DATA.map(function(x){var a=fwd(n,x,res).y,b=fwd(n2,x,res).y;return [(b[0]-a[0])/eps,(b[1]-a[1])/eps];});}
+function pulls(n,res){return {o:nudges(n,res,objPull(n,res)),r:nudges(n,res,flatNet(n).map(function(v){return -LAM*v;}))};}
+// +1: the two pulls move the outputs the same way; -1: straight against each other
+function agree(n,res){var P=pulls(n,res),d=0,a=0,b=0;P.o.forEach(function(u,i){var v=P.r[i];d+=u[0]*v[0]+u[1]*v[1];a+=u[0]*u[0]+u[1]*u[1];b+=v[0]*v[0]+v[1]*v[1];});
+ return a*b>1e-30?d/Math.sqrt(a*b):0;}
+function stepN(n){for(var i=0;i<n;i++){gd(NET.plain,false);gd(NET.res,true);STEP++;if(STEP%5===0)record();}VIEW=-1;drawA();}
 function toggle(){running=!running;document.getElementById('play').textContent=running?'Pause':'Train';
  if(running)(function f(){if(!running)return;stepN(10);if(STEP>=4000){toggle();return;}raf=requestAnimationFrame(f);})();}
 
@@ -129,7 +171,7 @@ function warpPanel(x0,y0,S,n,res,title,col){
  s+='</g>';
  s+=T(x0+S/2,y0-10,title,'ts','middle');
  return s;}
-function plotPanel(x0,y0,Wp,Hp){
+function plotPanel(x0,y0,Wp,Hp,vi){
  var s='',n=HIST.length,xmax=Math.max(300,HIST[n-1][0]),lo=-4,hi=1;
  HIST.forEach(function(h){hi=Math.max(hi,Math.ceil(Math.log10(Math.max(h[1],h[2],1e-9))));});
  function px(t){return x0+t/xmax*Wp;}function py(v){var l=Math.log10(Math.max(v,1e-4));return y0+Hp-(l-lo)/(hi-lo)*Hp;}
@@ -140,22 +182,110 @@ function plotPanel(x0,y0,Wp,Hp){
  [[1,WARM,'plain H(x)'],[2,BLUE,'residual x + F(x)']].forEach(function(c,k){var d='';HIST.forEach(function(h,i){d+=(i?'L':'M')+px(h[0]).toFixed(1)+' '+py(h[c[0]]).toFixed(1)+' ';});
   s+='<path d="'+d+'" fill="none" stroke="'+c[1]+'" stroke-width="2.4"/>';
   s+=T(x0+8,y0+Hp-26+17*k,'<tspan style="fill:'+c[1]+'">━</tspan> '+c[2],'tn','start');});
+ // the step being viewed
+ var hv=HIST[vi],xv=px(hv[0]);
+ s+='<line x1="'+xv.toFixed(1)+'" y1="'+y0+'" x2="'+xv.toFixed(1)+'" y2="'+(y0+Hp)+'" stroke="var(--text-secondary)" stroke-width="1" stroke-dasharray="4 3"/>';
+ [[1,WARM],[2,BLUE]].forEach(function(c){s+='<circle cx="'+xv.toFixed(1)+'" cy="'+py(hv[c[0]]).toFixed(1)+'" r="4.5" fill="'+c[1]+'" stroke="var(--bg)" stroke-width="1"/>';});
+ return s;}
+// small block diagrams: a box for the block, and for a residual block an identity
+// shortcut arcing around it into a sum
+function dBox(x,y,w,h,lab,col){return '<rect x="'+x.toFixed(1)+'" y="'+(y-h/2).toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+h+'" rx="5" fill="var(--surface)" stroke="'+col+'" stroke-width="1.8"/>'+T(x+w/2,y+5,lab,'ts','middle',col);}
+function dLine(x1,x2,y,col){return '<line x1="'+x1.toFixed(1)+'" y1="'+y+'" x2="'+x2.toFixed(1)+'" y2="'+y+'" stroke="'+col+'" stroke-width="1.6"/>'+
+ '<path d="M'+x2.toFixed(1)+' '+y+' l-6 -4 l0 8 Z" fill="'+col+'"/>';}
+function dSum(x,y,col){return '<circle cx="'+x.toFixed(1)+'" cy="'+y+'" r="8" fill="var(--surface)" stroke="'+col+'" stroke-width="1.6"/>'+T(x,y+5,'+','ts','middle',col);}
+function dSkip(x1,x2,y,col,lab){var top=y-26;return '<path d="M'+x1.toFixed(1)+' '+y+' C'+x1.toFixed(1)+' '+top+' '+x2.toFixed(1)+' '+top+' '+x2.toFixed(1)+' '+(y-8)+'" fill="none" stroke="'+col+'" stroke-width="1.8"/>'+
+ (lab?T((x1+x2)/2,top+2,lab,'tn','middle',col):'');}
+// one block: x -> [H] -> H(x), or x -> [F] -> (+) -> x + F(x) with the shortcut
+function netDiagram(x0,y0,w,h,res,col){
+ var s='',cy=y0+h/2+8,bw=70;
+ s+=T(x0+14,cy+5,'x','ts','middle');
+ if(!res){s+=dLine(x0+24,x0+w*0.36,cy,col)+dBox(x0+w*0.36,cy,bw,28,'H',col)+dLine(x0+w*0.36+bw,x0+w*0.78,cy,col)+T(x0+w*0.80,cy+5,'H(x)','ts','start');}
+ else{var xs=x0+w*0.66;s+=dSkip(x0+30,xs,cy,col,'')+dLine(x0+24,x0+w*0.30,cy,col)+dBox(x0+w*0.30,cy,bw,28,'F',col)+dLine(x0+w*0.30+bw,xs-8,cy,col)+dSum(xs,cy,col)+
+  dLine(xs+8,x0+w*0.78,cy,col)+T(x0+w*0.80,cy+5,'x + F(x)','ts','start');}
+ return s;}
+// the stack so far: x -> out with no blocks, then F1, F1 F2, F1 F2 F3, and from
+// four blocks on F1 F2 ... FL. Each layer is its own random block, so each gets a
+// subscript; the plain and residual stacks use the same F1..F30, wired two ways
+function subs(n){return String(n).split('').map(function(c){return '₀₁₂₃₄₅₆₇₈₉'[+c];}).join('');}
+function chainDiagram(x0,y0,w,h,res,col,L,lab){
+ var s='',cy=y0+h/2+8,bw=36,cur=x0+30,names=[];
+ if(L<=3)for(var i=1;i<=L;i++)names.push('F'+subs(i));else names=['F'+subs(1),'F'+subs(2),'…','F'+subs(L)];
+ s+=T(x0+10,cy+5,'x','ts','middle')+dLine(x0+18,cur,cy,col);
+ names.forEach(function(k,i){
+  var last=i===names.length-1,next;
+  if(k==='…'){s+=T(cur+12,cy+5,'⋯','ts','middle',col);s+=dLine(cur+24,cur+34,cy,col);cur+=34;return;}
+  if(res){var sx=cur+bw+16;s+=dSkip(cur-8,sx,cy,col,'')+dBox(cur,cy,bw,24,k,col)+dLine(cur+bw,sx-8,cy,col)+dSum(sx,cy,col);next=sx+8+(last?0:14);s+=dLine(sx+8,next+(last?14:0),cy,col);}
+  else{s+=dBox(cur,cy,bw,24,k,col);next=cur+bw+(last?0:16);s+=dLine(cur+bw,next+(last?14:0),cy,col);}
+  cur=next;});
+ if(!names.length)s+=dLine(cur,cur+30,cy,col),cur+=16;
+ s+=T(cur+18,cy+5,'out','ts','start');
+ s+=T(x0+w/2,y0+h+8,lab,'tn','middle');
  return s;}
 function drawA(){
- var mob=mobile(),s='',L=mob?{vb:'0 0 560 620',a:[20,34],b:[290,34],S:250,p:[60,340,470,230]}:{vb:'0 0 1040 370',a:[20,34],b:[350,34],S:300,p:[720,34,300,290]};
- s+=warpPanel(L.a[0],L.a[1],L.S,NET.plain,false,'plain block: H(x) = B relu(A x)',WARM);
- s+=warpPanel(L.b[0],L.b[1],L.S,NET.res,true,'residual block: x + F(x)',BLUE);
- s+=plotPanel(L.p[0],L.p[1],L.p[2],L.p[3]);
+ var mob=mobile(),s='',L=mob?{vb:'0 0 560 720',a:[20,34],b:[290,34],S:250,p:[60,440,470,230]}:{vb:'0 0 1040 440',a:[20,34],b:[350,34],S:300,p:[720,34,300,290]};
+ var vi=VIEW<0?HIST.length-1:Math.min(VIEW,HIST.length-1),nv=SNAP[vi];
+ var sl=document.getElementById('scrub');sl.max=HIST.length-1;sl.value=vi;document.getElementById('scrubv').textContent=HIST[vi][0];
+ s+=warpPanel(L.a[0],L.a[1],L.S,nv.plain,false,'plain block: H(x) = B relu(A x)',WARM);
+ s+=warpPanel(L.b[0],L.b[1],L.S,nv.res,true,'residual block: x + F(x)',BLUE);
+ s+=netDiagram(L.a[0],L.a[1]+L.S+16,L.S,60,false,WARM)+netDiagram(L.b[0],L.b[1]+L.S+16,L.S,60,true,BLUE);
+ s+=plotPanel(L.p[0],L.p[1],L.p[2],L.p[3],vi);
+ drawT(vi,nv);
  var svg=document.getElementById('figA');svg.setAttribute('viewBox',L.vb);
  document.getElementById('stageA').innerHTML=s;
- var h=HIST[HIST.length-1],h0=HIST[0];
- document.getElementById('rdA').innerHTML='After <b>'+STEP+'</b> steps'+(MODE==='decay'?' of weight decay alone':wdOn()?' with weight decay':'')+
+ var h=HIST[vi],h0=HIST[0];
+ document.getElementById('rdA').innerHTML=(vi<HIST.length-1?'Viewing step <b>'+h[0]+'</b> of '+STEP:'After <b>'+STEP+'</b> steps')+(MODE==='decay'?' of weight decay alone':wdOn()?' with weight decay':'')+
   ': the plain block is <b class="num">'+h[1].toFixed(3)+'</b> from the identity (it started at '+h0[1].toFixed(2)+'), the residual block <b class="num">'+h[2].toFixed(3)+'</b> (started at '+h0[2].toFixed(2)+').'+
-  (MODE==='decay'?' With nothing to fit, decay shrinks every weight toward zero: the plain block becomes the <b>zero map</b>, the residual block the <b>identity</b>.':'');
+  (MODE==='decay'?' With nothing to fit, decay shrinks every weight toward zero: the plain block becomes the <b>zero map</b>, the residual block the <b>identity</b>.':'')+
+  (EQUIV?' <b>Equivalent start</b>: both blocks begin as the same function, so any difference comes from where each one&rsquo;s zero weights are: the zero map for the plain block, the identity for the residual block.':'');
+}
+
+function arrowT(x1,y1,x2,y2,col){var dx=x2-x1,dy=y2-y1,l=Math.hypot(dx,dy);if(l<1.2)return '';var ux=dx/l,uy=dy/l,h=Math.min(5,l*0.45);
+ return '<line x1="'+x1.toFixed(1)+'" y1="'+y1.toFixed(1)+'" x2="'+x2.toFixed(1)+'" y2="'+y2.toFixed(1)+'" stroke="'+col+'" stroke-width="1.6"/>'+
+  '<path d="M'+x2.toFixed(1)+' '+y2.toFixed(1)+' L'+(x2-h*ux-h*0.55*uy).toFixed(1)+' '+(y2-h*uy+h*0.55*ux).toFixed(1)+' L'+(x2-h*ux+h*0.55*uy).toFixed(1)+' '+(y2-h*uy-h*0.55*ux).toFixed(1)+' Z" fill="'+col+'"/>';}
+function pullPanel(x0,y0,S,n,res,title,col){
+ var s='',sc=S/5.2,cx=x0+S/2,cy=y0+S/2,P=function(p){return [cx+sc*p[0],cy-sc*p[1]];},pl=pulls(n,res);
+ s+='<rect x="'+x0+'" y="'+y0+'" width="'+S+'" height="'+S+'" fill="var(--surface)" stroke="var(--border)"/>';
+ s+='<clipPath id="pc'+x0+'"><rect x="'+x0+'" y="'+y0+'" width="'+S+'" height="'+S+'"/></clipPath><g clip-path="url(#pc'+x0+')">';
+ // each kind of arrow gets its own scale: near convergence one pull can be far
+ // smaller than the other, and what matters here is the direction each one points
+ var mo=1e-12,mr=1e-12;pl.o.forEach(function(v){mo=Math.max(mo,Math.hypot(v[0],v[1]));});pl.r.forEach(function(v){mr=Math.max(mr,Math.hypot(v[0],v[1]));});
+ var ko=24/(mo*sc),kr=24/(mr*sc);
+ var o=P([0,0]);s+='<circle cx="'+o[0]+'" cy="'+o[1]+'" r="2.5" fill="var(--text-muted)"/>';
+ DATA.forEach(function(x,i){var y=fwd(n,x,res).y,p=P(y);
+  s+='<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="2.4" fill="'+col+'" opacity="0.6"/>';
+  s+=arrowT(p[0],p[1],p[0]+ko*sc*pl.o[i][0],p[1]-ko*sc*pl.o[i][1],'var(--green-ink)');
+  s+=arrowT(p[0],p[1],p[0]+kr*sc*pl.r[i][0],p[1]-kr*sc*pl.r[i][1],'var(--red)');});
+ s+='</g>'+T(x0+S/2,y0-10,title,'ts','middle');
+ return s;}
+function agreePanel(x0,y0,Wp,Hp,vi){
+ var s='',n=HIST.length,xmax=Math.max(300,HIST[n-1][0]);
+ function px(t){return x0+t/xmax*Wp;}function py(v){return y0+Hp/2-v*(Hp/2-6);}
+ s+='<rect x="'+x0+'" y="'+y0+'" width="'+Wp+'" height="'+Hp+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
+ [[1,'+1  same way'],[0,'0'],[-1,'−1  tug of war']].forEach(function(q){s+='<line x1="'+x0+'" y1="'+py(q[0])+'" x2="'+(x0+Wp)+'" y2="'+py(q[0])+'" stroke="var(--border)" stroke-width="'+(q[0]?0.5:1)+'"/>'+T(x0-5,py(q[0])+4,q[0]>0?'+1':q[0]<0?'−1':'0','tn','end');});
+ s+=T(x0+Wp-6,py(1)+14,'pulling the same way','tn','end')+T(x0+Wp-6,py(-1)-6,'tug of war','tn','end');
+ [[3,WARM],[4,BLUE]].forEach(function(c){var d='';HIST.forEach(function(h,i){d+=(i?'L':'M')+px(h[0]).toFixed(1)+' '+py(h[c[0]]).toFixed(1)+' ';});s+='<path d="'+d+'" fill="none" stroke="'+c[1]+'" stroke-width="2.4"/>';});
+ var hv=HIST[vi],xv=px(hv[0]);
+ s+='<line x1="'+xv.toFixed(1)+'" y1="'+y0+'" x2="'+xv.toFixed(1)+'" y2="'+(y0+Hp)+'" stroke="var(--text-secondary)" stroke-width="1" stroke-dasharray="4 3"/>';
+ [[3,WARM],[4,BLUE]].forEach(function(c){s+='<circle cx="'+xv.toFixed(1)+'" cy="'+py(hv[c[0]]).toFixed(1)+'" r="4.5" fill="'+c[1]+'" stroke="var(--bg)" stroke-width="1"/>';});
+ s+=T(x0,y0+Hp+16,'0','tn','middle')+T(x0+Wp,y0+Hp+16,String(xmax),'tn','end')+T(x0+Wp/2,y0+Hp+16,'training steps','tn','middle');
+ s+=T(x0+Wp/2,y0-10,'do the two pulls agree? (output cosine)','ts','middle');
+ return s;}
+function drawT(vi,nv){
+ var mob=mobile(),s='',L=mob?{vb:'0 0 560 700',a:[20,30],b:[290,30],S:250,p:[60,430,470,220]}:{vb:'0 0 1040 400',a:[20,30],b:[350,30],S:280,p:[720,30,300,270]};
+ s+=pullPanel(L.a[0],L.a[1],L.S,nv.plain,false,'plain block',WARM);
+ s+=pullPanel(L.b[0],L.b[1],L.S,nv.res,true,'residual block',BLUE);
+ s+=netDiagram(L.a[0],L.a[1]+L.S+16,L.S,60,false,WARM)+netDiagram(L.b[0],L.b[1]+L.S+16,L.S,60,true,BLUE);
+ s+=agreePanel(L.p[0],L.p[1],L.p[2],L.p[3],vi);
+ document.getElementById('figT').setAttribute('viewBox',L.vb);
+ document.getElementById('stageT').innerHTML=s;
+ var h=HIST[vi];
+ document.getElementById('rdT').innerHTML='Agreement at step '+h[0]+': <span style="color:var(--warm-ink)">plain</span> <b class="num">'+(h[3]>=0?'+':'−')+Math.abs(h[3]).toFixed(2)+'</b>, <span style="color:var(--blue-ink)">residual</span> <b class="num">'+(h[4]>=0?'+':'−')+Math.abs(h[4]).toFixed(2)+'</b>. '+
+  (h[3]<-0.8?'The plain block is in a <b>tug of war</b>: the identity needs big weights, decay wants small ones, and it settles where the two pulls cancel, short of the identity. ':'')+
+  (h[4]>0.4?'The residual block&rsquo;s pulls point the <b>same way</b>: shrinking F moves every output toward x, which is exactly where the objective wants it.':'');
 }
 
 /* ---------- part B: thirty blocks ---------- */
-var NB=30,SEEDB=11,ALPHA=0.15,LAY=30,PTS=[],CLS=[],RUN=null,PRES=null,runningB=false;
+var W=8,NB=30,SEEDB=11,ALPHA=0.15,LAY=30,PTS=[],CLS=[],RUN=null,PRES=null,runningB=false;
 (function(){for(var i=0;i<120;i++){var t=0.25+i/120*3.2,r=0.25+t/3.45*1.35;
  PTS.push([r*Math.cos(t),r*Math.sin(t)]);CLS.push(0);PTS.push([-r*Math.cos(t),-r*Math.sin(t)]);CLS.push(1);}})();
 // each point's five nearest neighbours (kept by insertion, no full sort)
@@ -183,9 +313,10 @@ function cloud(x0,y0,S,P,title,col){
  return s;}
 function drawB(){
  document.getElementById('layv').textContent=LAY;
- var mob=mobile(),s='',L=mob?{vb:'0 0 560 620',a:[20,34],b:[290,34],S:250,p:[60,340,470,230]}:{vb:'0 0 1040 370',a:[20,34],b:[350,34],S:300,p:[720,34,300,290]};
+ var mob=mobile(),s='',L=mob?{vb:'0 0 560 710',a:[20,34],b:[290,34],S:250,p:[60,430,470,230]}:{vb:'0 0 1040 450',a:[20,34],b:[350,34],S:300,p:[720,34,300,290]};
  s+=cloud(L.a[0],L.a[1],L.S,RUN.pl[LAY],'plain: x → F(x), '+LAY+' times',WARM);
  s+=cloud(L.b[0],L.b[1],L.S,RUN.rs[LAY],'residual: x → x + &alpha;F(x), '+LAY+' times',BLUE);
+ s+=chainDiagram(L.a[0],L.a[1]+L.S+16,L.S,52,false,WARM,LAY,LAY===0?'no blocks yet':LAY+' plain block'+(LAY>1?'s':'')+' in a row')+chainDiagram(L.b[0],L.b[1]+L.S+16,L.S,52,true,BLUE,LAY,LAY===0?'no blocks yet':LAY+' residual block'+(LAY>1?'s':'')+', each with its own shortcut');
  var x0=L.p[0],y0=L.p[1],Wp=L.p[2],Hp=L.p[3];
  function px(l){return x0+l/NB*Wp;}function py(v){return y0+Hp-v*Hp;}
  s+='<rect x="'+x0+'" y="'+y0+'" width="'+Wp+'" height="'+Hp+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
