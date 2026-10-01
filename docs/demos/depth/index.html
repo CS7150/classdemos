@@ -101,6 +101,24 @@ footer a{color:var(--text-secondary)}
 </li>
 
 <li class="done">
+  <div class="qtag">Older cousins</div>
+  <h2><a href="gates.html">LSTMs, highways, ResNets</a></h2>
+  <p class="what">The additive path an LSTM carries through time and a ResNet carries through depth. A plain
+     layer multiplies the gradient by its gain every step, an LSTM cell or highway layer by its gate, and a
+     residual shortcut by exactly one: ResNet is a highway that is always open.</p>
+  <a class="go" href="gates.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">From the related work</div>
+  <h2><a href="vlad.html">VLAD: encode the residual, not the point</a></h2>
+  <p class="what">The residual representation He et al. cite: descriptors assigned to visual words, each word
+     keeping the sum of descriptor-minus-center. Two images with identical bag-of-words counts get different
+     VLAD vectors.</p>
+  <a class="go" href="vlad.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
   <div class="qtag">The architecture</div>
   <h2><a href="resnet-blocks.html">Residual blocks: basic, bottleneck, and the shortcut</a></h2>
   <p class="what">ResNet's two blocks with live weight and multiply-add counts: a 256-wide bottleneck

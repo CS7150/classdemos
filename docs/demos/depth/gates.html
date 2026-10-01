@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LSTMs, highways, ResNets</title>
+<meta name="description" content="The additive path that LSTMs carry through time and ResNets carry through depth: a vanilla recurrence multiplies the gradient by a matrix every step, an LSTM cell by its forget gate, a highway layer by its carry gate, and a residual block by one plus a small correction.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 24px;max-width:1100px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+.quiz{margin:0}
+svg{max-height:66vh}
+.row{gap:7px}
+button{height:30px;font-size:13px;padding:0 9px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:40px}
+input[type=range]{flex:1 1 140px;min-width:90px}
+.rd{font-size:14px;line-height:1.5;min-height:1.5em}
+.cap{font-size:12.5px;line-height:1.55;padding-top:4px}
+.nav{display:flex;align-items:baseline;gap:10px}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Training deep networks demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>LSTMs, highways, ResNets<span>: one additive path, through time or through depth</span></h1>
+<p class="quiz">A residual block looks a lot like an LSTM cell, and that is no accident. Both keep a <b>state that is updated by adding to it</b>, so the gradient has a path back that is not multiplied by a weight matrix at every step. An LSTM runs that path through <b>time</b>; a ResNet runs it through <b>depth</b>. Below, the gradient reaching step 0 from step T, for four update rules.</p>
+
+<svg id="fig" viewBox="0 0 900 420" role="img">
+<title>Four update rules and how much gradient survives each</title>
+<desc>Left: four small diagrams, a plain recurrence or layer, an LSTM cell, a highway layer, and a residual block, with the additive path highlighted. Right: the gradient reaching step 0 from step T for each, on a log scale.</desc>
+<g id="g"></g>
+</svg>
+<div class="row">
+  <span class="klab">steps T</span><input type="range" id="T" min="5" max="100" step="1" value="50" oninput="draw()"><span class="knum" id="Tv">50</span>
+  <span class="klab">forget / carry gate</span><input type="range" id="f" min="0.5" max="1" step="0.005" value="0.95" oninput="draw()"><span class="knum" id="fv">0.95</span>
+  <span class="klab">plain layer gain</span><input type="range" id="gn" min="0.5" max="1.5" step="0.01" value="0.9" oninput="draw()"><span class="knum" id="gv">0.90</span>
+</div>
+<div class="rd" id="rd"></div>
+<div class="cap"><b>The four rules</b>, with the factor each multiplies the gradient by per step along its best path: a <b>plain</b> recurrence or layer, h<sub>t</sub> = &phi;(W h<sub>t&minus;1</sub>), multiplies by W<sup>T</sup> and the activation&rsquo;s slope every step, so unless that product is exactly 1 the gradient shrinks or grows exponentially (Hochreiter 1991; Bengio et al. 1994). The <b>LSTM</b> (Hochreiter &amp; Schmidhuber 1997) adds a cell state c<sub>t</sub> = f&middot;c<sub>t&minus;1</sub> + i&middot;g: along the cell, the gradient is multiplied only by the forget gate f, and with f = 1 (the original &ldquo;constant error carousel&rdquo;; the forget gate came in Gers et al. 2000) it passes unchanged. <b>Highway networks</b> (Srivastava et al. 2015, months before ResNet) took the same gated, additive idea from time to depth: y = t&middot;H(x) + (1 &minus; t)&middot;x, carrying a fraction 1 &minus; t of x straight through. <b>ResNet</b> drops the gate: y = x + F(x), a highway that is always fully open, so the factor along the shortcut is exactly 1 and the branch only adds corrections (the rate here assumes a branch whose Jacobian contributes a small &plusmn;5% per step on average). So the idea was not new in 2015; what was new was applying the always-open version to very deep feedforward networks, alongside BatchNorm and GPUs, and showing that it beat everything on ImageNet. He et al. also point out that a highway layer whose gate closes stops being residual, while their shortcut is never closed.</div>
+
+<script>
+var NS='http://www.w3.org/2000/svg';
+function T(x,y,s,cls,anc,fill){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'"'+(anc?' text-anchor="'+anc+'"':'')+(fill?' style="fill:'+fill+'"':'')+'>'+s+'</text>';}
+var RULES=[{n:'plain: h = φ(W h)',c:'var(--warm-ink)',e:'plain'},{n:'LSTM cell: c = f·c + i·g (through time)',c:'var(--pink-ink)',e:'LSTM'},{n:'highway: y = t·H + (1−t)·x, a gated shortcut',c:'var(--violet-ink)',e:'highway'},{n:'ResNet: y = x + F(x), a shortcut always open',c:'var(--blue-ink)',e:'ResNet'}];
+function box(x,y,w,h,lab,col){return '<rect x="'+x+'" y="'+(y-h/2)+'" width="'+w+'" height="'+h+'" rx="5" fill="var(--surface)" stroke="'+col+'" stroke-width="1.6"/>'+T(x+w/2,y+5,lab,'tn','middle',col);}
+function arr(x1,x2,y,col,w){return '<line x1="'+x1+'" y1="'+y+'" x2="'+x2+'" y2="'+y+'" stroke="'+col+'" stroke-width="'+(w||1.6)+'"/><path d="M'+x2+' '+y+' l-6 -4 l0 8 Z" fill="'+col+'"/>';}
+function op(x,y,s,col){return '<circle cx="'+x+'" cy="'+y+'" r="9" fill="var(--surface)" stroke="'+col+'" stroke-width="1.6"/>'+T(x,y+5,s,'tn','middle',col);}
+function skip(x1,x2,y,col,lab){return '<path d="M'+x1+' '+y+' C'+x1+' '+(y-24)+' '+x2+' '+(y-24)+' '+x2+' '+(y-9)+'" fill="none" stroke="'+col+'" stroke-width="2.6"/>'+(lab?T((x1+x2)/2,y-27,lab,'tn','middle',col):'');}
+function diagrams(x0,y0){
+ var s='',dy=92,w=330;
+ RULES.forEach(function(r,k){var y=y0+k*dy+40,c=r.c;
+  s+=T(x0,y-38,r.n,'ts','start',c);
+  if(k===0){s+=T(x0+6,y+5,'h','tn','middle')+arr(x0+14,x0+70,y,c)+box(x0+70,y,80,26,'φ(W·)',c)+arr(x0+150,x0+230,y,c)+T(x0+238,y+5,'h′','tn','start');}
+  if(k===1){s+=T(x0+6,y+5,'c','tn','middle')+arr(x0+14,x0+90,y,c,2.6)+op(x0+99,y,'×f',c)+arr(x0+108,x0+190,y,c,2.6)+op(x0+199,y,'+',c)+arr(x0+208,x0+260,y,c,2.6)+T(x0+266,y+5,'c′','tn','start')+
+   '<line x1="'+(x0+199)+'" y1="'+(y+24)+'" x2="'+(x0+199)+'" y2="'+(y+9)+'" stroke="'+c+'" stroke-width="1.4"/>'+T(x0+207,y+26,'+ i·g, the new input','tn','start',c);}
+  if(k===2){s+=skip(x0+20,x0+220,y,c,'')+T(x0+6,y+5,'x','tn','middle')+arr(x0+14,x0+80,y,c)+box(x0+80,y,60,26,'H',c)+arr(x0+140,x0+178,y,c)+op(x0+188,y,'×t',c)+arr(x0+197,x0+211,y,c)+op(x0+220,y,'+',c)+arr(x0+229,x0+270,y,c)+T(x0+276,y+5,'y','tn','start');}
+  if(k===3){s+=skip(x0+20,x0+220,y,c,'')+T(x0+6,y+5,'x','tn','middle')+arr(x0+14,x0+90,y,c)+box(x0+90,y,70,26,'F',c)+arr(x0+160,x0+211,y,c)+op(x0+220,y,'+',c)+arr(x0+229,x0+270,y,c)+T(x0+276,y+5,'y','tn','start');}
+ });
+ return s;}
+function draw(){
+ var Tn=+document.getElementById('T').value,f=+document.getElementById('f').value,gn=+document.getElementById('gn').value;
+ document.getElementById('Tv').textContent=Tn;document.getElementById('fv').textContent=f.toFixed(3);document.getElementById('gv').textContent=gn.toFixed(2);
+ // gradient factor per step along each rule's best path
+ var per=[gn,f,f,1.0],s='';
+ s+=diagrams(16,30);
+ var X0=470,Y0=40,W=360,H=330,LMIN=-8,LMAX=4,px=function(t){return X0+t/Tn*W;},py=function(v){var l=Math.log10(Math.max(v,1e-12));l=Math.max(LMIN,Math.min(LMAX,l));return Y0+H-(l-LMIN)/(LMAX-LMIN)*H;};
+ s+='<rect x="'+X0+'" y="'+Y0+'" width="'+W+'" height="'+H+'" fill="var(--surface)" opacity="0.5" stroke="var(--border)"/>';
+ [[1e4,'10⁴'],[1,'1'],[1e-4,'10⁻⁴'],[1e-8,'10⁻⁸']].forEach(function(q){s+='<line x1="'+X0+'" y1="'+py(q[0])+'" x2="'+(X0+W)+'" y2="'+py(q[0])+'" stroke="var(--border)" stroke-width="'+(q[0]===1?1.2:0.6)+'"/>'+T(X0-6,py(q[0])+4,q[1],'tn','end');});
+ per.forEach(function(r,k){var pts=[];for(var t=0;t<=Tn;t++){var v=k===3?Math.pow(1.0,t)*(1+0.0*t):Math.pow(r,t);pts.push(px(t).toFixed(1)+','+py(v).toFixed(1));}
+  s+='<polyline points="'+pts.join(' ')+'" fill="none" stroke="'+RULES[k].c+'" stroke-width="2.6"'+(k===2?' stroke-dasharray="6 4"':'')+'/>';});
+ // label each curve at its end
+ var ends=per.map(function(r,k){return {k:k,y:py(Math.pow(r,Tn))};}).sort(function(a,b){return a.y-b.y;});
+ for(var i=1;i<ends.length;i++)if(ends[i].y-ends[i-1].y<14)ends[i].y=ends[i-1].y+14;
+ ends.forEach(function(e){s+=T(X0+W+6,e.y+4,RULES[e.k].e,'tn','start',RULES[e.k].c);});
+ s+=T(X0+W/2,Y0-10,'gradient reaching step 0 from step T (log scale)','ts','middle');
+ s+=T(X0,Y0+H+16,'T','tn','middle')+T(X0+W,Y0+H+16,'0','tn','middle')+T(X0+W/2,Y0+H+16,'steps back','tn','middle');
+ document.getElementById('g').innerHTML=s;
+ var fmt=function(v){return v<1e-3||v>1e3?v.toExponential(1):v.toFixed(3);};
+ document.getElementById('rd').innerHTML='After '+Tn+' steps: <span style="color:var(--warm-ink)">plain</span> '+fmt(Math.pow(gn,Tn))+', <span style="color:var(--pink-ink)">LSTM cell</span> and <span style="color:var(--violet-ink)">highway</span> f<sup>T</sup> = '+fmt(Math.pow(f,Tn))+
+  ', <span style="color:var(--blue-ink)">ResNet</span> exactly 1 along the shortcut, before anything the branches add. Push the gate to 1 and the LSTM and highway paths become the ResNet one; any gain other than exactly 1 makes the plain path vanish or explode.';
+}
+draw();
+</script>
+</body>
+</html>

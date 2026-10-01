@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VLAD: encoding residuals</title>
+<meta name="description" content="VLAD, the residual encoding He et al. cite: descriptors are assigned to their nearest visual word, and each word keeps the sum of the residuals x minus its center. Two images with identical bag-of-words counts get different VLAD vectors.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 24px;max-width:1100px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+.quiz{margin:0}
+svg{max-height:66vh}
+.row{gap:7px}
+button{height:30px;font-size:13px;padding:0 9px}
+.seg button{height:28px;font-size:12.5px;padding:0 9px}
+.rd{font-size:14px;line-height:1.5;min-height:1.5em}
+.cap{font-size:12.5px;line-height:1.55;padding-top:4px}
+.nav{display:flex;align-items:baseline;gap:10px}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Training deep networks demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>VLAD<span>: encode the residual, not the point</span></h1>
+<p class="quiz">He et al. cite VLAD (Jégou et al. 2010) as an earlier &ldquo;residual representation.&rdquo; An image is a bag of local descriptors (here, points in 2-D). A small dictionary of <b>visual words</b> (k-means centers) is learned once. <b>Bag of words</b> just counts how many descriptors land on each word. <b>VLAD</b> keeps, for each word, the <b>sum of residuals</b>, descriptor minus center: where in the cluster the descriptors fell. Flip between two images that a bag of words cannot tell apart.</p>
+
+<svg id="fig" viewBox="0 0 900 400" role="img">
+<title>Descriptors, visual words, residuals, and the two encodings</title>
+<desc>Left: an image's descriptors as points, each joined by a thin line to its nearest visual word, with each word's summed residual drawn as a thick arrow. Right: the bag-of-words histogram, the same for both images, and the VLAD vector, which differs.</desc>
+<g id="g"></g>
+</svg>
+<div class="row">
+  <div class="seg" id="imSeg"><button data-i="0" class="on">image A</button><button data-i="1">image B</button></div>
+  <button onclick="sample();draw()">New images</button>
+</div>
+<div class="rd" id="rd"></div>
+<div class="cap"><b>The recipe.</b> (1) Extract local descriptors, in practice a few hundred 128-d SIFT vectors describing small patches. (2) Once, offline, run k-means on descriptors from many images to get K centers c<sub>1</sub>&hellip;c<sub>K</sub> (often K = 64). (3) For each image, assign every descriptor x to its nearest center and accumulate v<sub>k</sub> = &Sigma;<sub>x&rarr;k</sub> (x &minus; c<sub>k</sub>). (4) Concatenate v<sub>1</sub>&hellip;v<sub>K</sub> into one K&middot;d vector (64 &times; 128 = 8192 numbers) and normalize it (a signed square root, then unit length). <b>Why residuals.</b> The center is the same for every image, so it carries no information about this one; the residual is the image-specific part, small and centered on zero, which makes it compare and compress well. That is the sense in which He et al. say encoding residual vectors works better than encoding the original vectors, the same intuition as F(x) = H(x) &minus; x: describe the change relative to a sensible reference. The Fisher vector is the soft, probabilistic version (a Gaussian mixture instead of k-means), and NetVLAD (Arandjelović et al. 2016) made VLAD a trainable layer. The analogy to ResNet is loose: VLAD is a fixed encoding, and its reference is a cluster center rather than the layer&rsquo;s own input.</div>
+
+<script>
+var NS='http://www.w3.org/2000/svg';
+function T(x,y,s,cls,anc,fill){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'"'+(anc?' text-anchor="'+anc+'"':'')+(fill?' style="fill:'+fill+'"':'')+'>'+s+'</text>';}
+function randn(){var u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+var COLS=['var(--blue)','var(--warm)','var(--green)','var(--violet)'],INKS=['var(--blue-ink)','var(--warm-ink)','var(--green-ink)','var(--violet-ink)'];
+// four visual words, fixed
+var C=[[-1.3,0.9],[1.3,1.0],[-1.1,-1.1],[1.2,-1.0]],K=4,IM=0,IMGS=null;
+// the two images put the same number of descriptors on each word, but on different
+// sides of it, so their counts match and their residual sums do not
+var COUNTS=[6,4,5,3];
+function sample(){
+ var off=C.map(function(){var a=Math.random()*2*Math.PI;return [Math.cos(a),Math.sin(a)];});
+ IMGS=[0,1].map(function(im){var P=[];C.forEach(function(c,k){var d=im?[-off[k][0],-off[k][1]]:off[k];
+  for(var i=0;i<COUNTS[k];i++){var p;do{p=[c[0]+0.38*d[0]+0.22*randn(),c[1]+0.38*d[1]+0.22*randn()];}while(nearest(p)!==k);P.push(p);}});return P;});
+}
+function nearest(p){var b=0,bd=1e9;C.forEach(function(c,k){var d=(p[0]-c[0])*(p[0]-c[0])+(p[1]-c[1])*(p[1]-c[1]);if(d<bd){bd=d;b=k;}});return b;}
+function encode(P){var bow=new Array(K).fill(0),v=C.map(function(){return [0,0];});
+ P.forEach(function(p){var k=nearest(p);bow[k]++;v[k][0]+=p[0]-C[k][0];v[k][1]+=p[1]-C[k][1];});return {bow:bow,v:v};}
+function draw(){
+ var g='',P=IMGS[IM],E=encode(P),S=360,X0=20,Y0=26,R=2.6;
+ var px=function(x){return X0+(x+R)/(2*R)*S;},py=function(y){return Y0+S-(y+R)/(2*R)*S;};
+ g+='<rect x="'+X0+'" y="'+Y0+'" width="'+S+'" height="'+S+'" fill="var(--surface)" stroke="var(--border)"/>';
+ g+='<defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="context-stroke"/></marker></defs>';
+ P.forEach(function(p){var k=nearest(p);g+='<line x1="'+px(C[k][0])+'" y1="'+py(C[k][1])+'" x2="'+px(p[0])+'" y2="'+py(p[1])+'" stroke="'+COLS[k]+'" stroke-width="1" opacity="0.5"/>';});
+ P.forEach(function(p){var k=nearest(p);g+='<circle cx="'+px(p[0]).toFixed(1)+'" cy="'+py(p[1]).toFixed(1)+'" r="4" fill="'+COLS[k]+'" stroke="var(--surface)"/>';});
+ C.forEach(function(c,k){var v=E.v[k],s=0.35;
+  g+='<line x1="'+px(c[0])+'" y1="'+py(c[1])+'" x2="'+px(c[0]+s*v[0]).toFixed(1)+'" y2="'+py(c[1]+s*v[1]).toFixed(1)+'" stroke="'+INKS[k]+'" stroke-width="3.2" marker-end="url(#ah)"/>';
+  g+='<rect x="'+(px(c[0])-6)+'" y="'+(py(c[1])-6)+'" width="12" height="12" fill="var(--surface)" stroke="'+INKS[k]+'" stroke-width="2"/>'+T(px(c[0])-10,py(c[1])-10,'c'+(k+1),'tn','end',INKS[k]);});
+ g+=T(X0+S/2,Y0-8,'image '+(IM?'B':'A')+': words (squares), residual sums (arrows)','ts','middle');
+ // right: bag of words
+ var BX=440,BY=40,BW=420,BH=120;
+ g+=T(BX,BY-12,'bag of words: count per visual word','ts','start');
+ var mx=Math.max.apply(null,COUNTS)+1;
+ E.bow.forEach(function(n,k){var w=BW/K*0.6,x=BX+k*BW/K+BW/K*0.2,h=n/mx*BH;g+='<rect x="'+x+'" y="'+(BY+BH-h)+'" width="'+w+'" height="'+h+'" fill="'+COLS[k]+'" opacity="0.75"/>'+T(x+w/2,BY+BH-h-4,String(n),'tn','middle')+T(x+w/2,BY+BH+14,'c'+(k+1),'tn','middle',INKS[k]);});
+ g+='<line x1="'+BX+'" y1="'+(BY+BH)+'" x2="'+(BX+BW)+'" y2="'+(BY+BH)+'" stroke="var(--border-strong)"/>';
+ // right: VLAD, 2K numbers
+ var VY=230,VH=130,vals=[];E.v.forEach(function(v){vals.push(v[0],v[1]);});
+ g+=T(BX,VY-12,'VLAD: summed residual per word (x and y), '+(2*K)+' numbers','ts','start');
+ var vm=3,cy=VY+VH/2,bw=BW/(2*K);
+ g+='<line x1="'+BX+'" y1="'+cy+'" x2="'+(BX+BW)+'" y2="'+cy+'" stroke="var(--border-strong)"/>';
+ vals.forEach(function(v,i){var k=Math.floor(i/2),h=Math.max(-1,Math.min(1,v/vm))*(VH/2),x=BX+i*bw+bw*0.15;
+  g+='<rect x="'+x+'" y="'+Math.min(cy,cy-h)+'" width="'+(bw*0.7)+'" height="'+Math.abs(h)+'" fill="'+COLS[k]+'" opacity="'+(i%2?0.55:0.85)+'"/>'+T(x+bw*0.35,VY+VH+14,'c'+(k+1)+(i%2?'y':'x'),'tn','middle',INKS[k]);});
+ document.getElementById('g').innerHTML=g;
+ var A=encode(IMGS[0]),B=encode(IMGS[1]),dv=0;A.v.forEach(function(v,k){dv+=Math.hypot(v[0]-B.v[k][0],v[1]-B.v[k][1]);});
+ document.getElementById('rd').innerHTML='Bag of words: image A = ['+A.bow.join(', ')+'], image B = ['+B.bow.join(', ')+'], <b>identical</b>. VLAD: the summed residuals point in opposite directions, so the two vectors differ (total difference '+dv.toFixed(1)+'). With only '+K+' words, counts throw away where each descriptor sits; residuals keep it.';
+}
+document.getElementById('imSeg').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;IM=+b.dataset.i;
+ Array.from(this.children).forEach(function(x){x.classList.toggle('on',x===b);});draw();});
+sample();draw();
+</script>
+</body>
+</html>
