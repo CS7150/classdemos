@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Elman's word categories</title>
+<meta name="description" content="Elman 1990's sentence experiment, trained live in the browser: a simple recurrent network learns to predict the next word of sentences like 'man eat cookie', and its hidden states cluster the words into categories it was never told. With the controls the paper did not run: an untrained network, raw co-occurrence counts, three versions of the zog test, a probe checked on held-out words, and an intervention along the probe's direction.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 24px;max-width:1150px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+h2{font-size:15.5px;font-weight:600;margin:10px 0 0}
+.quiz{margin:0}
+.row{gap:7px}
+button{height:30px;font-size:13px;padding:0 10px}
+button.main{min-width:96px}
+.seg button{height:28px;font-size:12.5px;padding:0 9px}
+select{height:30px;font-size:13px;padding:0 6px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:34px}
+input[type=range]{flex:0 1 200px;min-width:90px}
+.rd{font-size:14px;line-height:1.55;min-height:1.6em}
+.cap{font-size:12.5px;line-height:1.6;padding-top:4px}
+.nav{display:flex;align-items:baseline;gap:10px}
+.status{font-size:13px;color:var(--text-muted);font-variant-numeric:tabular-nums}
+svg text{font-family:inherit}
+.leaf{cursor:pointer}
+#palette{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
+#palette .grp{display:flex;gap:3px;align-items:center;flex-wrap:wrap}
+#palette .grp span{font-size:11.5px;color:var(--text-muted);margin-right:2px}
+#palette button{height:26px;font-size:12.5px;padding:0 7px;border-width:1px}
+.sent{font-size:15px;line-height:1.6}
+.sent .old{color:var(--text-muted)}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Language modeling demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Elman&rsquo;s word categories<span>: what a next-word predictor learns about words</span></h1>
+<p class="quiz">Elman 1990 made 10,000 short sentences from a 29-word vocabulary, such as <b>man eat cookie</b>, <b>dragon smash plate</b>, <b>cat sleep</b>, ran them together with no breaks, and trained a simple recurrent network to predict each next word. The network sees every word as an arbitrary one-hot code, yet its hidden states end up grouping the words into categories. Below, the experiment runs live, along with the controls students asked for: is the structure learned or just in the data, is the zog result real, and does the network actually <i>use</i> the noun/verb distinction?</p>
+
+<div class="row">
+  <button class="main" id="go">Train</button>
+  <button id="reset">New network</button>
+  <span class="klab">hidden units</span><select id="H"><option>20</option><option selected>50</option><option>150</option></select>
+  <span class="klab">speed</span><select id="speed"><option value="3000">slow</option><option value="20000" selected>normal</option><option value="0">fast</option></select>
+  <span class="status" id="status"></span>
+</div>
+
+<h2>1. Training: predicting the next word</h2>
+<svg id="train" viewBox="0 0 1120 290" role="img"><title>Training on the word stream</title><desc>Left, the last words the network trained on, each with the probability it gave to the word that actually came next, and its full prediction for the next word. Right, the error in bits per word on held-out sentences as training proceeds, against n-gram baselines.</desc><g id="gt"></g></svg>
+<div class="rd" id="rdTrain"></div>
+
+<h2>2. The hidden state each word produces, averaged over all its occurrences</h2>
+<div class="row">
+  <span class="klab">vectors from</span>
+  <div class="seg" id="srcSeg"><button data-s="net" class="on">trained network</button><button data-s="init">untrained network</button><button data-s="cooc">co-occurrence counts</button></div>
+  <span class="klab">clustering</span>
+  <div class="seg" id="linkSeg"><button data-l="ward" class="on">Ward</button><button data-l="avg">average linkage</button></div>
+  <span class="klab">zog test</span>
+  <div class="seg" id="zogSeg"><button data-z="none" class="on">no zog</button><button data-z="man">zog where man was</button><button data-z="cookie">where cookie was</button><button data-z="random">at random places</button></div>
+</div>
+<svg id="tree" viewBox="0 0 1120 590" role="img"><title>Clustering of the words by their hidden states</title><desc>Left, a tree joining the words whose averaged hidden states are closest; right, the same vectors projected onto their two main directions, with the path of the sentence built below.</desc><g id="gtr"></g></svg>
+<div class="rd" id="rdTree"></div>
+
+<h2>3. Is the noun/verb distinction really there, and is it used?</h2>
+<div class="row" id="palette"></div>
+<div class="row">
+  <div class="sent" id="sent"></div>
+  <button id="undo">&#9003; back</button><button id="clear">clear</button><button id="rand">random sentence</button>
+</div>
+<div class="row">
+  <span class="klab">push the hidden state along the probe&rsquo;s direction: &larr; verb-like &nbsp;</span>
+  <input type="range" id="alpha" min="-5" max="5" step="0.1" value="0"><span class="klab">&nbsp; noun-like &rarr;</span><span class="knum" id="alphaV">0</span>
+</div>
+<svg id="probe" viewBox="0 0 1120 290" role="img"><title>The probe and the intervention</title><desc>Left, how accurately a linear probe reads noun versus verb from the hidden state, for words it was fit on and for held-out words, in the trained and an untrained network. Right, the network's prediction for the next word after the sentence above, after pushing its hidden state along the probe's direction.</desc><g id="gp"></g></svg>
+<div class="rd" id="rdProbe"></div>
+
+<div class="cap">
+<div><b>The setup.</b> Elman&rsquo;s lexicon has 13 kinds of word, such as humans (man, woman, boy, girl), food (cookie, bread, sandwich), and verbs that take a food (eat) or a fragile object (break, smash), and 16 sentence templates such as <i>human eat food</i> or <i>animal move</i>; some words belong to two kinds (lion is an animal and an aggressor). Each word is a one-hot input, so &ldquo;man&rdquo; and &ldquo;woman&rdquo; start out exactly as different as &ldquo;man&rdquo; and &ldquo;plate.&rdquo; Hidden units are sigmoids, the context units copy the previous hidden layer, the output is a softmax over the 30 words, and training is Elman&rsquo;s one-step backprop, online, for 6 passes over about 27,000 words. The n-gram lines are the error of counting models fit to the same sentences and tested, like the network, on held-out ones: the trigram (two words of context) is close to the best possible, because a sentence is at most three words long. Beating the bigram requires memory: after <i>eat</i>, whether a human, animal or food comes next depends on who was eating.</div>
+<div><b>What the tree shows, and what it does not.</b> Elman reported a top split into nouns and verbs. Here the tree splits by <b>what each word predicts</b>: animate nouns (a verb comes next), transitive verbs (an object comes next), and everything that ends a sentence, both inanimate nouns and intransitive verbs like <i>sleep</i> (a new subject comes next). Within those the categories are clean: humans, animals, aggressors, food, fragile things. That is the point Parth and Ardhra raised. The averaged hidden state is shaped by the prediction task, and <b>co-occurrence counts</b> of the neighboring words recover much of the same tree with no network at all, so the structure is in the data; what the network adds is learning it from prediction, and compressing it. The <b>untrained network</b> shows no categories: a random network can only tell the words apart, not group them. And the tree itself is a choice: switch to average linkage and the same vectors make a different tree, which is why Teoman wants a test rather than a picture.</div>
+<div><b>The zog test.</b> Elman added a novel word, zog, replaced every <i>man</i> with it in new sentences, and found zog&rsquo;s hidden state among the humans, with no training on zog. Zog&rsquo;s own input weights are random and untrained, so its hidden state comes almost entirely from the words <i>before</i> it, and zog lands wherever its positions put it: with the humans where man was, with the foods where cookie was, among the sentence-ending words at random places. Ankit&rsquo;s worry is right: the test shows the representation reflects context, which is useful, but it is built into how zog was placed, and it is not evidence the network learned anything about zog.</div>
+<div><b>Probe, control, intervention.</b> The probe is a logistic regression reading &ldquo;is the current word a noun?&rdquo; from the hidden state. It is fit on most words and tested on words it never saw (woman, dog, rock, plate, bread, chase, sleep, smell, break), because on the words it was fit on a probe can simply memorize which of the 29 one-hot words are nouns. Even so, the probe needs a control: an <i>untrained</i> network with random weights also scores well above chance on held-out words, because its context units carry the previous word forward, and the previous word hints at the current one&rsquo;s category (after a verb, a noun is likely). The evidence is the gap between the two networks, not the trained network&rsquo;s accuracy alone. Then the causal test: push the hidden state along the probe&rsquo;s direction and watch the prediction. After &ldquo;&hellip; man&rdquo; the network expects a verb; push the state toward the verb side and it expects a noun instead, as if it had just read a verb. The distinction is not only readable, the network uses it.</div>
+</div>
+
+<script>
+// ---------------------------------------------------------------- the grammar (after Elman's Tables 3 and 4)
+function rng(seed){var a=seed>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+var CAT={'NOUN-HUM':['man','woman','boy','girl'],'NOUN-ANIM':['cat','mouse','dog','lion'],'NOUN-AGRESS':['dragon','monster','lion'],
+ 'NOUN-INANIM':['book','rock','car'],'NOUN-FRAG':['glass','plate'],'NOUN-FOOD':['cookie','bread','sandwich'],
+ 'VERB-INTRAN':['think','sleep','exist'],'VERB-TRAN':['see','chase','like'],'VERB-AGPAT':['move','break'],'VERB-PERCEPT':['smell','see'],
+ 'VERB-DESTROY':['break','smash'],'VERB-EAT':['eat']};
+var CATNAME={'NOUN-HUM':'human','NOUN-ANIM':'animal','NOUN-AGRESS':'aggressor','NOUN-INANIM':'inanimate','NOUN-FRAG':'fragile','NOUN-FOOD':'food',
+ 'VERB-INTRAN':'intransitive','VERB-TRAN':'transitive','VERB-AGPAT':'move/break','VERB-PERCEPT':'perceive','VERB-DESTROY':'destroy','VERB-EAT':'eat'};
+var CATCOL={'NOUN-HUM':'#185FA5','NOUN-ANIM':'#378ADD','NOUN-AGRESS':'#7F77DD','NOUN-INANIM':'#0F6E56','NOUN-FRAG':'#1D9E75','NOUN-FOOD':'#5aa34a',
+ 'VERB-INTRAN':'#BA7517','VERB-TRAN':'#D85A30','VERB-AGPAT':'#993C1D','VERB-PERCEPT':'#D4537E','VERB-DESTROY':'#E24B4A','VERB-EAT':'#993556'};
+var TPL=[['NOUN-HUM','VERB-EAT','NOUN-FOOD'],['NOUN-HUM','VERB-PERCEPT','NOUN-INANIM'],['NOUN-HUM','VERB-DESTROY','NOUN-FRAG'],['NOUN-HUM','VERB-INTRAN'],
+ ['NOUN-HUM','VERB-TRAN','NOUN-HUM'],['NOUN-HUM','VERB-AGPAT','NOUN-INANIM'],['NOUN-HUM','VERB-AGPAT'],['NOUN-ANIM','VERB-EAT','NOUN-FOOD'],
+ ['NOUN-ANIM','VERB-TRAN','NOUN-ANIM'],['NOUN-ANIM','VERB-AGPAT','NOUN-INANIM'],['NOUN-ANIM','VERB-AGPAT'],['NOUN-INANIM','VERB-AGPAT'],
+ ['NOUN-AGRESS','VERB-DESTROY','NOUN-FRAG'],['NOUN-AGRESS','VERB-EAT','NOUN-HUM'],['NOUN-AGRESS','VERB-EAT','NOUN-ANIM'],['NOUN-AGRESS','VERB-EAT','NOUN-FOOD']];
+var VOCAB=[],WCAT={};for(var c in CAT)CAT[c].forEach(function(w){if(VOCAB.indexOf(w)<0){VOCAB.push(w);WCAT[w]=c;}});
+VOCAB.push('zog');WCAT.zog='ZOG';CATCOL.ZOG='var(--text-primary)';
+var V=VOCAB.length,IDX={};VOCAB.forEach(function(w,i){IDX[w]=i;});var ZOG=IDX.zog;
+function isNoun(w){return WCAT[w]&&WCAT[w].indexOf('NOUN')===0;}
+function corpus(n,r,sentOut){var s=[];for(var i=0;i<n;i++){var t=TPL[Math.floor(r()*TPL.length)],st=[];t.forEach(function(c){var ws=CAT[c];var w=IDX[ws[Math.floor(r()*ws.length)]];s.push(w);st.push(w);});if(sentOut)sentOut.push(st);}return s;}
+var SEED=1,HID=50,TRAIN=null,TEST=null,REFS=null;
+function makeCorpora(){TRAIN=corpus(10000,rng(SEED*7+1));TEST=corpus(1200,rng(SEED*7+2));REFS=ngramRefs(TRAIN,TEST);}
+// held-out cross-entropy (bits) of interpolated n-gram counts
+function ngramRefs(tr,te){
+ function counts(n){var m=new Map();for(var i=n-1;i<tr.length;i++){var k=tr.slice(i-n+1,i+1).join(',');m.set(k,(m.get(k)||0)+1);}return m;}
+ var c1=counts(1),c2=counts(2),c3=counts(3),N=tr.length;
+ function p1(w){return ((c1.get(''+w)||0)+0.5)/(N+0.5*V);}
+ function p2(a,w){var d=c1.get(''+a)||0;return d?0.95*(c2.get(a+','+w)||0)/d+0.05*p1(w):p1(w);}
+ function p3(a,b,w){var d=c2.get(a+','+b)||0;return d?0.95*(c3.get(a+','+b+','+w)||0)/d+0.05*p2(b,w):p2(b,w);}
+ var H=[0,0,0],n=0;for(var i=2;i<te.length;i++){H[0]-=Math.log2(p1(te[i]));H[1]-=Math.log2(p2(te[i-1],te[i]));H[2]-=Math.log2(p3(te[i-2],te[i-1],te[i]));n++;}
+ return H.map(function(h){return h/n;});}
+// ---------------------------------------------------------------- the network
+function makeNet(seed){var H=HID,r=rng(seed),u=function(s){return (r()*2-1)*s;};
+ var n={H:H,Wx:new Float32Array(V*H),Wh:new Float32Array(H*H),bh:new Float32Array(H),Wo:new Float32Array(V*H),bo:new Float32Array(V),
+  t:0,pass:0,c:new Float32Array(H).fill(0.5),curve:[],lr:0.1};
+ for(var i=0;i<V*H;i++)n.Wx[i]=u(0.1);for(i=0;i<H*H;i++)n.Wh[i]=u(1/Math.sqrt(H));for(i=0;i<V*H;i++)n.Wo[i]=u(1/Math.sqrt(H));return n;}
+function cloneNet(n){return {H:n.H,Wx:n.Wx.slice(),Wh:n.Wh.slice(),bh:n.bh.slice(),Wo:n.Wo.slice(),bo:n.bo.slice()};}
+function hstep(n,x,c,h){var H=n.H;for(var j=0;j<H;j++){var s=n.bh[j]+n.Wx[x*H+j],r=j*H;for(var k=0;k<H;k++)s+=n.Wh[r+k]*c[k];h[j]=1/(1+Math.exp(-s));}}
+function ostep(n,h,o){var H=n.H,m=-1e9;for(var v=0;v<V;v++){var s=n.bo[v],r=v*H;for(var j=0;j<H;j++)s+=n.Wo[r+j]*h[j];o[v]=s;if(s>m)m=s;}var z=0;for(v=0;v<V;v++){o[v]=Math.exp(o[v]-m);z+=o[v];}for(v=0;v<V;v++)o[v]/=z;}
+var hT,oT,dhT,LAST=[];   // scratch, and the last trained steps for the ticker
+function trainStep(n){var H=n.H,seq=TRAIN;if(n.t+1>=seq.length){n.t=0;n.pass++;}
+ var x=seq[n.t],y=seq[n.t+1];hstep(n,x,n.c,hT);ostep(n,hT,oT);
+ var lr=n.lr;dhT.fill(0);
+ for(var v=0;v<V;v++){var g=oT[v]-(v===y?1:0),r=v*H;n.bo[v]-=lr*g;for(var j=0;j<H;j++){dhT[j]+=g*n.Wo[r+j];n.Wo[r+j]-=lr*g*hT[j];}}
+ for(j=0;j<H;j++){var gz=dhT[j]*hT[j]*(1-hT[j]);n.bh[j]-=lr*gz;n.Wx[x*H+j]-=lr*gz;var rh=j*H;for(var k=0;k<H;k++)n.Wh[rh+k]-=lr*gz*n.c[k];}
+ n.c.set(hT);n.t++;return [x,y,oT[y]];}
+function testLoss(n){var H=n.H,c=new Float32Array(H).fill(0.5),h=new Float32Array(H),o=new Float32Array(V),L=0;
+ for(var t=0;t+1<TEST.length;t++){hstep(n,TEST[t],c,h);ostep(n,h,o);if(t>=2)L-=Math.log2(Math.max(o[TEST[t+1]],1e-12));c.set(h);}return L/(TEST.length-3);}
+// averaged hidden vectors (and token states) over a corpus
+function runStates(n,seq,keep){var H=n.H,c=new Float32Array(H).fill(0.5),h=new Float32Array(H),sum=[],cnt=new Array(V).fill(0),S=keep?[]:null;
+ for(var v=0;v<V;v++)sum.push(new Float64Array(H));
+ for(var t=0;t<seq.length;t++){var x=seq[t];hstep(n,x,c,h);for(var j=0;j<H;j++)sum[x][j]+=h[j];cnt[x]++;if(S)S.push(Float32Array.from(h));c.set(h);}
+ return {avg:sum.map(function(s,i){return cnt[i]?Array.from(s,function(a){return a/cnt[i];}):null;}),states:S};}
+function coocVectors(seq){var M=[];for(var v=0;v<V;v++)M.push(new Float64Array(2*V));var cnt=new Array(V).fill(0);
+ for(var t=0;t<seq.length;t++){var w=seq[t];cnt[w]++;if(t>0)M[w][seq[t-1]]++;if(t+1<seq.length)M[w][V+seq[t+1]]++;}
+ return M.map(function(r,i){return cnt[i]?Array.from(r,function(a){return a/cnt[i];}):null;});}
+// ---------------------------------------------------------------- analysis helpers
+function dist(a,b){var s=0;for(var i=0;i<a.length;i++){var d=a[i]-b[i];s+=d*d;}return Math.sqrt(s);}
+function cosd(a,b){var p=0,x=0,y=0;for(var i=0;i<a.length;i++){p+=a[i]*b[i];x+=a[i]*a[i];y+=b[i]*b[i];}return 1-p/Math.sqrt(x*y+1e-12);}
+function cluster(ids,vecs,link){   // agglomerative; returns root {l,r,h,ids}
+ var cl=ids.map(function(i){return {leaf:i,v:vecs[i].slice(),n:1,h:0,ids:[i]};});
+ while(cl.length>1){var bi=0,bj=1,bd=1e18;
+  for(var i=0;i<cl.length;i++)for(var j=i+1;j<cl.length;j++){var a=cl[i],b=cl[j],d;
+   if(link==='ward')d=dist(a.v,b.v)*Math.sqrt(2*a.n*b.n/(a.n+b.n));
+   else{d=0;for(var p=0;p<a.ids.length;p++)for(var q=0;q<b.ids.length;q++)d+=dist(vecs[a.ids[p]],vecs[b.ids[q]]);d/=a.ids.length*b.ids.length;}
+   if(d<bd){bd=d;bi=i;bj=j;}}
+  var A=cl[bi],B=cl[bj],v=A.v.map(function(x,k){return (x*A.n+B.v[k]*B.n)/(A.n+B.n);});
+  var m={l:A,r:B,v:v,n:A.n+B.n,h:bd,ids:A.ids.concat(B.ids)};cl.splice(bj,1);cl.splice(bi,1,m);}
+ return cl[0];}
+var PCPREV=null;
+function pca2(ids,vecs){var H=vecs[ids[0]].length,mean=new Float64Array(H);ids.forEach(function(i){for(var k=0;k<H;k++)mean[k]+=vecs[i][k]/ids.length;});
+ var X=ids.map(function(i){return vecs[i].map(function(a,k){return a-mean[k];});}),pcs=[];
+ for(var c=0;c<2;c++){var r=rng(5+c),w=Array.from({length:H},function(){return r()-0.5;});
+  for(var it=0;it<60;it++){var nw=new Float64Array(H);X.forEach(function(x){var p=0;for(var k=0;k<H;k++)p+=x[k]*w[k];for(k=0;k<H;k++)nw[k]+=p*x[k];});
+   pcs.forEach(function(pc){var p=0;for(var k=0;k<H;k++)p+=nw[k]*pc[k];for(k=0;k<H;k++)nw[k]-=p*pc[k];});
+   var nr=Math.sqrt(nw.reduce(function(s,a){return s+a*a;},0))||1;w=Array.from(nw,function(a){return a/nr;});}
+  pcs.push(w);}
+ if(PCPREV&&PCPREV[0].length===H)pcs.forEach(function(pc,c){var p=0;for(var k=0;k<H;k++)p+=pc[k]*PCPREV[c][k];if(p<0)for(k=0;k<H;k++)pc[k]=-pc[k];});
+ PCPREV=pcs;return {mean:mean,pcs:pcs,proj:function(v){return pcs.map(function(pc){var p=0;for(var k=0;k<H;k++)p+=(v[k]-mean[k])*pc[k];return p;});}};}
+// the probe: logistic regression, "is the current word a noun?", tested on held-out words
+var HOLD=['woman','dog','rock','plate','bread','chase','sleep','smell','break'];
+function fitProbe(n,epochs){var seq=TEST.slice(0,5000),S=runStates(n,seq,true).states,H=n.H,w=new Float64Array(H),b=0,tr=[],te=[];
+ S.forEach(function(h,t){var word=VOCAB[seq[t]];(HOLD.indexOf(word)>=0?te:tr).push([h,isNoun(word)?1:0]);});
+ for(var ep=0;ep<epochs;ep++)for(var i=0;i<tr.length;i++){var h=tr[i][0],y=tr[i][1],s=b;for(var j=0;j<H;j++)s+=w[j]*h[j];var g=1/(1+Math.exp(-s))-y;b-=0.05*g;for(j=0;j<H;j++)w[j]-=0.05*g*h[j];}
+ function acc(set){var ok=0;set.forEach(function(e){var s=b;for(var j=0;j<H;j++)s+=w[j]*e[0][j];if((s>0)===(e[1]===1))ok++;});return ok/set.length;}
+ return {w:w,b:b,fit:acc(tr),held:acc(te)};}
+// ---------------------------------------------------------------- state
+var NET=null,NET0=null,RUN=false,SPEED=20000,LASTT=0,MAXPASS=6,SRC='net',LINK='ward',ZMODE='none',AN=null,PROBE=null,PROBE0=null,SENT=[],ALPHA=0,PRIME=null,LASTAN=0,HOVER=null;
+function reset(){makeCorpora();NET=makeNet(SEED*31+3);NET0=cloneNet(NET);hT=new Float32Array(HID);oT=new Float32Array(V);dhT=new Float32Array(HID);
+ NET.curve=[[0,testLoss(NET)]];LAST=[];PCPREV=null;PROBE=null;PROBE0=fitProbe(NET0,120);
+ var pr=[];corpus(1,rng(99),pr);PRIME=pr[0];analyze();drawAll();}
+function zogCorpus(){var r=rng(SEED*7+3),seq=corpus(3000,r);
+ if(ZMODE==='man')return seq.map(function(x){return x===IDX.man?ZOG:x;});
+ if(ZMODE==='cookie')return seq.map(function(x){return x===IDX.cookie?ZOG:x;});
+ if(ZMODE==='random'){var r2=rng(SEED*7+4);return seq.map(function(x){return r2()<0.035?ZOG:x;});}
+ return seq;}
+function analyze(){
+ var seq=zogCorpus(),vecs;
+ if(SRC==='cooc')vecs=coocVectors(seq);else vecs=runStates(SRC==='init'?NET0:NET,seq,false).avg;
+ var ids=[];for(var i=0;i<V;i++)if(vecs[i]&&(i!==ZOG||ZMODE!=='none'))ids.push(i);
+ if(ZMODE==='man')ids=ids.filter(function(i){return i!==IDX.man;});if(ZMODE==='cookie')ids=ids.filter(function(i){return i!==IDX.cookie;});
+ var tree=cluster(ids,vecs,LINK),pc=pca2(ids,vecs);
+ AN={vecs:vecs,ids:ids,tree:tree,pc:pc};LASTAN=performance.now();}
+function frame(now){
+ if(RUN){var t0=performance.now(),i=0,dt=Math.min(100,now-(LASTT||now)),quota=SPEED?Math.max(1,Math.round(SPEED*dt/1000)):1e9;
+  while(performance.now()-t0<14&&i<quota){var r=trainStep(NET);if(i%37===0){LAST.push(r);if(LAST.length>14)LAST.shift();}i++;
+   if(NET.pass>=MAXPASS){RUN=false;document.getElementById('go').textContent='Train';break;}}
+  var p=NET.pass+NET.t/TRAIN.length,lc=NET.curve[NET.curve.length-1][0];
+  if(p-lc>0.08||!RUN)NET.curve.push([p,testLoss(NET)]);
+  if(performance.now()-LASTAN>500||!RUN){analyze();if(!RUN)PROBE=fitProbe(NET,40);}
+  drawAll();}
+ LASTT=now;requestAnimationFrame(frame);}
+// ---------------------------------------------------------------- drawing
+function T(x,y,s,cls,anc,fill,extra){return '<text class="'+(cls||'tn')+'" x="'+(+x).toFixed(1)+'" y="'+(+y).toFixed(1)+'"'+(anc?' text-anchor="'+anc+'"':'')+(fill?' style="fill:'+fill+'"':'')+(extra||'')+'>'+s+'</text>';}
+function R(x,y,w,h,fill,extra){return '<rect x="'+(+x).toFixed(1)+'" y="'+(+y).toFixed(1)+'" width="'+Math.max(0,w).toFixed(1)+'" height="'+Math.max(0,h).toFixed(1)+'" fill="'+fill+'"'+(extra||'')+'/>';}
+function wcol(i){return CATCOL[WCAT[VOCAB[i]]];}
+var ORDER=[];for(var cc in CAT)CAT[cc].forEach(function(w){var i=IDX[w];if(ORDER.indexOf(i)<0)ORDER.push(i);});
+function predBars(o,x0,y0,W,Hh,title){   // a bar per word, grouped by category
+ var s=T(x0,y0-8,title,'ts','start'),bw=W/(V-1);
+ ORDER.forEach(function(i,k){var x=x0+k*bw,h=o[i]*Hh;s+=R(x+1,y0+Hh-h,bw-2,h,wcol(i),' opacity="0.85"')+
+   '<text class="tn" transform="translate('+(x+bw/2+4).toFixed(1)+','+(y0+Hh+6)+') rotate(-90)" text-anchor="end" style="font-size:11px">'+VOCAB[i]+'</text>';});
+ s+='<line x1="'+x0+'" y1="'+(y0+Hh)+'" x2="'+(x0+W)+'" y2="'+(y0+Hh)+'" stroke="var(--border-strong)"/>';
+ var nn=0;ORDER.forEach(function(i){if(isNoun(VOCAB[i]))nn+=o[i];});
+ var xs=x0+ORDER.filter(function(i){return isNoun(VOCAB[i]);}).length*bw;
+ s+='<line x1="'+xs.toFixed(1)+'" y1="'+(y0-2)+'" x2="'+xs.toFixed(1)+'" y2="'+(y0+Hh)+'" stroke="var(--border-strong)" stroke-dasharray="3 3"/>'+
+   T(xs-4,y0+10,'nouns '+(nn*100).toFixed(0)+'%','tn','end')+T(xs+4,y0+10,'verbs '+((1-nn)*100).toFixed(0)+'%','tn','start');
+ return s;}
+function drawTrain(){
+ var s='',H=NET.H;
+ // ticker
+ s+=T(16,18,'the stream the network is training on, and the probability it gave the word that came next','ts','start');
+ var tx=16,ty=40;
+ LAST.slice(-9).forEach(function(r,k){var w=VOCAB[r[0]],nx=VOCAB[r[1]],x=tx+k*60;
+  s+=R(x,ty,54,22,'var(--surface)',' stroke="var(--border)" rx="4"')+T(x+27,ty+16,w,'tn','middle',wcol(r[0]));
+  s+=R(x+4,ty+28,46,8,'var(--surface-1)',' rx="2"')+R(x+4,ty+28,46*r[2],8,'var(--green)',' rx="2"')+T(x+27,ty+50,'&rarr; '+nx,'tn','middle',null,' style="font-size:11.5px"');});
+ // full prediction after the latest step
+ var lx=16,ly=124;
+ if(LAST.length){var c=new Float32Array(H).fill(0.5),h=new Float32Array(H),o=new Float32Array(V),k0=Math.max(0,NET.t-6);
+  for(var t=k0;t<NET.t;t++){hstep(NET,TRAIN[t],c,h);c.set(h);}ostep(NET,h,o);
+  s+=predBars(o,lx,ly+18,560,92,'its prediction after &ldquo;&hellip; '+TRAIN.slice(Math.max(0,NET.t-3),NET.t).map(function(i){return VOCAB[i];}).join(' ')+'&rdquo;');}
+ else s+=T(lx,ly+40,'press Train','tn','start');
+ // loss curve
+ var cx=640,cy=24,cw=440,ch=170,ymax=Math.max(REFS[0],NET.curve[0][1])*1.03,ymin=2.4,np=Math.max(MAXPASS,1);
+ var py=function(v){return cy+ch-(Math.max(ymin,Math.min(ymax,v))-ymin)/(ymax-ymin)*ch;},px=function(p){return cx+p/np*cw;};
+ s+=T(cx,16,'error on held-out sentences (bits per word)','ts','start');
+ s+=R(cx,cy,cw,ch,'var(--surface)',' opacity="0.6" stroke="var(--border)"');
+ [['counting 1 word (unigram)',REFS[0]],['counting pairs (bigram)',REFS[1]],['counting triples (trigram)',REFS[2]]].forEach(function(q){
+  s+='<line x1="'+cx+'" y1="'+py(q[1]).toFixed(1)+'" x2="'+(cx+cw)+'" y2="'+py(q[1]).toFixed(1)+'" stroke="var(--text-muted)" stroke-dasharray="4 3"/>'+T(cx+cw-4,py(q[1])-4,q[0]+' '+q[1].toFixed(2),'tn','end');});
+ for(var v=Math.ceil(ymin*2)/2;v<=ymax;v+=0.5)s+=T(cx-6,py(v)+4,v.toFixed(1),'tn','end');
+ var pts=NET.curve.map(function(q){return px(Math.min(np,q[0])).toFixed(1)+','+py(q[1]).toFixed(1);});
+ if(pts.length>1)s+='<polyline points="'+pts.join(' ')+'" fill="none" stroke="var(--blue)" stroke-width="2.6"/>';
+ var last=NET.curve[NET.curve.length-1];s+='<circle cx="'+px(Math.min(np,last[0])).toFixed(1)+'" cy="'+py(last[1]).toFixed(1)+'" r="4" fill="var(--blue)"/>';
+ for(var p=0;p<=np;p++)s+=T(px(p),cy+ch+16,String(p),'tn','middle');
+ s+=T(cx+cw/2,cy+ch+34,'passes through the 27,000-word training stream','tn','middle');
+ document.getElementById('gt').innerHTML=s;
+ document.getElementById('rdTrain').innerHTML='Network: <b>'+last[1].toFixed(2)+'</b> bits per word after '+last[0].toFixed(1)+' passes. '+
+  (last[1]<REFS[1]-0.02?'It has beaten the bigram, so it is using more than the last word: it remembers who the subject was.':'Counting pairs of words gets '+REFS[1].toFixed(2)+'; to beat it the network has to remember more than the last word.');
+ document.getElementById('status').textContent='pass '+(NET.pass+NET.t/TRAIN.length).toFixed(2)+' of '+MAXPASS+(RUN?' · training':'');}
+function drawTree(){
+ var s='',tree=AN.tree,leaves=tree.ids,x0=110,y0=24,lh=(560-y0-20)/leaves.length,W=420,hmax=tree.h||1;
+ var pos={},yOf={};leaves.forEach(function(i,k){yOf[i]=y0+k*lh+lh/2;});
+ var title=SRC==='cooc'?'counts of the word before and after':SRC==='init'?'untrained network':'trained network';
+ s+=T(16,14,'tree: words joined in order of closeness ('+title+')','ts','start');
+ function walk(nd){if(nd.leaf!==undefined)return [x0,yOf[nd.leaf]];var a=walk(nd.l),b=walk(nd.r),x=x0+nd.h/hmax*W;
+  s+='<path d="M'+a[0].toFixed(1)+' '+a[1].toFixed(1)+'H'+x.toFixed(1)+'V'+b[1].toFixed(1)+'H'+b[0].toFixed(1)+'" fill="none" stroke="var(--text-muted)" stroke-width="1.3"/>';
+  return [x,(a[1]+b[1])/2];}
+ walk(tree);
+ leaves.forEach(function(i){var w=VOCAB[i],y=yOf[i],hl=HOVER===i||w==='zog';
+  s+='<g class="leaf" data-i="'+i+'">'+R(4,y-lh/2,x0,lh,'transparent')+T(x0-6,y+4.5,w,'tn','end',wcol(i),' style="font-weight:'+(hl?700:400)+';font-size:'+(hl?14:13)+'px"')+'</g>';});
+ // PCA map
+ var mx=600,my=30,mw=500,mh=500,P=AN.ids.map(function(i){return [i,AN.pc.proj(AN.vecs[i])];});
+ var trail=[];if(SRC!=='cooc'){var n=SRC==='init'?NET0:NET,st=sentStates(n);trail=st.map(function(h){return AN.pc.proj(h);});}
+ var all=P.map(function(q){return q[1];}).concat(trail),xs=all.map(function(q){return q[0];}),ys=all.map(function(q){return q[1];});
+ var ax=Math.min.apply(null,xs),bx=Math.max.apply(null,xs),ay=Math.min.apply(null,ys),by=Math.max.apply(null,ys),sc=Math.min(mw/(bx-ax||1),mh/(by-ay||1))*0.86;
+ var X=function(v){return mx+mw/2+(v-(ax+bx)/2)*sc;},Y=function(v){return my+mh/2-(v-(ay+by)/2)*sc;};
+ s+=T(mx,14,'the same vectors on their two main directions (PCA)','ts','start')+(trail.length?T(mx+mw,my+mh-2,'gray path: the sentence in section 3','tn','end'):'');
+ s+=R(mx,my-6,mw,mh+12,'var(--surface)',' opacity="0.5" stroke="var(--border)"');
+ if(trail.length>1){s+='<polyline points="'+trail.map(function(q){return X(q[0]).toFixed(1)+','+Y(q[1]).toFixed(1);}).join(' ')+'" fill="none" stroke="var(--text-secondary)" stroke-width="1.6" stroke-dasharray="5 3"/>';}
+ trail.forEach(function(q,k){s+='<circle cx="'+X(q[0]).toFixed(1)+'" cy="'+Y(q[1]).toFixed(1)+'" r="'+(k===trail.length-1?6:4)+'" fill="var(--text-secondary)" stroke="var(--surface)"/>';});
+ var lab=P.map(function(q){var w=VOCAB[q[0]],wd=w.length*6.6+4,px=X(q[1][0]);return {i:q[0],w:w,px:px,py:Y(q[1][1]),x:px+6+wd>mx+mw-2?px-6-wd:px+6,y:Y(q[1][1])+4,wd:wd};});
+ for(var it=0;it<80;it++){var moved=false;
+  for(var a=0;a<lab.length;a++)for(var b=a+1;b<lab.length;b++){var A=lab[a],B=lab[b];
+   if(A.x<B.x+B.wd&&B.x<A.x+A.wd&&Math.abs(A.y-B.y)<13){var push=(13-Math.abs(A.y-B.y))/2+0.3,sg=A.y<=B.y?-1:1;A.y+=sg*push;B.y-=sg*push;moved=true;}}
+  if(!moved)break;}
+ lab.forEach(function(L){var hl=HOVER===L.i||L.w==='zog';
+  if(Math.abs(L.y-4-L.py)>7)s+='<line x1="'+L.px.toFixed(1)+'" y1="'+L.py.toFixed(1)+'" x2="'+(L.x-1).toFixed(1)+'" y2="'+(L.y-4).toFixed(1)+'" stroke="'+wcol(L.i)+'" stroke-width="0.7" opacity="0.6"/>';
+  s+='<circle cx="'+L.px.toFixed(1)+'" cy="'+L.py.toFixed(1)+'" r="'+(hl?5.5:3.5)+'" fill="'+wcol(L.i)+'"/>'+
+  T(L.x,L.y,L.w,'tn','start',wcol(L.i),' style="font-size:'+(hl?14:12)+'px;font-weight:'+(hl?700:400)+'"');});
+ // legend
+ var cats=Object.keys(CATNAME);cats.forEach(function(c,k){var lx=mx+(k%6)*84,ly=my+mh+24+Math.floor(k/6)*16;
+  s+=R(lx,ly-8,9,9,CATCOL[c],' rx="2"')+T(lx+13,ly,CATNAME[c],'tn','start',null,' style="font-size:11.5px"');});
+ document.getElementById('gtr').innerHTML=s;
+ Array.from(document.querySelectorAll('#gtr .leaf')).forEach(function(g){g.addEventListener('mouseenter',function(){HOVER=+g.dataset.i;drawTree();treeReadout();});});
+ treeReadout();}
+function neighbors(i,k){return AN.ids.filter(function(j){return j!==i;}).map(function(j){return [j,dist(AN.vecs[i],AN.vecs[j])];}).sort(function(a,b){return a[1]-b[1];}).slice(0,k);}
+function treeReadout(){
+ var s='';
+ if(ZMODE!=='none'){var nb=neighbors(ZOG,4).map(function(q){return '<b style="color:'+wcol(q[0])+'">'+VOCAB[q[0]]+'</b>';});
+  s+='<b>zog</b> ('+(ZMODE==='man'?'placed wherever man was':ZMODE==='cookie'?'placed wherever cookie was':'dropped in at random places')+') is closest to '+nb.join(', ')+'. ';
+  if(SRC==='cooc'&&ZMODE!=='random')s+='Of course: by construction its neighbors are exactly '+(ZMODE==='man'?'man&rsquo;s':'cookie&rsquo;s')+'. ';}
+ var i=HOVER!==null&&AN.ids.indexOf(HOVER)>=0?HOVER:null;
+ if(i!==null)s+='Nearest to <b style="color:'+wcol(i)+'">'+VOCAB[i]+'</b> ('+CATNAME[WCAT[VOCAB[i]]]+'): '+neighbors(i,4).map(function(q){return '<span style="color:'+wcol(q[0])+'">'+VOCAB[q[0]]+'</span>';}).join(', ')+'. ';
+ else s+='Point at a word in the tree to list its nearest neighbors. ';
+ if(SRC==='net'&&NET.pass<1&&RUN)s+='The tree reorganizes as the network trains.';
+ document.getElementById('rdTree').innerHTML=s;}
+// sentence builder, intervention
+function sentStates(n){var H=n.H,c=new Float32Array(H).fill(0.5),h=new Float32Array(H),out=[];
+ PRIME.forEach(function(x){hstep(n,x,c,h);c.set(h);});
+ SENT.forEach(function(x){hstep(n,x,c,h);out.push(Float32Array.from(h));c.set(h);});return out;}
+function drawProbe(){
+ var s='';
+ // probe accuracy bars
+ s+=T(16,16,'probe: read &ldquo;is this word a noun?&rdquo; from the hidden state','ts','start');
+ var bars=[['trained network',PROBE],['untrained network',PROBE0]],x0=30,y0=40,bh=150;
+ bars.forEach(function(b,k){var gx=x0+k*200;s+=T(gx+80,y0+bh+40,b[0],'tn','middle',k?null:'var(--blue-ink)');
+  if(!b[1]){s+=T(gx+80,y0+bh/2,k?'':(RUN?'(computed when training pauses)':'press Train'),'tn','middle');return;}
+  [['fit words',b[1].fit],['held-out words',b[1].held]].forEach(function(q,j){var x=gx+20+j*70,h=q[1]*bh;
+   s+=R(x,y0+bh-h,56,h,k?'var(--text-muted)':'var(--blue)',' opacity="'+(j?0.95:0.55)+'"')+T(x+28,y0+bh-h-5,(q[1]*100).toFixed(0)+'%','tn','middle')+T(x+28,y0+bh+16,q[0],'tn','middle',null,' style="font-size:11.5px"');});});
+ s+='<line x1="'+x0+'" y1="'+(y0+bh-0.5*bh)+'" x2="'+(x0+390)+'" y2="'+(y0+bh-0.5*bh)+'" stroke="var(--text-muted)" stroke-dasharray="3 3"/>'+T(x0+392,y0+bh-0.5*bh+4,'chance','tn','start');
+ // intervention
+ var o=new Float32Array(V),n=NET,st=sentStates(n),pn='';
+ if(!SENT.length){s+=T(520,120,'Build a sentence with the word buttons above.','tn','start');}
+ else{var h=Float32Array.from(st[st.length-1]);
+  if(PROBE&&ALPHA!==0){var w=PROBE.w,nr=Math.sqrt(w.reduce(function(a,b){return a+b*b;},0))||1;for(var j=0;j<h.length;j++)h[j]+=ALPHA*w[j]/nr;}
+  ostep(n,h,o);s+=predBars(o,520,44,570,150,'the network&rsquo;s next-word prediction after &ldquo;&hellip; '+SENT.map(function(i){return VOCAB[i];}).join(' ')+'&rdquo;'+(ALPHA?' (pushed '+(ALPHA>0?'+':'')+ALPHA.toFixed(1)+')':''));
+  var nn=0;ORDER.forEach(function(i){if(isNoun(VOCAB[i]))nn+=o[i];});pn=nn;}
+ document.getElementById('gp').innerHTML=s;
+ var r='';
+ if(PROBE)r+='On words it never saw, the probe reads noun vs. verb from the trained network at <b>'+(PROBE.held*100).toFixed(0)+'%</b>, and from the untrained one at '+(PROBE0.held*100).toFixed(0)+'%: random weights already carry a hint, so the gap is the evidence. ';
+ if(SENT.length&&PROBE){var lw=VOCAB[SENT[SENT.length-1]];r+='After <b>'+lw+'</b>'+(ALPHA?', pushed '+(ALPHA>0?'toward nouns':'toward verbs')+',':'')+' the network puts <b>'+(pn*100).toFixed(0)+'%</b> on a noun coming next. ';
+  if(ALPHA===0)r+=isNoun(lw)?'Drag the slider left, toward &ldquo;verb-like&rdquo;, and see whether it starts expecting a noun.':'Drag the slider right, toward &ldquo;noun-like&rdquo;, and see whether it starts expecting a verb.';}
+ else if(!PROBE)r+='Train the network to fit the probe.';
+ document.getElementById('rdProbe').innerHTML=r;}
+function drawSent(){document.getElementById('sent').innerHTML='<span class="old">'+PRIME.map(function(i){return VOCAB[i];}).join(' ')+' &middot; </span>'+
+ (SENT.length?SENT.map(function(i){return '<b style="color:'+wcol(i)+'">'+VOCAB[i]+'</b>';}).join(' '):'<span class="old">(pick words)</span>');}
+function drawAll(){drawTrain();drawTree();drawSent();drawProbe();}
+// palette
+(function(){var pal=document.getElementById('palette'),groups=[['nouns',['NOUN-HUM','NOUN-ANIM','NOUN-AGRESS','NOUN-INANIM','NOUN-FRAG','NOUN-FOOD']],['verbs',['VERB-INTRAN','VERB-TRAN','VERB-AGPAT','VERB-PERCEPT','VERB-DESTROY','VERB-EAT']]];
+ groups.forEach(function(g){var d=document.createElement('div');d.className='grp';d.innerHTML='<span>'+g[0]+':</span>';
+  var done=[];g[1].forEach(function(c){CAT[c].forEach(function(w){if(done.indexOf(w)>=0||WCAT[w]!==c)return;done.push(w);var b=document.createElement('button');b.textContent=w;b.style.color=CATCOL[c];b.title=CATNAME[c];
+   b.addEventListener('click',function(){SENT.push(IDX[w]);if(SENT.length>8)SENT.shift();drawTree();drawSent();drawProbe();});d.appendChild(b);});});
+  pal.appendChild(d);});})();
+// controls
+function seg(id,fn){document.getElementById(id).addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;Array.from(this.children).forEach(function(x){x.classList.toggle('on',x===b);});fn(b);});}
+seg('srcSeg',function(b){SRC=b.dataset.s;PCPREV=null;analyze();drawTree();});
+seg('linkSeg',function(b){LINK=b.dataset.l;analyze();drawTree();});
+seg('zogSeg',function(b){ZMODE=b.dataset.z;PCPREV=null;analyze();drawTree();});
+document.getElementById('go').addEventListener('click',function(){RUN=!RUN;if(RUN&&NET.pass>=MAXPASS)MAXPASS+=6;this.textContent=RUN?'Pause':'Train';if(!RUN){PROBE=fitProbe(NET,40);drawAll();}});
+document.getElementById('reset').addEventListener('click',function(){SEED++;RUN=false;document.getElementById('go').textContent='Train';MAXPASS=6;reset();});
+document.getElementById('H').addEventListener('change',function(){HID=+this.value;RUN=false;document.getElementById('go').textContent='Train';MAXPASS=6;reset();});
+document.getElementById('speed').addEventListener('change',function(){SPEED=+this.value;});
+document.getElementById('undo').addEventListener('click',function(){SENT.pop();drawTree();drawSent();drawProbe();});
+document.getElementById('clear').addEventListener('click',function(){SENT=[];drawTree();drawSent();drawProbe();});
+document.getElementById('rand').addEventListener('click',function(){var o=[];corpus(1,rng(Math.floor(Math.random()*1e9)),o);SENT=o[0].slice(0,2);drawTree();drawSent();drawProbe();});
+document.getElementById('alpha').addEventListener('input',function(){ALPHA=+this.value;document.getElementById('alphaV').textContent=(ALPHA>0?'+':'')+ALPHA.toFixed(1);drawProbe();});
+reset();SENT=[IDX.girl];drawAll();RUN=true;document.getElementById('go').textContent='Pause';requestAnimationFrame(frame);
+</script>
+</body>
+</html>

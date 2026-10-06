@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Language modeling</title>
+<meta name="description" content="Interactive explainers for Elman 1990 (Finding Structure in Time): simple recurrent networks trained live in the browser on letter streams and word sequences, with the controls the paper did not run.">
+<style>
+:root{--bg:#faf9f5;--surface:#ffffff;--surface-1:#f1efe8;--text-primary:#26251f;--text-secondary:#5f5e5a;--text-muted:#888780;
+ --border:#d3d1c7;--border-strong:#b4b2a9;--accent:#185FA5;--accent-warm:#BA7517;--accent-green:#0F6E56;}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#1a1a18;--surface:#232320;--surface-1:#2c2c2a;
+ --text-primary:#eceae2;--text-secondary:#b4b2a9;--text-muted:#888780;--border:#3a3a36;--border-strong:#5f5e5a;
+ --accent:#79b1ec;--accent-warm:#d9a24d;--accent-green:#4fbb99;}}
+:root[data-theme="dark"]{--bg:#1a1a18;--surface:#232320;--surface-1:#2c2c2a;--text-primary:#eceae2;--text-secondary:#b4b2a9;
+ --text-muted:#888780;--border:#3a3a36;--border-strong:#5f5e5a;--accent:#79b1ec;--accent-warm:#d9a24d;--accent-green:#4fbb99;}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--text-primary);line-height:1.6;
+ font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
+.page{max-width:900px;margin:0 auto;padding:0 20px 72px}
+header{padding-block:44px 24px;border-bottom:1px solid var(--border)}
+.nav{font-size:14px;margin:0 0 18px}
+.nav a{color:var(--text-muted);text-decoration:none}
+.nav a:hover{color:var(--text-secondary);text-decoration:underline}
+.eyebrow{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);margin:0 0 10px}
+h1{font-size:32px;font-weight:600;letter-spacing:-.015em;margin:0 0 12px}
+header p{margin:0 0 10px;font-size:17px;color:var(--text-secondary);max-width:64ch}
+a{color:var(--accent)}
+ol.qs{list-style:none;counter-reset:q;margin:26px 0 0;padding:0}
+ol.qs li{counter-increment:q;border-bottom:1px solid var(--border);padding:20px 0 20px 52px;position:relative}
+ol.qs li:before{content:counter(q);position:absolute;left:0;top:19px;width:34px;height:34px;border-radius:50%;
+ display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500;
+ background:var(--surface-1);color:var(--text-secondary);border:1px solid var(--border)}
+ol.qs li.done:before{background:var(--surface);border-color:var(--accent);color:var(--accent)}
+.qtag{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-warm)}
+h2{font-size:20px;font-weight:600;margin:5px 0 6px;letter-spacing:-.01em}
+h2 a{text-decoration:none}
+h2 a:hover{text-decoration:underline}
+.what{margin:0;font-size:15.5px;color:var(--text-secondary)}
+.go{display:inline-block;margin-top:9px;font-size:15px}
+footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--border);font-size:14.5px;color:var(--text-muted)}
+footer a{color:var(--text-secondary)}
+@media (max-width:640px){h1{font-size:26px}ol.qs li{padding-left:44px}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <div class="nav"><a href="../../">&larr; CS7150 class demos</a></div>
+  <p class="eyebrow">Northeastern University &middot; CS 7150 &middot; Fall 2026</p>
+  <h1>Language modeling</h1>
+  <p>Interactive pieces for <a href="https://papers.baulab.info/papers/Elman-1990.pdf">Elman 1990</a>, &ldquo;Finding
+     Structure in Time.&rdquo; Both reproduce his experiments live in the browser: a simple recurrent network
+     reads a stream one symbol at a time and learns to predict the next, and what it gets wrong, and what its
+     hidden units end up encoding, tell you what it has learned. Each adds the tests your nightly questions asked for.</p>
+</header>
+
+<ol class="qs">
+
+<li class="done">
+  <div class="qtag">Elman&rsquo;s first experiment</div>
+  <h2><a href="elman-letters.html">The letter stream: error marks what can&rsquo;t be known</a></h2>
+  <p class="what">Two networks learn <b>ba dii guuu</b>, one with Elman&rsquo;s one-step training and one with
+     backpropagation through time, side by side. The error spikes at every consonant, which no one can predict, and
+     vanishes on the vowels; lengthen the vowel runs to find where one-step training stops being enough. Step through
+     the stream to watch the hidden and context units, and switch to words or real English with the spaces removed,
+     where the spikes find the word boundaries.</p>
+  <a class="go" href="elman-letters.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">Elman&rsquo;s sentence experiment</div>
+  <h2><a href="elman-sentences.html">Word categories from next-word prediction</a></h2>
+  <p class="what">Ten thousand sentences like <b>man eat cookie</b>, a network trained to predict each next word,
+     and the tree its hidden states make. Then the controls: an untrained network and raw co-occurrence counts, three
+     versions of the zog test, a noun/verb probe tested on held-out words, and an intervention that pushes the hidden
+     state along the probe&rsquo;s direction to see whether the network uses it.</p>
+  <a class="go" href="elman-sentences.html">Open the explainer &rarr;</a>
+</li>
+
+</ol>
+
+
+<footer>
+  The vanishing gradient that limits one-step training is in <a href="../depth/gates.html">LSTMs, highways, ResNets</a>;
+  softmax and cross-entropy are in <a href="../objectives/">losses and regularization</a>. &middot;
+  <a href="https://github.com/CS7150/classdemos">Repository</a>
+</footer>
+
+</div>
+</body>
+</html>

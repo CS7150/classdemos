@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Elman's letter stream</title>
+<meta name="description" content="Elman 1990's letter-prediction experiment, trained live in the browser: a simple recurrent network predicts the next letter of a stream like b a d i i g u u u. Its error spikes at every unpredictable letter, and a second network trained with longer backpropagation through time shows how far Elman's one-step training can reach.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 24px;max-width:1150px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+h2{font-size:15.5px;font-weight:600;margin:8px 0 0}
+.quiz{margin:0}
+.row{gap:7px}
+button{height:30px;font-size:13px;padding:0 10px}
+button.main{min-width:96px}
+.seg button{height:28px;font-size:12.5px;padding:0 9px}
+select{height:30px;font-size:13px;padding:0 6px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:24px}
+input[type=range]{flex:0 1 130px;min-width:80px}
+.rd{font-size:14px;line-height:1.55;min-height:3.1em}
+.cap{font-size:12.5px;line-height:1.6;padding-top:4px}
+.nav{display:flex;align-items:baseline;gap:10px}
+.status{font-size:13px;color:var(--text-muted);font-variant-numeric:tabular-nums}
+svg text{font-family:inherit}
+.cell{cursor:pointer}
+.sw{display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:-1px;margin-right:3px}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Language modeling demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Elman&rsquo;s letter stream<span>: prediction error marks what the network cannot know</span></h1>
+<p class="quiz">Elman 1990 fed a network one letter at a time from a stream with no gaps, like <b>b a d i i g u u u d i i</b>, and asked it to predict the next letter. Each consonant is random, but it fixes the vowels that follow: <b>b</b>&rarr;<b>a</b>, <b>d</b>&rarr;<b>ii</b>, <b>g</b>&rarr;<b>uuu</b>. Two networks train side by side on the same stream: <b style="color:var(--warm-ink)">Elman&rsquo;s</b>, whose error goes back only one step, and one trained with <b style="color:var(--blue-ink)">backpropagation through time</b> over k steps. Click any letter to see the network at that moment.</p>
+
+<div class="row">
+  <div class="seg" id="modeSeg"><button data-m="syl" class="on">syllables: ba dii guuu</button><button data-m="words">Elman&rsquo;s 15 words, no spaces</button><button data-m="eng">English text, no spaces</button></div>
+  <span class="klab" id="Llab">vowels after g</span><input type="range" id="L" min="3" max="8" step="1" value="3"><span class="knum" id="Lv">3</span>
+  <span class="klab">backprop steps k</span><input type="range" id="K" min="1" max="12" step="1" value="8"><span class="knum" id="Kv">8</span>
+  <span class="klab">hidden units</span><select id="H"><option>10</option><option selected>20</option><option>40</option><option>80</option></select>
+</div>
+<div class="row">
+  <button class="main" id="go">Train</button>
+  <button id="reset">New networks</button>
+  <span class="klab">speed</span><select id="speed"><option value="1500">slow</option><option value="12000" selected>normal</option><option value="0">fast</option></select>
+  <span class="klab" style="margin-left:8px">inspect:</span>
+  <button id="prev" title="previous letter">&#9664;</button><button id="play">Play</button><button id="next" title="next letter">&#9654;</button>
+  <div class="seg" id="netSeg"><button data-n="0" class="on">Elman, 1 step</button><button data-n="1" id="netB">BPTT, 8 steps</button></div>
+  <span class="status" id="status"></span>
+</div>
+
+<h2>1. The stream, and each network&rsquo;s error on every letter</h2>
+<svg id="strip" viewBox="0 0 1120 212" role="img"><title>Letter stream with prediction errors</title><desc>A window of the letter stream. Above each letter, a bar for the error the one-step network made predicting it, and a bar for the error of the network trained with backpropagation through time.</desc><g id="gs"></g></svg>
+<div class="rd" id="rd"></div>
+
+<h2>2. Inside the network at the selected letter</h2>
+<svg id="net" viewBox="0 0 1120 330" role="img"><title>The simple recurrent network at one time step</title><desc>Input units for the current letter, hidden units, context units holding a copy of the previous hidden state, and output units predicting the next letter; at right, the steps the training gradient reaches back through.</desc><g id="gn"></g></svg>
+
+<h2>3. Where the errors are, and how training goes</h2>
+<svg id="chart" viewBox="0 0 1120 300" role="img"><title>Error by position in the syllable, and the training curve</title><desc>Left, the average error for predicting each position of a syllable or word, for both networks, with the unavoidable error marked. Right, the average error per pass through the stream as training proceeds.</desc><g id="gc"></g></svg>
+
+<div class="cap">
+<div><b>What the network is.</b> Elman&rsquo;s simple recurrent network has an ordinary hidden layer, h<sub>t</sub> = &sigma;(W<sub>x</sub> x<sub>t</sub> + W<sub>h</sub> c<sub>t</sub> + b), whose input includes a bank of <b>context units</b> c<sub>t</sub> holding an exact copy of the previous hidden state, c<sub>t</sub> = h<sub>t&minus;1</sub>. The copy has fixed weight 1 and is not learned; what <i>is</i> learned is W<sub>h</sub>, how the hidden layer reads its own past. So memory is trained even though the copy is not. (Jordan&rsquo;s 1986 networks copied the <i>output</i> instead; copying the hidden layer lets the network keep anything it finds useful, not only what it predicted.) The output is the next letter&rsquo;s prediction. In syllable mode each letter is Elman&rsquo;s six phonetic features (consonant, vowel, interrupted, high, back, voiced) with squared error on each, as in his paper; in word mode each letter is one unit and the error is cross-entropy in bits.</div>
+<div><b>Why the error spikes.</b> A consonant&rsquo;s identity is a coin flip, so no network can predict it: its error stays at the dashed line, the variance of the coin (0.44 for three equally likely consonants differing in two features). The vowels after it are fully determined, so their error falls to zero. The bars therefore spike at each syllable start. Look at the six output units at a consonant: the <i>consonant</i> and <i>interrupted</i> features come out right, because after the last <b>u</b> the network knows a consonant is coming, only not which one. In the word modes the same thing happens at the first letter of each word, the &ldquo;weird spikes at the start&rdquo; in Elman&rsquo;s Figure 6. He pointed out that the spikes find the word boundaries, with no spaces in the input.</div>
+<div><b>How close to the paper.</b> Syllable mode is Elman&rsquo;s first experiment as he ran it: 1,000 random consonants expanded into about 3,000 letters, six features, a 6-20-6 network, 200 passes. His word experiment used the same 15 words, but in 200 sentences from a small grammar, with each letter coded as a random 5-bit pattern; here the words come in random order and each letter has its own unit, which keeps the same point (the boundaries are where the next letter is unknown). English mode goes beyond the paper: the opening paragraphs of <i>Alice&rsquo;s Adventures in Wonderland</i> with spaces and punctuation removed, about 1,300 letters, so the network has to pick up real spelling. With so little text it partly memorizes it; the spikes at word starts appear anyway. The second network, trained with backpropagation through time, is not in the paper either: it shows what Elman&rsquo;s one-step training leaves on the table.</div>
+<div><b>One step back, and how far that reaches.</b> Elman trained by ordinary backprop at each step, treating the context units as fixed inputs: the error never flows back past the copy. Yet his network learned to count three <b>u</b>s. It can do that because the context it receives is not random: it was produced by the same network one step earlier, so a hidden state that already happens to differ after one <b>u</b> and after two can be told apart, and one-step training sharpens that. Nothing, though, trains the earlier step to <i>keep</i> information for later. Raise <b>vowels after g</b>: at 4 the one-step network usually still counts; at 6 it usually loses count near the end of the run (it cannot tell whether another <b>u</b> is coming), and at 8 it lost count in every run we tried, while backprop through k &ge; the run length kept it every time. Which way a given run goes depends on the random start, so press <b>New networks</b> a few times. The backward pass in panel 2 shows the difference: Elman&rsquo;s gradient stops at the context units, while BPTT carries &part;E/&part;h back through W<sub>h</sub> and each step&rsquo;s &sigma;&prime; for k steps, accumulating weight changes at every step it reaches. Carrying it back many steps is where gradients vanish, which is the problem LSTMs were built to fix (<a href="../depth/gates.html">LSTMs, highways, ResNets</a>).</div>
+</div>
+
+<script>
+// ---------------------------------------------------------------- data
+function rng(seed){var a=seed>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+// Elman's Table 1: consonant, vowel, interrupted, high, back, voiced
+var FEAT={b:[1,0,1,0,0,1],d:[1,0,1,1,0,1],g:[1,0,1,0,1,1],a:[0,1,0,0,1,1],i:[0,1,0,1,0,1],u:[0,1,0,1,1,1]};
+var FNAME=['consonant','vowel','interrupted','high','back','voiced'];
+var LEX='many years ago a boy and girl lived by the sea they played happily'.split(' ');
+// the opening of Alice's Adventures in Wonderland (Carroll 1865, public domain)
+var ALICE='Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once or twice she had peeped into the book her sister was reading, but it had no pictures or conversations in it, and what is the use of a book, thought Alice, without pictures or conversations? So she was considering in her own mind (as well as she could, for the hot day made her feel very sleepy and stupid), whether the pleasure of making a daisy-chain would be worth the trouble of getting up and picking the daisies, when suddenly a White Rabbit with pink eyes ran close by her. There was nothing so very remarkable in that; nor did Alice think it so very much out of the way to hear the Rabbit say to itself, Oh dear! Oh dear! I shall be late! (when she thought it over afterwards, it occurred to her that she ought to have wondered at this, but at the time it all seemed quite natural); but when the Rabbit actually took a watch out of its waistcoat-pocket, and looked at it, and then hurried on, Alice started to her feet, for it flashed across her mind that she had never before seen a rabbit with either a waistcoat-pocket, or a watch to take out of it, and burning with curiosity, she ran across the field after it, and fortunately was just in time to see it pop down a large rabbit-hole under the hedge. In another moment down went Alice after it, never once considering how in the world she was to get out again. The rabbit-hole went straight on like a tunnel for some way, and then dipped suddenly down, so suddenly that Alice had not a moment to think about stopping herself before she found herself falling down a very deep well.';
+var MODE='syl',LRUN=3,KSTEPS=8,HID=20,SEED=1;
+var DATA=null;   // {letters:[...], X:[Float32Array], pos:[...], start:[bool], D, out:'sig'|'soft', alpha:[...]}
+function makeData(){
+ var r=rng(SEED*101+7),letters=[],pos=[],start=[];
+ if(MODE==='syl'){
+  var SY={b:['a',1],d:['i',2],g:['u',LRUN]};
+  for(var n=0;n<1000;n++){var c='bdg'[Math.floor(r()*3)];letters.push(c);pos.push(0);start.push(true);
+   for(var j=0;j<SY[c][1];j++){letters.push(SY[c][0]);pos.push(j+1);start.push(false);}}
+  var X=letters.map(function(c){return Float32Array.from(FEAT[c]);});
+  DATA={letters:letters,X:X,pos:pos,start:start,D:6,out:'sig',alpha:'bdgaiu'.split('')};
+ }else if(MODE==='eng'){
+  var words=ALICE.toLowerCase().replace(/[^a-z ]+/g,' ').split(/ +/).filter(function(w){return w;});
+  var al2='abcdefghijklmnopqrstuvwxyz'.split('');
+  words.forEach(function(w){for(var k=0;k<w.length;k++){letters.push(w[k]);pos.push(Math.min(k,7));start.push(k===0);}});
+  var X3=letters.map(function(ch){var v=new Float32Array(26);v[al2.indexOf(ch)]=1;return v;});
+  DATA={letters:letters,X:X3,pos:pos,start:start,D:26,out:'soft',alpha:al2};
+ }else{
+  var al=[];LEX.join('').split('').forEach(function(ch){if(al.indexOf(ch)<0)al.push(ch);});al.sort();
+  for(var n2=0;n2<1100;n2++){var w=LEX[Math.floor(r()*LEX.length)];for(var k=0;k<w.length;k++){letters.push(w[k]);pos.push(k);start.push(k===0);}}
+  var X2=letters.map(function(ch){var v=new Float32Array(al.length);v[al.indexOf(ch)]=1;return v;});
+  DATA={letters:letters,X:X2,pos:pos,start:start,D:al.length,out:'soft',alpha:al};
+ }
+}
+// ---------------------------------------------------------------- network
+function makeNet(k,seed){
+ var D=DATA.D,H=HID,r=rng(seed),u=function(s){return (r()*2-1)*s;};
+ var n={k:k,H:H,D:D,Wx:new Float32Array(H*D),Wh:new Float32Array(H*H),bh:new Float32Array(H),Wo:new Float32Array(D*H),bo:new Float32Array(D),
+  t:0,pass:0,passErr:0,passN:0,curve:[],hs:[],xs:[],lr:DATA.out==='sig'?0.3:(k>1?0.05:0.1)};
+ for(var i=0;i<H*D;i++)n.Wx[i]=u(0.5);for(i=0;i<H*H;i++)n.Wh[i]=u(0.5);for(i=0;i<D*H;i++)n.Wo[i]=u(0.5);
+ n.hs=[new Float32Array(H).fill(0.5)];n.gw=new Float32Array(k);   // gradient size reaching each step back, for the picture
+ return n;}
+function sig(z){return 1/(1+Math.exp(-z));}
+function hiddenStep(n,x,hp,h){var H=n.H,D=n.D;for(var j=0;j<H;j++){var z=n.bh[j],rx=j*D,rh=j*H;for(var i=0;i<D;i++)z+=n.Wx[rx+i]*x[i];for(var k=0;k<H;k++)z+=n.Wh[rh+k]*hp[k];h[j]=sig(z);}}
+function outStep(n,h,o){var H=n.H,D=n.D,m=-1e9;for(var v=0;v<D;v++){var z=n.bo[v],r=v*H;for(var j=0;j<H;j++)z+=n.Wo[r+j]*h[j];o[v]=z;if(z>m)m=z;}
+ if(DATA.out==='sig'){for(v=0;v<D;v++)o[v]=sig(o[v]);}else{var s=0;for(v=0;v<D;v++){o[v]=Math.exp(o[v]-m);s+=o[v];}for(v=0;v<D;v++)o[v]/=s;}}
+function errOf(o,y){var e=0;if(DATA.out==='sig'){for(var v=0;v<o.length;v++)e+=(o[v]-y[v])*(o[v]-y[v]);return e;}
+ for(v=0;v<o.length;v++)if(y[v]>0)return -Math.log2(Math.max(o[v],1e-12));return 0;}
+// one online training step at position n.t, backprop through up to n.k steps
+function trainStep(n){
+ var T=DATA.X.length,H=n.H,D=n.D;if(n.t+1>=T){n.curve.push(n.passErr/n.passN);n.pass++;n.t=0;n.passErr=0;n.passN=0;n.hs=[new Float32Array(H).fill(0.5)];n.xs=[];}
+ var x=DATA.X[n.t],y=DATA.X[n.t+1],hp=n.hs[n.hs.length-1],h=new Float32Array(H),o=new Float32Array(D);
+ hiddenStep(n,x,hp,h);n.hs.push(h);n.xs.push(x);if(n.hs.length>n.k+1){n.hs.shift();n.xs.shift();}
+ outStep(n,h,o);n.passErr+=errOf(o,y);n.passN++;
+ var dh=new Float32Array(H),lr=n.lr,v,j,i,k;
+ for(v=0;v<D;v++){var g=DATA.out==='sig'?(o[v]-y[v])*o[v]*(1-o[v]):o[v]-y[v],r=v*H;n.bo[v]-=lr*g;
+  for(j=0;j<H;j++){dh[j]+=g*n.Wo[r+j];n.Wo[r+j]-=lr*g*h[j];}}
+ var top=n.hs.length-1,dz=new Float32Array(H);
+ for(var s=0;s<Math.min(n.k,top);s++){
+  var hh=n.hs[top-s],hprev=n.hs[top-s-1],xx=n.xs[n.xs.length-1-s],mag=0;
+  for(j=0;j<H;j++){dz[j]=dh[j]*hh[j]*(1-hh[j]);mag+=dz[j]*dz[j];}
+  n.gw[s]=0.98*n.gw[s]+0.02*Math.sqrt(mag);
+  var nd=new Float32Array(H);
+  for(j=0;j<H;j++){var gj=dz[j];if(gj===0)continue;n.bh[j]-=lr*gj;var rx=j*D,rh=j*H;
+   for(i=0;i<D;i++)n.Wx[rx+i]-=lr*gj*xx[i];
+   for(k=0;k<H;k++){nd[k]+=gj*n.Wh[rh+k];n.Wh[rh+k]-=lr*gj*hprev[k];}}
+  // clip the gradient carried back a step, so long backprop cannot blow up
+  var nn=0;for(k=0;k<H;k++)nn+=nd[k]*nd[k];nn=Math.sqrt(nn);if(nn>1)for(k=0;k<H;k++)nd[k]/=nn;
+  dh=nd;}
+ n.t++;}
+// evaluate a network on the whole stream (forward only)
+function evaluate(n){
+ var T=DATA.X.length,H=n.H,D=n.D,hp=new Float32Array(H).fill(0.5),h=new Float32Array(H),o=new Float32Array(D),err=new Float32Array(T),HS=[],OS=[];
+ for(var t=0;t+1<T;t++){hiddenStep(n,DATA.X[t],hp,h);outStep(n,h,o);err[t+1]=errOf(o,DATA.X[t+1]);
+  if(t<WINMAX){HS.push(Float32Array.from(h));OS.push(Float32Array.from(o));}hp.set(h);}
+ return {err:err,HS:HS,OS:OS};}
+var WINMAX=420;   // keep states for the first letters, which are the ones shown
+// ---------------------------------------------------------------- state
+var NETS=[],EV=[null,null],RUN=false,CUR=12,VIEW=0,SHOW=0,PLAY=null,MAXPASS=300;
+function reset(){makeData();NETS=[makeNet(1,SEED*13+5),makeNet(KSTEPS,SEED*13+5)];EV=NETS.map(evaluate);
+ document.getElementById('netB').textContent='BPTT, '+KSTEPS+' steps';draw();}
+var SPEED=12000,LAST=0;
+function frame(now){
+ if(RUN){var t0=performance.now(),i=0,dt=Math.min(100,now-(LAST||now)),quota=SPEED?Math.max(1,Math.round(SPEED*dt/1000)):1e9;
+  while(performance.now()-t0<14&&i<quota){trainStep(NETS[0]);trainStep(NETS[1]);i++;
+   if(NETS[0].pass>=MAXPASS&&NETS[1].pass>=MAXPASS){RUN=false;document.getElementById('go').textContent='Train';break;}}
+  EV=NETS.map(evaluate);draw();}
+ LAST=now;requestAnimationFrame(frame);}
+// ---------------------------------------------------------------- drawing
+function T(x,y,s,cls,anc,fill,extra){return '<text class="'+(cls||'tn')+'" x="'+(+x).toFixed(1)+'" y="'+(+y).toFixed(1)+'"'+(anc?' text-anchor="'+anc+'"':'')+(fill?' style="fill:'+fill+'"':'')+(extra||'')+'>'+s+'</text>';}
+function R(x,y,w,h,fill,extra){return '<rect x="'+(+x).toFixed(1)+'" y="'+(+y).toFixed(1)+'" width="'+Math.max(0,w).toFixed(1)+'" height="'+Math.max(0,h).toFixed(1)+'" fill="'+fill+'"'+(extra||'')+'/>';}
+var CA='var(--warm)',CAi='var(--warm-ink)',CB='var(--blue)',CBi='var(--blue-ink)';
+function unavoidable(p){   // error floor for each position
+ if(MODE==='syl')return p===0?4/9:0;
+ if(p===0){return null;} return null;}
+function drawStrip(){
+ var s='',W=46,x0=24,cw=(1120-x0-16)/W,start=Math.max(0,Math.min(CUR-Math.floor(W/2),DATA.letters.length-W-1)),yA=130,yB=150,hB=78;
+ var emax=MODE==='syl'?1:4.5;
+ s+=T(x0,16,MODE==='syl'?'error (squared, summed over the 6 features)':'error (bits of surprise)','tn','start');
+ s+='<line x1="'+x0+'" y1="'+yA+'" x2="'+(1120-16)+'" y2="'+yA+'" stroke="var(--border-strong)"/>';
+ if(MODE==='syl'){var yf=yA-4/9/emax*hB*1.0;s+='<line x1="'+x0+'" y1="'+yf.toFixed(1)+'" x2="'+(1120-16)+'" y2="'+yf.toFixed(1)+'" stroke="var(--text-muted)" stroke-dasharray="4 3"/>'+T(1120-18,yf-4,'unavoidable at a consonant: 0.44','tn','end');}
+ for(var w=0;w<W;w++){var t=start+w,x=x0+w*cw,ch=DATA.letters[t],on=t===CUR;
+  if(DATA.start[t]&&w>0)s+='<line x1="'+(x-1).toFixed(1)+'" y1="34" x2="'+(x-1).toFixed(1)+'" y2="'+(yB+hB+30)+'" stroke="var(--border)" stroke-width="1"/>';
+  var eA=t>0?EV[0].err[t]:0,eB=t>0?EV[1].err[t]:0,bw=cw*0.36;
+  s+=R(x+cw*0.12,yA-Math.min(1,eA/emax)*hB,bw,Math.min(1,eA/emax)*hB,CA,' opacity="0.85"');
+  s+=R(x+cw*0.52,yA-Math.min(1,eB/emax)*hB,bw,Math.min(1,eB/emax)*hB,CB,' opacity="0.85"');
+  s+='<g class="cell" data-t="'+t+'">'+R(x+1,yB,cw-2,30,on?'var(--surface-1)':'var(--surface)',' stroke="'+(on?'var(--text-secondary)':'var(--border)')+'" rx="3"')+
+    T(x+cw/2,yB+21,ch,'ts','middle',DATA.start[t]?'var(--text-primary)':'var(--text-secondary)',' style="font-weight:'+(DATA.start[t]?600:400)+';pointer-events:none"')+'</g>';}
+ s+=T(x0,yB+50,'&#9632;','tn','start',CAi)+T(x0+14,yB+50,'Elman, error back 1 step','tn','start')+T(x0+214,yB+50,'&#9632;','tn','start',CBi)+T(x0+228,yB+50,'BPTT, error back '+KSTEPS+' steps','tn','start')+
+   T(1120-16,yB+50,'thin lines: syllable or word starts &nbsp;&middot;&nbsp; letters '+start+'&ndash;'+(start+W-1)+' of '+DATA.letters.length,'tn','end');
+ document.getElementById('gs').innerHTML=s;
+ Array.from(document.querySelectorAll('#gs .cell')).forEach(function(c){c.addEventListener('click',function(){CUR=+c.dataset.t;draw();});});}
+function decode(o){   // the letter the output most resembles
+ if(DATA.out==='soft'){var b=0;for(var v=1;v<o.length;v++)if(o[v]>o[b])b=v;return [DATA.alpha[b],o[b]];}
+ var best=null,bd=1e9;'bdgaiu'.split('').forEach(function(c){var d=0;for(var v=0;v<6;v++)d+=(o[v]-FEAT[c][v])*(o[v]-FEAT[c][v]);if(d<bd){bd=d;best=c;}});return [best,bd];}
+function drawNet(){
+ var s='',n=NETS[VIEW],ev=EV[VIEW],t=Math.min(CUR,WINMAX-1),col=VIEW?CB:CA,coli=VIEW?CBi:CAi;
+ var x=DATA.X[t],h=ev.HS[t],hp=t>0?ev.HS[t-1]:new Float32Array(n.H).fill(0.5),o=ev.OS[t],y=DATA.X[t+1];
+ var H=n.H,D=n.D;
+ // input
+ var ix=40,iy=40;
+ s+=T(ix,iy-14,'input: &ldquo;'+DATA.letters[t]+'&rdquo;','ts','start');
+ if(MODE==='syl'){for(var v=0;v<6;v++){var yy=iy+v*30;s+=R(ix,yy,22,22,x[v]?'var(--text-secondary)':'var(--surface)',' stroke="var(--border-strong)" rx="3"')+T(ix+30,yy+16,FNAME[v],'tn','start');}}
+ else{var rows=D>18?9:6,dy=D>18?28:30;for(v=0;v<D;v++){var cx=ix+Math.floor(v/rows)*30,cy=iy+(v%rows)*dy;s+=R(cx,cy,22,22,x[v]?'var(--text-secondary)':'var(--surface)',' stroke="var(--border-strong)" rx="3"')+T(cx+11,cy+15,DATA.alpha[v],'tn','middle',x[v]?'var(--surface)':null);}}
+ // hidden and context as grids
+ var gcol=Math.ceil(Math.sqrt(H*1.6)),cell=Math.min(26,150/gcol),hx=300,hy=36,cxp=300,cyp=200;
+ function grid(vals,gx,gy,title,stroke){var g=T(gx,gy-10,title,'ts','start');for(var j=0;j<H;j++){var a=vals[j],X=gx+(j%gcol)*(cell+3),Y=gy+Math.floor(j/gcol)*(cell+3);
+   g+=R(X,Y,cell,cell,'color-mix(in oklab, '+col+' '+Math.round(a*100)+'%, var(--surface))',' stroke="'+stroke+'" rx="3"');}return g;}
+ s+=grid(h,hx,hy,'hidden h<tspan dy="3" font-size="10">t</tspan>','var(--border-strong)');
+ var gh=Math.ceil(H/gcol)*(cell+3);
+ s+=grid(hp,cxp,cyp,'context c<tspan dy="3" font-size="10">t</tspan> = copy of h<tspan dy="3" font-size="10">t&minus;1</tspan>','var(--border)');
+ var gw=gcol*(cell+3);
+ // arrows
+ s+='<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10Z" fill="var(--text-muted)"/></marker></defs>';
+ s+='<line x1="'+(ix+130)+'" y1="'+(iy+80)+'" x2="'+(hx-10)+'" y2="'+(hy+gh/2)+'" stroke="var(--text-muted)" stroke-width="1.5" marker-end="url(#ar)"/>'+T((ix+130+hx)/2,iy+56,'W<tspan dy="3" font-size="10">x</tspan>','tn','middle');
+ s+='<line x1="'+(cxp+gw/2)+'" y1="'+(cyp-22)+'" x2="'+(hx+gw/2)+'" y2="'+(hy+gh+6)+'" stroke="var(--text-muted)" stroke-width="1.5" marker-end="url(#ar)"/>'+T(hx+gw/2+8,(cyp-22+hy+gh+6)/2+4,'W<tspan dy="3" font-size="10">h</tspan> (learned)','tn','start');
+ s+='<path d="M'+(hx-8)+' '+(hy+gh*0.75)+' C'+(hx-60)+' '+(hy+gh+40)+' '+(cxp-60)+' '+(cyp+10)+' '+(cxp-8)+' '+(cyp+gh*0.4)+'" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#ar)"/>'+
+   T(hx-70,(hy+gh+cyp)/2+18,'copy, weight 1','tn','end')+T(hx-70,(hy+gh+cyp)/2+34,'(used at t+1)','tn','end');
+ // output
+ var ox=hx+gw+90,oy=40;
+ s+='<line x1="'+(hx+gw+8)+'" y1="'+(hy+gh/2)+'" x2="'+(ox-12)+'" y2="'+(oy+80)+'" stroke="var(--text-muted)" stroke-width="1.5" marker-end="url(#ar)"/>'+T((hx+gw+ox)/2,oy+60,'W<tspan dy="3" font-size="10">o</tspan>','tn','middle');
+ var dec=decode(o);
+ s+=T(ox,oy-14,'predicted next &rarr; actual: &ldquo;'+DATA.letters[t+1]+'&rdquo;','ts','start');
+ if(MODE==='syl'){for(v=0;v<6;v++){var yy2=oy+v*30;s+=R(ox,yy2,120,22,'var(--surface)',' stroke="var(--border)" rx="3"')+R(ox,yy2,120*o[v],22,col,' opacity="0.8" rx="3"')+
+   '<line x1="'+(ox+120*y[v])+'" y1="'+(yy2-3)+'" x2="'+(ox+120*y[v])+'" y2="'+(yy2+25)+'" stroke="var(--text-primary)" stroke-width="2"/>'+T(ox+128,yy2+16,FNAME[v]+' '+o[v].toFixed(2),'tn','start');}
+  s+=T(ox,oy+196,'black tick: the true next letter&rsquo;s feature','tn','start')+T(ox,oy+214,'closest letter to the prediction: '+dec[0],'tn','start',coli);}
+ else{var idx=o.map?Array.from(o.keys()):[];idx=Array.from({length:D},function(_,i){return i;}).sort(function(a,b){return o[b]-o[a];}).slice(0,6);
+  idx.forEach(function(v,r){var yy3=oy+r*30,isY=y[v]>0;s+=R(ox,yy3,140,22,'var(--surface)',' stroke="var(--border)" rx="3"')+R(ox,yy3,140*o[v],22,col,' opacity="0.8" rx="3"')+
+    T(ox+148,yy3+16,'&ldquo;'+DATA.alpha[v]+'&rdquo; '+(o[v]*100).toFixed(0)+'%'+(isY?' &larr; actual':''),'tn','start',isY?'var(--text-primary)':null);});
+  s+=T(ox,oy+196,'top six guesses for the next letter','tn','start');}
+ // backward reach diagram
+ var bx=ox+250,by=56,bw=1120-bx-16,K=n.k,steps=Math.min(Math.max(K,1),12),sw=Math.min(36,(bw-20)/(steps+1));
+ s+=T(bx,30,'training: how far the error flows back','ts','start');
+ for(var q=0;q<=steps;q++){var X=bx+bw-20-q*sw,label=q===0?'t':'t&minus;'+q,reach=q<K;
+  s+=R(X-sw*0.42,by,sw*0.84,26,q===0?col:'var(--surface)',' stroke="'+(q<=K?col:'var(--border)')+'" rx="4"'+(q===0?' opacity="0.7"':''))+T(X,by+44,label,'tn','middle');
+  if(q<K&&q<steps){var gv=n.gw[q]||0,mx=Math.max.apply(null,Array.from(n.gw).concat([1e-9])),wd=1+4*gv/mx;
+   s+='<line x1="'+(X-sw*0.45).toFixed(1)+'" y1="'+(by+13)+'" x2="'+(X-sw*0.55).toFixed(1)+'" y2="'+(by+13)+'" stroke="'+col+'" stroke-width="'+wd.toFixed(1)+'"/>';}}
+ s+=T(bx+bw-20+sw*0.5,by+70,K===1?'Elman: the error stops at the copy':'BPTT: '+K+' steps; line width = gradient size','tn','end',coli);
+ if(K>1){s+=T(bx+bw-20+sw*0.5,by+92,'gradient reaching t, t&minus;1, t&minus;2, &hellip; (relative):','tn','end');
+  s+=T(bx+bw-20+sw*0.5,by+110,Array.from(n.gw).slice(0,Math.min(K,6)).map(function(v){var m=n.gw[0]||1e-9;return (v/m).toFixed(2);}).join(' &middot; ')+(K>6?' &middot; &hellip;':''),'tn','end');}
+ document.getElementById('gn').innerHTML=s;}
+function drawChart(){
+ var s='',P=0;DATA.pos.forEach(function(p){if(p>P)P=p;});
+ var acc=[0,1].map(function(k){var sum=new Float64Array(P+1),cnt=new Float64Array(P+1);for(var t=1;t<DATA.X.length;t++){sum[DATA.pos[t]]+=EV[k].err[t];cnt[DATA.pos[t]]++;}return Array.from(sum,function(v,i){return cnt[i]?v/cnt[i]:0;});});
+ var x0=60,y0=30,W=520,Hh=200,emax=MODE==='syl'?0.8:Math.max(1,Math.max.apply(null,acc[0].concat(acc[1]))*1.1),gw=W/(P+1);
+ s+=T(x0,16,MODE==='syl'?'average error predicting each position of a syllable':'average error predicting each position in a word (bits)','ts','start');
+ s+='<line x1="'+x0+'" y1="'+(y0+Hh)+'" x2="'+(x0+W)+'" y2="'+(y0+Hh)+'" stroke="var(--border-strong)"/>';
+ [0,emax/2,emax].forEach(function(v){var yy=y0+Hh-v/emax*Hh;s+='<line x1="'+x0+'" y1="'+yy+'" x2="'+(x0+W)+'" y2="'+yy+'" stroke="var(--border)" stroke-width="0.6"/>'+T(x0-6,yy+4,v.toFixed(2),'tn','end');});
+ for(var p=0;p<=P;p++){var X=x0+p*gw;
+  [0,1].forEach(function(k){var v=acc[k][p],bh=Math.min(1,v/emax)*Hh;s+=R(X+gw*(0.14+k*0.37),y0+Hh-bh,gw*0.33,bh,k?CB:CA,' opacity="0.85"')+(v>0.005?T(X+gw*(0.305+k*0.37),y0+Hh-bh-4,v>=1?v.toFixed(1):v.toFixed(2).replace(/^0/,''),'tn','middle',k?CBi:CAi,' style="font-size:'+(gw<90?9.5:11)+'px"'):'');});
+  var lab=MODE==='syl'?(p===0?'consonant':'vowel '+p):(p===0?'1st letter':(p+1)+(p===1?'nd':p===2?'rd':'th')+(MODE==='eng'&&p===7?'+':''));
+  s+=T(X+gw/2,y0+Hh+16,lab,'tn','middle');}
+ if(MODE==='syl'){var yf=y0+Hh-(4/9)/emax*Hh;s+='<line x1="'+x0+'" y1="'+yf+'" x2="'+(x0+gw)+'" y2="'+yf+'" stroke="var(--text-muted)" stroke-dasharray="4 3" stroke-width="1.5"/>'+T(x0+gw+4,yf+4,'unavoidable','tn','start');}
+ // training curve
+ var cx=680,cw=410,ch=200;
+ s+=T(cx,16,'average error per pass through the stream','ts','start');
+ var curves=NETS.map(function(n){return n.curve.concat(n.passN>50?[n.passErr/n.passN]:[]);}),np=Math.max(10,curves[0].length,curves[1].length),
+   cmax=Math.max(0.05,Math.max.apply(null,[0.0001].concat(curves[0].slice(0,3),curves[1].slice(0,3))))*1.05;
+ s+='<rect x="'+cx+'" y="'+y0+'" width="'+cw+'" height="'+ch+'" fill="var(--surface)" opacity="0.6" stroke="var(--border)"/>';
+ [0,cmax/2,cmax].forEach(function(v){var yy=y0+ch-v/cmax*ch;s+=T(cx-6,yy+4,v.toFixed(2),'tn','end');});
+ curves.forEach(function(c,k){if(c.length<2)return;var pts=c.map(function(v,i){return (cx+i/(np-1)*cw).toFixed(1)+','+(y0+ch-Math.min(1,v/cmax)*ch).toFixed(1);});
+  s+='<polyline points="'+pts.join(' ')+'" fill="none" stroke="'+(k?CB:CA)+'" stroke-width="2.4"/>';});
+ s+=T(cx,y0+ch+16,'0','tn','middle')+T(cx+cw,y0+ch+16,String(np-1),'tn','middle')+T(cx+cw/2,y0+ch+16,'passes','tn','middle');
+ s+=T(cx,y0+ch+40,'&#9632;','tn','start',CAi)+T(cx+14,y0+ch+40,'Elman, 1 step: '+(curves[0].length?curves[0][curves[0].length-1].toFixed(3):'&ndash;'),'tn','start')+
+   T(cx+214,y0+ch+40,'&#9632;','tn','start',CBi)+T(cx+228,y0+ch+40,'BPTT, '+KSTEPS+' steps: '+(curves[1].length?curves[1][curves[1].length-1].toFixed(3):'&ndash;'),'tn','start');
+ document.getElementById('gc').innerHTML=s;
+ return acc;}
+function readout(acc){
+ var t=CUR,nx=DATA.letters[t+1],pA=decode(EV[0].OS[Math.min(t,WINMAX-1)]),pB=decode(EV[1].OS[Math.min(t,WINMAX-1)]);
+ var ctx=DATA.letters.slice(Math.max(0,t-5),t+1).join(' ');
+ var s='After <b>&hellip; '+ctx+'</b>, the next letter is <b>'+nx+'</b>. <span style="color:var(--warm-ink)">Elman&rsquo;s network</span> expects <b>'+pA[0]+'</b>'+
+   (DATA.out==='soft'?' ('+(pA[1]*100).toFixed(0)+'%)':'')+', <span style="color:var(--blue-ink)">the BPTT network</span> <b>'+pB[0]+'</b>'+(DATA.out==='soft'?' ('+(pB[1]*100).toFixed(0)+'%)':'')+'. ';
+ if(MODE==='syl'){var P=acc[0].length-1;
+  if(NETS[0].pass<3)s+='Press <b>Train</b> and watch the bars over the vowels shrink.';
+  else if(LRUN<=3)s+='With runs of at most three vowels both networks count them: the only error left is at the consonants, which no one can predict.';
+  else s+='The hard letter is the '+P+'th <b>u</b>: after '+(P-1)+' of them, is there one more? Elman&rsquo;s network errs '+acc[0][P].toFixed(2)+' there, the BPTT network '+acc[1][P].toFixed(2)+'.'+(KSTEPS<LRUN?' Try k &ge; '+LRUN+'.':'');}
+ else if(MODE==='eng')s+=NETS[0].pass<3?'Real text is much harder: watch the error fall first inside common words like <b>the</b> and <b>and</b>.':'Even in real prose, the surprise is highest at the first letter of a word and falls as the word goes on: the network has learned bits of English spelling, and the spikes still point at the word boundaries the input never showed.';
+ else s+=NETS[0].pass<3?'Press <b>Train</b>: the error inside each word falls, and what is left marks where words begin.':'Inside a word the next letter is nearly certain; at a word&rsquo;s first letter it is a guess among the words, so the error spikes there and marks the boundary.';
+ document.getElementById('rd').innerHTML=s;
+ document.getElementById('status').textContent='pass '+NETS[0].pass+' / '+MAXPASS+(RUN?' · training':'');}
+function draw(){drawStrip();drawNet();var acc=drawChart();readout(acc);}
+// ---------------------------------------------------------------- controls
+function seg(id,fn){document.getElementById(id).addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;Array.from(this.children).forEach(function(x){x.classList.toggle('on',x===b);});fn(b);});}
+seg('modeSeg',function(b){MODE=b.dataset.m;if(MODE==='eng'&&HID<40){HID=40;document.getElementById('H').value='40';}document.getElementById('L').disabled=MODE!=='syl';document.getElementById('Llab').style.opacity=MODE==='syl'?1:0.4;CUR=12;reset();});
+seg('netSeg',function(b){VIEW=+b.dataset.n;draw();});
+document.getElementById('L').addEventListener('input',function(){LRUN=+this.value;document.getElementById('Lv').textContent=LRUN;reset();});
+document.getElementById('K').addEventListener('input',function(){KSTEPS=+this.value;document.getElementById('Kv').textContent=KSTEPS;reset();});
+document.getElementById('H').addEventListener('change',function(){HID=+this.value;reset();});
+document.getElementById('speed').addEventListener('change',function(){SPEED=+this.value;});
+document.getElementById('go').addEventListener('click',function(){RUN=!RUN;if(RUN&&NETS[0].pass>=MAXPASS){MAXPASS+=200;}this.textContent=RUN?'Pause':'Train';draw();});
+document.getElementById('reset').addEventListener('click',function(){SEED++;reset();});
+document.getElementById('prev').addEventListener('click',function(){CUR=Math.max(0,CUR-1);draw();});
+document.getElementById('next').addEventListener('click',function(){CUR=Math.min(WINMAX-2,CUR+1);draw();});
+document.getElementById('play').addEventListener('click',function(){if(PLAY){clearInterval(PLAY);PLAY=null;this.textContent='Play';return;}
+ this.textContent='Stop';PLAY=setInterval(function(){CUR=CUR>=WINMAX-2?0:CUR+1;draw();},450);});
+document.addEventListener('keydown',function(e){if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;if(e.key==='ArrowLeft'){CUR=Math.max(0,CUR-1);draw();}if(e.key==='ArrowRight'){CUR=Math.min(WINMAX-2,CUR+1);draw();}});
+reset();RUN=true;document.getElementById('go').textContent='Pause';requestAnimationFrame(frame);
+</script>
+</body>
+</html>
