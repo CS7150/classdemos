@@ -45,7 +45,7 @@ button.main{min-width:120px}
 <div class="rd" id="rd"></div>
 
 <div class="cap">
-<div><b>What the paper says.</b> Write &phi;(x) for the activations of a layer. The usual analysis takes a single unit, the natural basis vector e<sub>i</sub>, and collects the held-out images x that maximize &lang;&phi;(x), e<sub>i</sub>&rang;, the unit&rsquo;s activation. The paper takes a random vector v instead and maximizes &lang;&phi;(x), v&rang;. For both an MNIST network and AlexNet, the two kinds of image set looked equally semantically coherent (their Figures 1&ndash;4). So, they conclude, &ldquo;the natural basis is not better than a random basis,&rdquo; and it is the whole space of activations, not individual units, that carries the meaning. This is the property Joseph and Ling asked about. Here the network is the paper&rsquo;s fully connected FC100-100-10, the images are the 2,000 held-out test digits, and each random direction is a Gaussian vector over the 100 units of the layer.</div>
+<div><b>What the paper says.</b> Write &phi;(x) for the activations of a layer. The usual analysis takes a single unit, the natural basis vector e<sub>i</sub>, and collects the held-out images x that maximize &lang;&phi;(x), e<sub>i</sub>&rang;, the unit&rsquo;s activation. The paper takes a random vector v instead and maximizes &lang;&phi;(x), v&rang;. For both an MNIST network and AlexNet, the two kinds of image set looked equally semantically coherent (their Figures 1&ndash;4). So, they conclude, &ldquo;the natural basis is not better than a random basis,&rdquo; and it is the whole space of activations, not individual units, that carries the meaning. This is the property Joseph and Ling asked about. Here the network is the paper&rsquo;s fully connected FC100-100-10, the images are 1,000 held-out test digits, and each random direction is a Gaussian vector over the 100 units of the layer.</div>
 <div><b>Why it matters, and what came after.</b> If meaning lives in directions rather than neurons, then looking at single neurons can miss most of what a network represents, and a neuron that looks like a &ldquo;7 detector&rdquo; might be one view of something spread across many units. Later interpretability work took both sides: some units really are selective (network dissection found many single-concept units in convolutional networks), but many representations are distributed and superposed, which is why methods now look for directions (probes, sparse dictionaries) as much as for neurons. Ling&rsquo;s question, whether there is a way to explain every feature when features are not single neurons, is close to the current research frontier.</div>
 </div>
 
@@ -78,7 +78,7 @@ function seg(id,fn){document.getElementById(id).addEventListener('click',functio
 seg('layerSeg',function(b){LAYER=+b.dataset.l;activations();makeRows();});
 document.getElementById('newrows').addEventListener('click',function(){if(!D)return;SEED++;makeRows();});
 document.getElementById('reveal').addEventListener('click',function(){REVEAL=true;draw();});
-Promise.all([ADV.loadMNIST(''),ADV.loadModels('')]).then(function(a){D=a[0];M=a[1];document.getElementById('status').textContent='';activations();makeRows();})
+Promise.all([ADV.loadMNIST(''),ADV.loadModels('',['FC100'])]).then(function(a){D=a[0];M=a[1];document.getElementById('status').textContent='';activations();makeRows();})
  .catch(function(e){document.getElementById('status').textContent='could not load the data: '+e;});
 </script>
 </body>

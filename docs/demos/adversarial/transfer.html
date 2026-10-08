@@ -57,7 +57,7 @@ table.mx tr.noise td{cursor:default;font-style:italic}
 
 <script src="advcore.js"></script>
 <script>
-var D=null,M=null,IDS=[],RES={},RUNNING=false,SEL=null,MAG=1;
+var D=null,M=null,META={},IDS=[],RES={},RUNNING=false,SEL=null,MAG=1;
 function paint(cv,x){var cx=cv.getContext('2d'),im=cx.createImageData(28,28);for(var i=0;i<784;i++){var v=Math.round(Math.max(0,Math.min(1,x[i]))*255);im.data[i*4]=im.data[i*4+1]=im.data[i*4+2]=v;im.data[i*4+3]=255;}cx.putImageData(im,0,0);}
 function applied(e,m){var x=new Float32Array(784);for(var i=0;i<784;i++)x[i]=Math.max(0,Math.min(1,e.x[i]+m*e.r[i]));return x;}
 function cellRate(src,dst){var es=RES[src];if(!es||!es.length)return null;var err=0;es.forEach(function(e){if(ADV.predict(M[dst],applied(e,MAG))!==e.y)err++;});return err/es.length;}
@@ -65,8 +65,8 @@ function noiseRate(dst){var all=[];IDS.forEach(function(k){if(RES[k])all=all.con
  all.forEach(function(e){var d=ADV.distortion(e.r)*MAG,x=e.x.map(function(v){return Math.max(0,Math.min(1,v+ADV.randn(r)*d));});if(ADV.predict(M[dst],x)!==e.y)err++;});return err/all.length;}
 function shade(v){return 'color-mix(in oklab, var(--pink) '+Math.round(v*85)+'%, var(--surface))';}
 function draw(){
- var h='<table class="mx"><tr><th></th>'+IDS.map(function(k){return '<th>'+M[k].meta.name.replace(', ','<br>')+'<br><span style="font-size:11.5px">'+(M[k].meta.testAcc*100).toFixed(1)+'% test</span></th>';}).join('')+'</tr>';
- IDS.forEach(function(src){h+='<tr><th class="rh">made for '+M[src].meta.name+'</th>';IDS.forEach(function(dst){var v=cellRate(src,dst),sel=SEL&&SEL[0]===src&&SEL[1]===dst;
+ var h='<table class="mx"><tr><th></th>'+IDS.map(function(k){return '<th>'+META[k].name.replace(', ','<br>')+'<br><span style="font-size:11.5px">'+(META[k].testAcc*100).toFixed(1)+'% test</span></th>';}).join('')+'</tr>';
+ IDS.forEach(function(src){h+='<tr><th class="rh">made for '+META[src].name+'</th>';IDS.forEach(function(dst){var v=cellRate(src,dst),sel=SEL&&SEL[0]===src&&SEL[1]===dst;
    h+='<td data-s="'+src+'" data-d="'+dst+'" class="'+(sel?'sel':'')+'" style="background:'+(v===null?'var(--surface)':shade(v))+'">'+(v===null?(RUNNING===src?'&hellip;':''):(v*100).toFixed(0)+'%')+'</td>';});h+='</tr>';});
  h+='<tr class="noise"><th class="rh">Gaussian noise, same size</th>';IDS.forEach(function(dst){var v=noiseRate(dst);h+='<td style="background:'+(v===null?'var(--surface)':shade(v))+'">'+(v===null?'':(v*100).toFixed(0)+'%')+'</td>';});h+='</tr></table>';
  document.getElementById('mx').innerHTML=h;
@@ -85,9 +85,11 @@ function examples(){var ex=document.getElementById('ex');ex.innerHTML='';if(!SEL
   var d=document.createElement('div');d.className='e';var c1=document.createElement('canvas'),c2=document.createElement('canvas');c1.width=c2.width=28;c1.height=c2.height=28;paint(c1,e.x);paint(c2,xa);
   var row=document.createElement('div');row.style.display='flex';row.style.gap='3px';row.appendChild(c1);row.appendChild(c2);d.appendChild(row);
   var t=document.createElement('div');t.innerHTML='a '+e.y+': made-for says <b>'+ps+'</b>, tested says <b style="color:'+(pd!==e.y?'var(--pink-ink)':'var(--green-ink)')+'">'+pd+'</b>';d.appendChild(t);ex.appendChild(d);});
- var lab=document.createElement('div');lab.className='lg';lab.style.width='100%';lab.innerHTML='Examples made for <b>'+M[src].meta.name+'</b> and tested on <b>'+M[dst].meta.name+'</b>: original, then adversarial. Click any cell to change the pair.';ex.insertBefore(lab,ex.firstChild);}
+ var lab=document.createElement('div');lab.className='lg';lab.style.width='100%';lab.innerHTML='Examples made for <b>'+META[src].name+'</b> and tested on <b>'+META[dst].name+'</b>: original, then adversarial. Click any cell to change the pair.';ex.insertBefore(lab,ex.firstChild);}
 function frame(){return new Promise(function(r){setTimeout(r,0);});}
-async function run(){if(RUNNING)return;var N=+document.getElementById('N').value,r=ADV.rng(17),digits=[],k=0;RES={};SEL=null;
+async function run(){if(RUNNING)return;
+ if(!M){var st=document.getElementById('status');st.textContent='loading the six networks (about 400 KB)…';M=await ADV.loadModels('',IDS);st.textContent='';}
+ var N=+document.getElementById('N').value,r=ADV.rng(17),digits=[],k=0;RES={};SEL=null;
  while(digits.length<N&&k<D.test.length){var i=D.test[k++];var ok=IDS.every(function(m){return ADV.predict(M[m],D.X[i])===D.Y[i];});if(ok)digits.push(i);}
  for(var s=0;s<IDS.length;s++){var src=IDS[s];RUNNING=src;RES[src]=[];draw();
   for(var n=0;n<digits.length;n++){var i2=digits[n],y=D.Y[i2],tgt=(y+1+Math.floor(r()*9))%10;
@@ -97,7 +99,8 @@ async function run(){if(RUNNING)return;var N=+document.getElementById('N').value
  RUNNING=false;SEL=['P1a','P2'];document.getElementById('status').textContent='done: '+digits.length+' digits per network, all read correctly by every network to begin with';draw();}
 document.getElementById('go').addEventListener('click',function(){if(D)run();});
 document.getElementById('mag').addEventListener('input',function(){MAG=+this.value;document.getElementById('magv').innerHTML='&times;'+MAG.toFixed(2);if(!RUNNING)draw();});
-Promise.all([ADV.loadMNIST(''),ADV.loadModels('')]).then(function(a){D=a[0];M=a[1];IDS=['FC100','FC200','FC10','P1a','P1b','P2'];document.getElementById('status').textContent='';draw();})
+IDS=['FC100','FC50','FC10','P1a','P1b','P2'];
+Promise.all([ADV.loadMNIST(''),ADV.modelIndex('')]).then(function(a){D=a[0];a[1].forEach(function(m){META[m.id]=m;});document.getElementById('status').textContent='';draw();})
  .catch(function(e){document.getElementById('status').textContent='could not load the data: '+e;});
 </script>
 </body>

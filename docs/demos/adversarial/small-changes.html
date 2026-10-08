@@ -126,10 +126,11 @@ function drawAll(){drawA();drawB();drawC();}
 document.getElementById('logn').addEventListener('input',function(){LOGN=+this.value;drawB();});
 document.getElementById('n784').addEventListener('click',function(){LOGN=Math.log10(784);document.getElementById('logn').value=LOGN;drawB();});
 document.getElementById('n150k').addEventListener('click',function(){LOGN=Math.log10(150528);document.getElementById('logn').value=LOGN;drawB();});
-document.getElementById('model').addEventListener('change',function(){MODEL=this.value;document.getElementById('status').textContent='computing…';setTimeout(function(){drawAll();document.getElementById('status').textContent='';},20);});
+document.getElementById('model').addEventListener('change',function(){var id=this.value,st=document.getElementById('status');st.textContent='loading that network…';
+ ADV.loadModel('',id).then(function(net){M[id]=net;MODEL=id;st.textContent='computing…';setTimeout(function(){drawAll();st.textContent='';},20);});});
 drawB();
-Promise.all([ADV.loadMNIST(''),ADV.loadModels('')]).then(function(a){D=a[0];M=a[1];
- var sel=document.getElementById('model');Object.keys(M).forEach(function(k){var o=document.createElement('option');o.value=k;o.textContent=M[k].meta.name;if(k===MODEL)o.selected=true;sel.appendChild(o);});
+Promise.all([ADV.loadMNIST(''),ADV.modelIndex(''),ADV.loadModel('',MODEL)]).then(function(a){D=a[0];M={};M[MODEL]=a[2];
+ var sel=document.getElementById('model');a[1].forEach(function(m){var o=document.createElement('option');o.value=m.id;o.textContent=m.name;if(m.id===MODEL)o.selected=true;sel.appendChild(o);});
  document.getElementById('status').textContent='computing…';setTimeout(function(){drawAll();document.getElementById('status').textContent='';},20);}).catch(function(e){document.getElementById('status').textContent='could not load the data: '+e;});
 </script>
 </body>

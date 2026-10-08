@@ -80,24 +80,27 @@ function opNorm(ly,iters){var r=rng(3),v=new Float32Array(ly.nin);for(var i=0;i<
 root.ADV={rng:rng,randn:randn,makeMLP:makeMLP,forward:forward,predict:predict,backward:backward,trainBatch:trainBatch,accuracy:accuracy,
   inputGrad:inputGrad,attack:attack,attackFixedC:attackFixedC,distortion:distortion,opNorm:opNorm};
 })(typeof window!=='undefined'?window:global);
-// ---- browser loaders: the 14,000-digit sheet (12,000 train, 2,000 test) and the trained models
+// ---- browser loaders: 1,000 held-out MNIST test digits, and the trained networks, one file each
 (function(root){
 if(typeof window==='undefined')return;
 root.ADV.loadMNIST=function(base){base=base||'';
-  return Promise.all([new Promise(function(res,rej){var im=new Image();im.onload=function(){res(im);};im.onerror=rej;im.src=base+'mnist14k.png';}),
-    fetch(base+'mnist14k-labels.bin').then(function(r){return r.arrayBuffer();})]).then(function(a){
+  return Promise.all([new Promise(function(res,rej){var im=new Image();im.onload=function(){res(im);};im.onerror=rej;im.src=base+'mnist-test1k.png';}),
+    fetch(base+'mnist-test1k-labels.bin').then(function(r){return r.arrayBuffer();})]).then(function(a){
     var im=a[0],cv=document.createElement('canvas');cv.width=im.width;cv.height=im.height;var cx=cv.getContext('2d');cx.drawImage(im,0,0);
     var px=cx.getImageData(0,0,im.width,im.height).data,cols=im.width/28,Y=new Uint8Array(a[1]),X=[];
     for(var n=0;n<Y.length;n++){var r0=Math.floor(n/cols)*28,c0=(n%cols)*28,x=new Float32Array(784);
       for(var i=0;i<28;i++)for(var j=0;j<28;j++)x[i*28+j]=px[((r0+i)*im.width+c0+j)*4]/255;X.push(x);}
-    return {X:X,Y:Array.from(Y),train:Array.from({length:12000},function(_,i){return i;}),test:Array.from({length:2000},function(_,i){return 12000+i;})};});};
-root.ADV.loadModels=function(base){base=base||'';
-  return Promise.all([fetch(base+'models.json').then(function(r){return r.json();}),fetch(base+'models.bin').then(function(r){return r.arrayBuffer();})]).then(function(a){
-    var meta=a[0],buf=a[1],out={};
-    meta.models.forEach(function(m){var net={spec:{sizes:m.sizes},act:m.act,lambda:m.lambda,meta:m,layers:[]};
+    return {X:X,Y:Array.from(Y),train:[],test:Array.from({length:Y.length},function(_,i){return i;})};});};
+var INDEX=null,CACHE={};
+root.ADV.modelIndex=function(base){base=base||'';if(!INDEX)INDEX=fetch(base+'models/index.json').then(function(r){return r.json();}).then(function(j){return j.models;});return INDEX;};
+root.ADV.loadModel=function(base,id){base=base||'';if(CACHE[id])return CACHE[id];
+  CACHE[id]=root.ADV.modelIndex(base).then(function(list){var m=list.filter(function(q){return q.id===id;})[0];
+    return fetch(base+m.file).then(function(r){return r.arrayBuffer();}).then(function(buf){
+      var net={spec:{sizes:m.sizes},act:m.act,lambda:m.lambda,meta:m,layers:[]};
       m.layers.forEach(function(L){var q=new Int8Array(buf,L.w,L.nin*L.nout),sc=new Float32Array(buf,L.scale,L.nout),b=new Float32Array(buf,L.b,L.nout).slice(),W=new Float32Array(L.nin*L.nout);
         for(var j=0;j<L.nout;j++)for(var i=0;i<L.nin;i++)W[j*L.nin+i]=q[j*L.nin+i]*sc[j];
         net.layers.push({nin:L.nin,nout:L.nout,W:W,b:b});});
-      out[m.id]=net;});
-    return out;});};
+      return net;});});
+  return CACHE[id];};
+root.ADV.loadModels=function(base,ids){return Promise.all(ids.map(function(id){return root.ADV.loadModel(base,id);})).then(function(nets){var o={};ids.forEach(function(id,k){o[id]=nets[k];});return o;});};
 })(typeof window!=="undefined"?window:global);

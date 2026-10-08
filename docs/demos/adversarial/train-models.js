@@ -1,6 +1,7 @@
 // Train the six MNIST networks used by these demos, with the same advcore.js the pages run.
 // Usage: put the four MNIST .gz files in this folder, then: node train-models.js 30
-// It writes models.bin (int8 weights, one scale per output unit) and models.json.
+// It writes models.bin (int8 weights, one scale per output unit) and models.json; the pages
+// load them split into models/<id>.bin with models/index.json.
 require('./advcore.js');
 const fs=require('fs'),zlib=require('zlib');
 const TR=zlib.gunzipSync(fs.readFileSync('train-images-idx3-ubyte.gz')).subarray(16),TL=zlib.gunzipSync(fs.readFileSync('train-labels-idx1-ubyte.gz')).subarray(8);
@@ -11,7 +12,7 @@ const ALL=[...Array(12000).keys()],P1=ALL.slice(0,6000),P2=ALL.slice(6000),TEST=
 const EP=+process.argv[2]||30;
 const MODELS=[
  {id:'FC100',name:'FC100-100-10',spec:{sizes:[784,100,100,10],act:'sigmoid',lambda:[1e-5,1e-5,1e-6],seed:2},data:'all'},
- {id:'FC200',name:'FC200-200-10',spec:{sizes:[784,200,200,10],act:'sigmoid',lambda:[1e-5,1e-5,1e-6],seed:3},data:'all'},
+ {id:'FC50',name:'FC50-50-10',spec:{sizes:[784,50,50,10],act:'sigmoid',lambda:[1e-5,1e-5,1e-6],seed:3},data:'all'},
  {id:'FC10',name:'FC10 (softmax)',spec:{sizes:[784,10],act:'sigmoid',lambda:[1e-4],seed:1},data:'all'},
  {id:'P1a',name:'FC100-100-10, half 1',spec:{sizes:[784,100,100,10],act:'sigmoid',lambda:[1e-5,1e-5,1e-6],seed:5},data:'P1'},
  {id:'P1b',name:'FC100-100-10, half 1, new seed',spec:{sizes:[784,100,100,10],act:'sigmoid',lambda:[1e-5,1e-5,1e-6],seed:6},data:'P1'},
