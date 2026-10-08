@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Adversarial examples transfer</title>
+<meta name="description" content="Szegedy et al.'s cross-model experiment, run live: adversarial examples made for one MNIST network, tested on networks of other sizes, other regularization, and networks trained on a disjoint half of the data. They fool the others far more often than random noise of the same size does.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 24px;max-width:1150px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+h2{font-size:15.5px;font-weight:600;margin:10px 0 0}
+.quiz{margin:0}
+.row{gap:7px}
+button{height:30px;font-size:13px;padding:0 10px}
+button.main{min-width:120px}
+select{height:30px;font-size:13px;padding:0 6px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:44px}
+input[type=range]{flex:0 1 200px;min-width:100px}
+.rd{font-size:14px;line-height:1.6;min-height:1.6em}
+.cap{font-size:12.5px;line-height:1.6;padding-top:4px}
+.nav{display:flex;align-items:baseline;gap:10px}
+.status{font-size:13px;color:var(--text-muted);font-variant-numeric:tabular-nums}
+table.mx{border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+table.mx th{font-weight:400;color:var(--text-muted);padding:4px 8px;text-align:center;line-height:1.25}
+table.mx th.rh{text-align:right}
+table.mx td{width:92px;height:34px;text-align:center;border:1px solid var(--border);cursor:pointer;color:var(--text-primary)}
+table.mx td.sel{outline:2px solid var(--text-primary);outline-offset:-2px}
+table.mx tr.noise td{cursor:default;font-style:italic}
+#ex{display:flex;gap:14px;flex-wrap:wrap}
+#ex .e{display:flex;flex-direction:column;align-items:center;font-size:12px;color:var(--text-secondary);gap:2px}
+#ex canvas{width:64px;height:64px;image-rendering:pixelated;border:1px solid var(--border);border-radius:3px;background:#000}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Adversarial examples demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Adversarial examples transfer<span>: made for one network, they fool the others</span></h1>
+<p class="quiz">The paper&rsquo;s most surprising finding: an adversarial example found with one network&rsquo;s gradients is often misread by a <b>different</b> network, one with another size, other regularization, even one trained on a <b>disjoint half of the training set</b> that shares no weights and no training images. Below, each row makes adversarial examples for one network (with the paper&rsquo;s search, live), and each column tests them on another.</p>
+
+<div class="row">
+  <span class="klab">digits per network</span><select id="N"><option>10</option><option selected>20</option><option>40</option></select>
+  <button class="main" id="go">Make the examples</button>
+  <span class="klab">magnify each change</span><input type="range" id="mag" min="1" max="2" step="0.05" value="1"><span class="knum" id="magv">&times;1.00</span>
+  <span class="status" id="status">loading digits and networks&hellip;</span>
+</div>
+
+<h2>Error rate of each network (columns) on the adversarial examples made for each network (rows)</h2>
+<div id="mx"></div>
+<div class="rd" id="rd"></div>
+<div id="ex"></div>
+
+<div class="cap">
+<div><b>The networks.</b> All are trained with the same code on MNIST digits (12,000 of them here, against the paper&rsquo;s 60,000): two sigmoid networks of different width, a softmax classifier with no hidden layer and its own weight decay (the paper&rsquo;s FC10), and three networks of the same size trained on halves of the data, two on the first half from different random starts and one on the second half, the paper&rsquo;s P<sub>1</sub> and P<sub>2</sub>. Each row runs the paper&rsquo;s search (projected gradient on c&middot;|r|&sup2; + loss for a random wrong target, with a line search on c) for that row&rsquo;s network only. A cell is the fraction of those examples the column&rsquo;s network gets wrong, so the diagonal is 100% by construction. The last row adds Gaussian noise of the same size to the same digits. <b>Magnify</b> scales every change up, as the paper did in Table 4 (by 40%) to show that a slightly larger change transfers much more often.</div>
+<div><b>Why would they transfer?</b> This is the question most of you asked, and the paper does not answer it. Three ideas since. (1) <b>Similar functions:</b> networks trained on the same task end up computing similar functions, so their gradients point in similar directions; the transfer is strongest between networks of the same shape and weakest to the softmax model, whose decision rule is simplest. (2) <b>Linearity:</b> in high dimensions, a change aligned with what any reasonable model weighs (the strokes and edges that separate the digits) adds up for all of them (<a href="small-changes.html">tiny crafted vs. large random</a>). (3) <b>Features, not bugs:</b> Ilyas et al. 2019 argue the perturbations exploit patterns that genuinely predict the label in the data, but which humans do not use; every model is rewarded for using them, so every model is fooled by them. That fits the disjoint-half result: the second half of the data has the same patterns as the first.</div>
+</div>
+
+<script src="advcore.js"></script>
+<script>
+var D=null,M=null,IDS=[],RES={},RUNNING=false,SEL=null,MAG=1;
+function paint(cv,x){var cx=cv.getContext('2d'),im=cx.createImageData(28,28);for(var i=0;i<784;i++){var v=Math.round(Math.max(0,Math.min(1,x[i]))*255);im.data[i*4]=im.data[i*4+1]=im.data[i*4+2]=v;im.data[i*4+3]=255;}cx.putImageData(im,0,0);}
+function applied(e,m){var x=new Float32Array(784);for(var i=0;i<784;i++)x[i]=Math.max(0,Math.min(1,e.x[i]+m*e.r[i]));return x;}
+function cellRate(src,dst){var es=RES[src];if(!es||!es.length)return null;var err=0;es.forEach(function(e){if(ADV.predict(M[dst],applied(e,MAG))!==e.y)err++;});return err/es.length;}
+function noiseRate(dst){var all=[];IDS.forEach(function(k){if(RES[k])all=all.concat(RES[k]);});if(!all.length)return null;var r=ADV.rng(4),err=0;
+ all.forEach(function(e){var d=ADV.distortion(e.r)*MAG,x=e.x.map(function(v){return Math.max(0,Math.min(1,v+ADV.randn(r)*d));});if(ADV.predict(M[dst],x)!==e.y)err++;});return err/all.length;}
+function shade(v){return 'color-mix(in oklab, var(--pink) '+Math.round(v*85)+'%, var(--surface))';}
+function draw(){
+ var h='<table class="mx"><tr><th></th>'+IDS.map(function(k){return '<th>'+M[k].meta.name.replace(', ','<br>')+'<br><span style="font-size:11.5px">'+(M[k].meta.testAcc*100).toFixed(1)+'% test</span></th>';}).join('')+'</tr>';
+ IDS.forEach(function(src){h+='<tr><th class="rh">made for '+M[src].meta.name+'</th>';IDS.forEach(function(dst){var v=cellRate(src,dst),sel=SEL&&SEL[0]===src&&SEL[1]===dst;
+   h+='<td data-s="'+src+'" data-d="'+dst+'" class="'+(sel?'sel':'')+'" style="background:'+(v===null?'var(--surface)':shade(v))+'">'+(v===null?(RUNNING===src?'&hellip;':''):(v*100).toFixed(0)+'%')+'</td>';});h+='</tr>';});
+ h+='<tr class="noise"><th class="rh">Gaussian noise, same size</th>';IDS.forEach(function(dst){var v=noiseRate(dst);h+='<td style="background:'+(v===null?'var(--surface)':shade(v))+'">'+(v===null?'':(v*100).toFixed(0)+'%')+'</td>';});h+='</tr></table>';
+ document.getElementById('mx').innerHTML=h;
+ Array.from(document.querySelectorAll('table.mx td[data-s]')).forEach(function(td){td.addEventListener('click',function(){SEL=[td.dataset.s,td.dataset.d];draw();});});
+ readout();examples();}
+function readout(){var r='';
+ if(!Object.keys(RES).length){r='Press <b>Make the examples</b>. Each row takes a few seconds: it runs the full search on every digit for that row&rsquo;s network.';}
+ else{var off=[],dis=null;IDS.forEach(function(s){IDS.forEach(function(d){if(s!==d){var v=cellRate(s,d);if(v!==null)off.push(v);}});});
+  var mean=off.length?off.reduce(function(a,b){return a+b;},0)/off.length:0,nz=IDS.map(noiseRate).filter(function(v){return v!==null;}),nm=nz.length?nz.reduce(function(a,b){return a+b;},0)/nz.length:0;
+  var p12=cellRate('P1a','P2');
+  r='Off the diagonal, the adversarial examples fool the other networks <b>'+(mean*100).toFixed(0)+'%</b> of the time on average; noise of the same size, <b>'+(nm*100).toFixed(0)+'%</b>.'+
+   (p12!==null?' Made for a network trained on the first half of the data, they fool the network trained on the <i>other</i> half '+(p12*100).toFixed(0)+'% of the time.':'')+(MAG>1?' (Every change magnified &times;'+MAG.toFixed(2)+'.)':' Drag <b>magnify</b> to see how fast transfer grows with a slightly larger change.');}
+ document.getElementById('rd').innerHTML=r;}
+function examples(){var ex=document.getElementById('ex');ex.innerHTML='';if(!SEL||!RES[SEL[0]])return;
+ var src=SEL[0],dst=SEL[1];RES[src].slice(0,12).forEach(function(e){var xa=applied(e,MAG),ps=ADV.predict(M[src],xa),pd=ADV.predict(M[dst],xa);
+  var d=document.createElement('div');d.className='e';var c1=document.createElement('canvas'),c2=document.createElement('canvas');c1.width=c2.width=28;c1.height=c2.height=28;paint(c1,e.x);paint(c2,xa);
+  var row=document.createElement('div');row.style.display='flex';row.style.gap='3px';row.appendChild(c1);row.appendChild(c2);d.appendChild(row);
+  var t=document.createElement('div');t.innerHTML='a '+e.y+': made-for says <b>'+ps+'</b>, tested says <b style="color:'+(pd!==e.y?'var(--pink-ink)':'var(--green-ink)')+'">'+pd+'</b>';d.appendChild(t);ex.appendChild(d);});
+ var lab=document.createElement('div');lab.className='lg';lab.style.width='100%';lab.innerHTML='Examples made for <b>'+M[src].meta.name+'</b> and tested on <b>'+M[dst].meta.name+'</b>: original, then adversarial. Click any cell to change the pair.';ex.insertBefore(lab,ex.firstChild);}
+function frame(){return new Promise(function(r){setTimeout(r,0);});}
+async function run(){if(RUNNING)return;var N=+document.getElementById('N').value,r=ADV.rng(17),digits=[],k=0;RES={};SEL=null;
+ while(digits.length<N&&k<D.test.length){var i=D.test[k++];var ok=IDS.every(function(m){return ADV.predict(M[m],D.X[i])===D.Y[i];});if(ok)digits.push(i);}
+ for(var s=0;s<IDS.length;s++){var src=IDS[s];RUNNING=src;RES[src]=[];draw();
+  for(var n=0;n<digits.length;n++){var i2=digits[n],y=D.Y[i2],tgt=(y+1+Math.floor(r()*9))%10;
+   var a=ADV.attack(M[src],D.X[i2],tgt,{steps:300,lr:0.05,iters:8,c0:0.2});RES[src].push({x:D.X[i2],y:y,r:a.r,ok:a.ok});
+   document.getElementById('status').textContent='row '+(s+1)+' of '+IDS.length+': digit '+(n+1)+' of '+digits.length;if(n%3===2){draw();await frame();}}
+  draw();await frame();}
+ RUNNING=false;SEL=['P1a','P2'];document.getElementById('status').textContent='done: '+digits.length+' digits per network, all read correctly by every network to begin with';draw();}
+document.getElementById('go').addEventListener('click',function(){if(D)run();});
+document.getElementById('mag').addEventListener('input',function(){MAG=+this.value;document.getElementById('magv').innerHTML='&times;'+MAG.toFixed(2);if(!RUNNING)draw();});
+Promise.all([ADV.loadMNIST(''),ADV.loadModels('')]).then(function(a){D=a[0];M=a[1];IDS=['FC100','FC200','FC10','P1a','P1b','P2'];document.getElementById('status').textContent='';draw();})
+ .catch(function(e){document.getElementById('status').textContent='could not load the data: '+e;});
+</script>
+</body>
+</html>

@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Finding an adversarial example</title>
+<meta name="description" content="Szegedy et al. 2014's search for an adversarial example, run live on an MNIST network: minimize c times the size of the change plus the loss for a target label, keeping pixels in range, and shrink c until the change is as small as it can be. Compare with the one-step fast gradient sign method and with random noise of the same size.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 24px;max-width:1150px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+.quiz{margin:0}
+.row{gap:7px}
+button{height:30px;font-size:13px;padding:0 10px}
+button.main{min-width:110px}
+.seg button{height:28px;font-size:12.5px;padding:0 9px}
+select{height:30px;font-size:13px;padding:0 6px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:40px}
+input[type=range]{flex:0 1 160px;min-width:90px}
+.rd{font-size:14px;line-height:1.6;min-height:3.2em}
+.cap{font-size:12.5px;line-height:1.6;padding-top:4px}
+.nav{display:flex;align-items:baseline;gap:10px}
+.status{font-size:13px;color:var(--text-muted)}
+#picker{display:flex;gap:5px;flex-wrap:wrap}
+#picker canvas{width:44px;height:44px;border:1px solid var(--border);border-radius:4px;cursor:pointer;image-rendering:pixelated;background:#000}
+#picker canvas.on{border:2px solid var(--blue)}
+#targets button{min-width:32px;padding:0 6px}
+#targets button.on{background:var(--surface-1);box-shadow:inset 0 -2px 0 var(--pink);font-weight:600}
+.panels{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}
+.panel{display:flex;flex-direction:column;align-items:center;gap:4px}
+.panel canvas{width:168px;height:168px;image-rendering:pixelated;border:1px solid var(--border);border-radius:4px;background:#000}
+.panel .lab{font-size:13px;color:var(--text-secondary);text-align:center;line-height:1.35;max-width:175px}
+.panel .lab b{color:var(--text-primary)}
+.op{font-size:26px;color:var(--text-muted);align-self:center;margin-top:-30px}
+table.log{border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--text-secondary)}
+table.log td,table.log th{padding:1px 10px 1px 0;text-align:right}
+table.log th{font-weight:400;color:var(--text-muted)}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Adversarial examples demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Finding an adversarial example<span>: the smallest change that makes the network say what you want</span></h1>
+<p class="quiz">Szegedy et al. pose it as an optimization. Given an image x and a target label, find the change r that <b>minimizes c&middot;|r| + loss(x + r, target)</b>, keeping every pixel of x + r between 0 and 1. A large c keeps r small but may not reach the target; so search for the <b>smallest c that still works</b>. Every step needs the gradient of the loss with respect to the input pixels, the <a href="input-gradient.html">backward pass carried to the input</a>. Pick a digit and a target, and watch.</p>
+
+<div class="row"><span class="klab">digit</span><div id="picker"></div><button id="more">Other digits</button></div>
+<div class="row">
+  <span class="klab">make the network say</span><div class="seg" id="targets"></div>
+  <span class="klab">network</span><select id="model"></select>
+</div>
+<div class="row">
+  <span class="klab">method</span>
+  <div class="seg" id="methodSeg"><button data-m="paper" class="on">Szegedy: smallest c&middot;|r|&sup2; + loss</button><button data-m="fgsm">one step: &epsilon;&middot;sign(gradient)</button></div>
+  <span class="klab" id="epsLab">&epsilon;</span><input type="range" id="eps" min="0.01" max="0.4" step="0.01" value="0.15"><span class="knum" id="epsV">0.15</span>
+  <button class="main" id="go">Run attack</button>
+  <button id="noise">Random noise, same size</button>
+  <span class="status" id="status">loading digits and networks&hellip;</span>
+</div>
+
+<div class="panels">
+  <div class="panel"><canvas id="cOrig" width="28" height="28"></canvas><div class="lab" id="lOrig"></div></div>
+  <div class="op">+</div>
+  <div class="panel"><canvas id="cPert" width="28" height="28"></canvas><div class="lab" id="lPert"></div></div>
+  <div class="op">=</div>
+  <div class="panel"><canvas id="cAdv" width="28" height="28"></canvas><div class="lab" id="lAdv"></div></div>
+  <div class="panel" style="margin-left:12px"><canvas id="cNoise" width="28" height="28"></canvas><div class="lab" id="lNoise">random noise of the same size</div></div>
+  <svg id="bars" viewBox="0 0 300 230" style="width:300px;height:230px"><g id="gb"></g></svg>
+</div>
+<div class="rd" id="rd"></div>
+<div class="row" style="align-items:flex-start;gap:24px">
+  <div><div class="klab" style="margin-bottom:2px">the search over c (paper&rsquo;s method)</div><table class="log" id="log"></table></div>
+</div>
+
+<div class="cap">
+<div><b>The search.</b> The paper solves the inner problem with box-constrained L-BFGS; here it is projected gradient descent (step on the gradient, then clip every pixel back into [0, 1]), which needs the same input gradient and finds similar answers. |r| is the squared length of the change. The outer loop is the paper&rsquo;s line search: start with some c, double it while the attack still succeeds, halve toward the last success when it fails, and keep the smallest successful change. The middle image shows r itself, red where pixels got brighter and blue where they got darker, rescaled so its largest change is fully saturated; the number under it is the paper&rsquo;s measure of distortion, the root-mean-square change per pixel on a 0&ndash;1 scale. The paper&rsquo;s Table 1 reports averages of 0.058 to 0.086 for its MNIST networks with hidden layers (more for heavily regularized softmax models); these networks, trained on 12,000 digits instead of 60,000, land in the same range.</div>
+<div><b>One step.</b> Goodfellow et al. 2015, a year later, asked what happens if you take a single step of size &epsilon; on <i>every</i> pixel, in the direction of the gradient&rsquo;s sign. If the loss were linear in x, that would be the strongest change allowed when no pixel may move by more than &epsilon;: each pixel contributes &epsilon;&middot;|gradient| to the change in loss, all with the same sign, so the effect adds up over the 784 pixels. It is cruder (every pixel moves, visibly so at large &epsilon;) but needs only one gradient, which is why it is the attack used to make adversarial training cheap.</div>
+<div><b>Noise of the same size.</b> The fourth image adds Gaussian noise with the same root-mean-square size as the adversarial change. It almost never changes the answer: what matters is not how big the change is but which way it points. <a href="small-changes.html">Tiny crafted vs. large random</a> measures this over many digits.</div>
+</div>
+
+<script src="advcore.js"></script>
+<script>
+var D=null,M=null,MODEL='FC100',METHOD='paper',EPS=0.15,PICK=[],SEL=0,TARGET=null,X0=null,R=null,RUNNING=false,NOISE=null,LOG=[],PSEED=1;
+function T(x,y,s,cls,anc,fill,extra){return '<text class="'+(cls||'tn')+'" x="'+(+x).toFixed(1)+'" y="'+(+y).toFixed(1)+'"'+(anc?' text-anchor="'+anc+'"':'')+(fill?' style="fill:'+fill+'"':'')+(extra||'')+'>'+s+'</text>';}
+function paint(cv,x){var cx=cv.getContext('2d'),im=cx.createImageData(28,28);for(var i=0;i<784;i++){var v=Math.round(Math.max(0,Math.min(1,x[i]))*255);im.data[i*4]=im.data[i*4+1]=im.data[i*4+2]=v;im.data[i*4+3]=255;}cx.putImageData(im,0,0);}
+function paintDiff(cv,r){var cx=cv.getContext('2d'),im=cx.createImageData(28,28),m=1e-9;for(var i=0;i<784;i++)m=Math.max(m,Math.abs(r[i]));
+ for(i=0;i<784;i++){var t=r[i]/m;var R_=t>0?255:Math.round(255*(1+t)),B=t<0?255:Math.round(255*(1-t)),G=Math.round(255*(1-Math.abs(t)));
+  im.data[i*4]=R_;im.data[i*4+1]=G;im.data[i*4+2]=B;im.data[i*4+3]=255;}cx.putImageData(im,0,0);return m;}
+function probs(x){var a=ADV.forward(M[MODEL],x);return a[a.length-1];}
+function argmax(p){var b=0;for(var j=1;j<p.length;j++)if(p[j]>p[b])b=j;return b;}
+function pickDigits(){var r=ADV.rng(PSEED*31+7),out=[],tries=0;while(out.length<12&&tries<500){var i=D.test[Math.floor(r()*D.test.length)];tries++;
+ if(out.indexOf(i)<0&&ADV.predict(M[MODEL],D.X[i])===D.Y[i])out.push(i);}PICK=out;
+ var pk=document.getElementById('picker');pk.innerHTML='';PICK.forEach(function(i,k){var c=document.createElement('canvas');c.width=28;c.height=28;paint(c,D.X[i]);c.title='digit '+D.Y[i];
+  c.addEventListener('click',function(){choose(k);});pk.appendChild(c);});choose(0);}
+function choose(k){SEL=k;Array.from(document.querySelectorAll('#picker canvas')).forEach(function(c,j){c.classList.toggle('on',j===k);});
+ X0=D.X[PICK[k]];R=new Float32Array(784);NOISE=null;LOG=[];var y=D.Y[PICK[k]];if(TARGET===null||TARGET===y)TARGET=(y+3)%10;drawTargets();draw();}
+function drawTargets(){var t=document.getElementById('targets');t.innerHTML='';var y=D.Y[PICK[SEL]];
+ for(var c=0;c<10;c++)(function(c){var b=document.createElement('button');b.textContent=c;b.disabled=c===y;if(c===TARGET)b.className='on';
+  b.addEventListener('click',function(){if(RUNNING)return;TARGET=c;R=new Float32Array(784);NOISE=null;LOG=[];drawTargets();draw();});t.appendChild(b);})(c);}
+function draw(msg){
+ var y=D.Y[PICK[SEL]],xa=new Float32Array(784);for(var i=0;i<784;i++)xa[i]=Math.max(0,Math.min(1,X0[i]+R[i]));
+ paint(document.getElementById('cOrig'),X0);var m=paintDiff(document.getElementById('cPert'),R);paint(document.getElementById('cAdv'),xa);
+ var p0=probs(X0),pa=probs(xa),d=ADV.distortion(R),pred=argmax(pa);
+ document.getElementById('lOrig').innerHTML='original: a <b>'+y+'</b><br>network says '+argmax(p0)+' ('+(p0[argmax(p0)]*100).toFixed(0)+'%)';
+ document.getElementById('lPert').innerHTML='the change r'+(d>0?', largest pixel &plusmn;'+m.toFixed(2):'')+'<br>distortion <b>'+d.toFixed(3)+'</b>';
+ document.getElementById('lAdv').innerHTML='x + r<br>network says <b style="color:'+(pred===TARGET&&d>0?'var(--pink-ink)':'inherit')+'">'+pred+'</b> ('+(pa[pred]*100).toFixed(0)+'%)';
+ var cn=document.getElementById('cNoise');if(NOISE){paint(cn,NOISE.x);var pn=probs(NOISE.x),q=argmax(pn);document.getElementById('lNoise').innerHTML='Gaussian noise, same size<br>network says <b>'+q+'</b> ('+(pn[q]*100).toFixed(0)+'%); '+NOISE.flips+' of 50 draws change the answer';}
+ else{cn.getContext('2d').clearRect(0,0,28,28);document.getElementById('lNoise').innerHTML='random noise of the same size<br>(press the button)';}
+ // bars
+ var s='',W=300,bw=24,x0=24,y0=20,H=170;s+=T(0,12,'probabilities: original (outline) and x + r (filled)','tn','start',null,' style="font-size:12px"');
+ for(var c=0;c<10;c++){var X=x0+c*(bw+3),h0=p0[c]*H,ha=pa[c]*H,col=c===TARGET?'var(--pink)':c===y?'var(--blue)':'var(--text-muted)';
+  s+='<rect x="'+X+'" y="'+(y0+H-ha).toFixed(1)+'" width="'+bw+'" height="'+ha.toFixed(1)+'" fill="'+col+'" opacity="0.8"/>'+
+   '<rect x="'+X+'" y="'+(y0+H-h0).toFixed(1)+'" width="'+bw+'" height="'+h0.toFixed(1)+'" fill="none" stroke="var(--text-secondary)" stroke-dasharray="3 2"/>'+
+   T(X+bw/2,y0+H+16,c,'tn','middle',c===TARGET?'var(--pink-ink)':c===y?'var(--blue-ink)':null,' style="font-weight:'+(c===TARGET||c===y?700:400)+'"');}
+ s+='<line x1="'+x0+'" y1="'+(y0+H)+'" x2="'+(x0+10*(bw+3))+'" y2="'+(y0+H)+'" stroke="var(--border-strong)"/>'+T(x0,y0+H+34,'blue: the true digit &middot; pink: the target','tn','start',null,' style="font-size:12px"');
+ document.getElementById('gb').innerHTML=s;
+ // log
+ var lg='<tr><th>try</th><th>c</th><th>reached '+TARGET+'?</th><th>distortion</th></tr>';LOG.forEach(function(e,k){lg+='<tr'+(e.best?' style="color:var(--text-primary);font-weight:600"':'')+'><td>'+(k+1)+'</td><td>'+e.c.toPrecision(3)+'</td><td>'+(e.ok?'yes':'no')+'</td><td>'+e.d.toFixed(3)+'</td></tr>';});
+ document.getElementById('log').innerHTML=LOG.length?lg:'<tr><td style="text-align:left">'+(METHOD==='paper'?'(runs when you press Run attack)':'(not used by the one-step method)')+'</td></tr>';
+ var rd='';
+ if(msg)rd=msg;
+ else if(d===0)rd='The network reads this as a <b>'+argmax(p0)+'</b>. Press <b>Run attack</b> to find a change that makes it say <b>'+TARGET+'</b>.';
+ else rd=pred===TARGET?'Found: a change of '+d.toFixed(3)+' per pixel (root mean square) makes the network say <b>'+TARGET+'</b>, '+(pa[TARGET]*100).toFixed(0)+'% sure. To you the image is still a '+y+'.':'This change is not enough: the network says '+pred+'.';
+ document.getElementById('rd').innerHTML=rd;}
+// ---------------------------------------------------------------- the attacks, animated
+function sleepFrame(){return new Promise(function(r){requestAnimationFrame(r);});}
+async function runPaper(){var net=M[MODEL],x=X0,c=0.2,lo=0,hi=null,best=null,steps=400,lr=0.05;LOG=[];
+ for(var it=0;it<12;it++){var r=new Float32Array(784),xr=new Float32Array(784);
+  for(var s=0;s<steps;s++){for(var i=0;i<784;i++)xr[i]=x[i]+r[i];var g=ADV.inputGrad(net,xr,TARGET).g;
+   for(i=0;i<784;i++){var v=r[i]-lr*(g[i]+2*c*r[i]),xv=x[i]+v;if(xv<0)v=-x[i];else if(xv>1)v=1-x[i];r[i]=v;}
+   if(s%25===24){R=r;draw('Try '+(it+1)+': c = '+c.toPrecision(3)+', gradient step '+(s+1)+' of '+steps+'&hellip;');await sleepFrame();}}
+  for(i=0;i<784;i++)xr[i]=x[i]+r[i];var ok=ADV.predict(net,xr)===TARGET,d=ADV.distortion(r);LOG.push({c:c,ok:ok,d:d});
+  if(ok&&(!best||d<best.d)){best={r:Float32Array.from(r),d:d,c:c};}
+  if(ok){lo=c;c=hi===null?c*2:(c+hi)/2;}else{hi=c;c=(lo+c)/2;}
+  if(hi!==null&&lo>0&&(hi-lo)/hi<0.05)break;}
+ if(best){LOG.forEach(function(e){e.best=e.c===best.c&&e.ok;});R=best.r;draw('Done: the smallest change found has distortion <b>'+best.d.toFixed(3)+'</b> (at c = '+best.c.toPrecision(3)+') and makes the network say <b>'+TARGET+'</b>. Larger c kept r smaller but failed to reach the target.');}
+ else{draw('No c in the search reached the target; try another target.');}}
+function runFGSM(){var g=ADV.inputGrad(M[MODEL],X0,TARGET).g,r=new Float32Array(784);
+ for(var i=0;i<784;i++){var v=-EPS*Math.sign(g[i]),xv=X0[i]+v;r[i]=Math.max(0,Math.min(1,xv))-X0[i];}R=r;LOG=[];
+ var xa=X0.map(function(v,i){return v+r[i];}),pred=ADV.predict(M[MODEL],xa);
+ draw('One step of &epsilon; = '+EPS.toFixed(2)+' against the gradient of the loss for <b>'+TARGET+'</b>, on every pixel at once: the network now says <b>'+pred+'</b>'+(pred===TARGET?'.':'. Raise &epsilon;, or try the paper&rsquo;s search, which spends its budget only where it matters.'));}
+function addNoise(){var d=ADV.distortion(R);if(d===0){draw('Run an attack first, so the noise can match its size.');return;}
+ var r=ADV.rng(Math.floor(Math.random()*1e9)),flips=0,y=ADV.predict(M[MODEL],X0),first=null;
+ for(var k=0;k<50;k++){var x=X0.map(function(v){return Math.max(0,Math.min(1,v+ADV.randn(r)*d));});if(!first)first=x;if(ADV.predict(M[MODEL],x)!==y)flips++;}
+ NOISE={x:first,flips:flips};draw();}
+// ---------------------------------------------------------------- controls
+function seg(id,fn){document.getElementById(id).addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;Array.from(this.children).forEach(function(x){x.classList.toggle('on',x===b);});fn(b);});}
+seg('methodSeg',function(b){METHOD=b.dataset.m;R=new Float32Array(784);NOISE=null;LOG=[];syncEps();draw();});
+function syncEps(){var on=METHOD==='fgsm';['eps','epsV','epsLab'].forEach(function(id){document.getElementById(id).style.opacity=on?1:0.35;});document.getElementById('eps').disabled=!on;}
+document.getElementById('eps').addEventListener('input',function(){EPS=+this.value;document.getElementById('epsV').textContent=EPS.toFixed(2);if(METHOD==='fgsm'&&D)runFGSM();});
+document.getElementById('go').addEventListener('click',async function(){if(RUNNING||!D)return;NOISE=null;
+ if(METHOD==='fgsm'){runFGSM();return;}RUNNING=true;this.disabled=true;await runPaper();RUNNING=false;this.disabled=false;});
+document.getElementById('noise').addEventListener('click',function(){if(D)addNoise();});
+document.getElementById('more').addEventListener('click',function(){if(RUNNING)return;PSEED++;pickDigits();});
+document.getElementById('model').addEventListener('change',function(){if(RUNNING)return;MODEL=this.value;R=new Float32Array(784);NOISE=null;LOG=[];pickDigits();});
+syncEps();
+Promise.all([ADV.loadMNIST(''),ADV.loadModels('')]).then(function(a){D=a[0];M=a[1];
+ var sel=document.getElementById('model');Object.keys(M).forEach(function(k){var o=document.createElement('option');o.value=k;o.textContent=M[k].meta.name+' ('+(M[k].meta.testAcc*100).toFixed(1)+'% on test digits)';if(k===MODEL)o.selected=true;sel.appendChild(o);});
+ document.getElementById('status').textContent='';pickDigits();}).catch(function(e){document.getElementById('status').textContent='could not load the data: '+e;});
+</script>
+</body>
+</html>

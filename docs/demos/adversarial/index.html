@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Adversarial examples</title>
+<meta name="description" content="Interactive explainers for Szegedy et al. 2014, Intriguing properties of neural networks: the gradient with respect to the input, the search for adversarial examples, why tiny crafted changes beat large random ones, transfer between networks, and units versus random directions.">
+<style>
+:root{--bg:#faf9f5;--surface:#ffffff;--surface-1:#f1efe8;--text-primary:#26251f;--text-secondary:#5f5e5a;--text-muted:#888780;
+ --border:#d3d1c7;--border-strong:#b4b2a9;--accent:#185FA5;--accent-warm:#BA7517;--accent-green:#0F6E56;}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#1a1a18;--surface:#232320;--surface-1:#2c2c2a;
+ --text-primary:#eceae2;--text-secondary:#b4b2a9;--text-muted:#888780;--border:#3a3a36;--border-strong:#5f5e5a;
+ --accent:#79b1ec;--accent-warm:#d9a24d;--accent-green:#4fbb99;}}
+:root[data-theme="dark"]{--bg:#1a1a18;--surface:#232320;--surface-1:#2c2c2a;--text-primary:#eceae2;--text-secondary:#b4b2a9;
+ --text-muted:#888780;--border:#3a3a36;--border-strong:#5f5e5a;--accent:#79b1ec;--accent-warm:#d9a24d;--accent-green:#4fbb99;}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--text-primary);line-height:1.6;
+ font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Helvetica,Arial,sans-serif}
+.page{max-width:900px;margin:0 auto;padding:0 20px 72px}
+header{padding-block:44px 24px;border-bottom:1px solid var(--border)}
+.nav{font-size:14px;margin:0 0 18px}
+.nav a{color:var(--text-muted);text-decoration:none}
+.nav a:hover{color:var(--text-secondary);text-decoration:underline}
+.eyebrow{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-muted);margin:0 0 10px}
+h1{font-size:32px;font-weight:600;letter-spacing:-.015em;margin:0 0 12px}
+header p{margin:0 0 10px;font-size:17px;color:var(--text-secondary);max-width:64ch}
+a{color:var(--accent)}
+ol.qs{list-style:none;counter-reset:q;margin:26px 0 0;padding:0}
+ol.qs li{counter-increment:q;border-bottom:1px solid var(--border);padding:20px 0 20px 52px;position:relative}
+ol.qs li:before{content:counter(q);position:absolute;left:0;top:19px;width:34px;height:34px;border-radius:50%;
+ display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500;
+ background:var(--surface-1);color:var(--text-secondary);border:1px solid var(--border)}
+ol.qs li.done:before{background:var(--surface);border-color:var(--accent);color:var(--accent)}
+.qtag{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent-warm)}
+h2{font-size:20px;font-weight:600;margin:5px 0 6px;letter-spacing:-.01em}
+h2 a{text-decoration:none}
+h2 a:hover{text-decoration:underline}
+.what{margin:0;font-size:15.5px;color:var(--text-secondary)}
+.go{display:inline-block;margin-top:9px;font-size:15px}
+footer{margin-top:48px;padding-top:20px;border-top:1px solid var(--border);font-size:14.5px;color:var(--text-muted)}
+footer a{color:var(--text-secondary)}
+@media (max-width:640px){h1{font-size:26px}ol.qs li{padding-left:44px}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <div class="nav"><a href="../../">&larr; CS7150 class demos</a></div>
+  <p class="eyebrow">Northeastern University &middot; CS 7150 &middot; Fall 2026</p>
+  <h1>Adversarial examples</h1>
+  <p>Interactive pieces for <a href="https://papers.baulab.info/papers/Szegedy-2014.pdf">Szegedy et al. 2014</a>,
+     &ldquo;Intriguing properties of neural networks.&rdquo; First the one new idea, carrying backpropagation past the
+     weights to the input; then the paper&rsquo;s experiments, run live in the browser on small MNIST networks like the
+     paper&rsquo;s: finding adversarial examples, comparing them with random noise, testing them on other networks, and the
+     paper&rsquo;s first property, about single units.</p>
+</header>
+
+<ol class="qs">
+
+<li class="done">
+  <div class="qtag">The idea</div>
+  <h2><a href="input-gradient.html">Backprop to the input</a></h2>
+  <p class="what">A small network learns two classes in the plane. Step through its backward pass on a diagram and use the
+     result two ways: stop at the weights and take a training step, which moves the boundary; or carry the gradient one
+     layer further, to the input, and take an attack step, which moves the point across the boundary.</p>
+  <a class="go" href="input-gradient.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">The paper&rsquo;s search</div>
+  <h2><a href="attack.html">Finding an adversarial example</a></h2>
+  <p class="what">Pick an MNIST digit and a target and watch the paper&rsquo;s optimization run: minimize c|r|&sup2; plus the
+     loss for the target, pixels kept in range, with a line search for the smallest change. Compare the one-step fast
+     gradient sign method, and Gaussian noise of the same size.</p>
+  <a class="go" href="attack.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">Figure 7, explained</div>
+  <h2><a href="small-changes.html">Tiny crafted vs. large random</a></h2>
+  <p class="what">Error rate against the size of the change, for noise and for a change along the gradient; why an aligned
+     change grows like n and a random one like &radic;n; and the paper&rsquo;s bound on how much each layer can stretch a change.</p>
+  <a class="go" href="small-changes.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">Tables 2&ndash;4</div>
+  <h2><a href="transfer.html">Adversarial examples transfer</a></h2>
+  <p class="what">Six networks: different sizes, a softmax classifier, and three trained on halves of the data. Make
+     adversarial examples for each, test them on all, and magnify the changes as the paper did. Then three ideas for why
+     transfer happens at all.</p>
+  <a class="go" href="transfer.html">Open the explainer &rarr;</a>
+</li>
+
+<li class="done">
+  <div class="qtag">The first property</div>
+  <h2><a href="units.html">Units vs. random directions</a></h2>
+  <p class="what">Rows of the test digits that most excite one hidden unit, mixed with rows for random directions in the
+     same layer. Guess which is which; the paper says you can&rsquo;t.</p>
+  <a class="go" href="units.html">Open the explainer &rarr;</a>
+</li>
+
+</ol>
+
+
+
+<footer>
+  The backward pass itself is in <a href="../backprop/">backpropagation</a>; the MNIST networks are trained with the
+  same code these pages run, on 12,000 MNIST digits. &middot;
+  <a href="https://github.com/CS7150/classdemos">Repository</a>
+</footer>
+
+
+</div>
+</body>
+</html>

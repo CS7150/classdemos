@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tiny crafted vs. large random</title>
+<meta name="description" content="Why a small change chosen along the gradient fools a network that shrugs off much larger random noise: error rates on MNIST for both kinds of change at every size, the high-dimensional arithmetic of aligned versus random changes, and Szegedy et al.'s layer-by-layer bound on how much a network can stretch a change.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 24px;max-width:1150px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+h2{font-size:15.5px;font-weight:600;margin:10px 0 0}
+.quiz{margin:0}
+.row{gap:7px}
+button{height:30px;font-size:13px;padding:0 10px}
+select{height:30px;font-size:13px;padding:0 6px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:56px}
+input[type=range]{flex:0 1 240px;min-width:100px}
+.rd{font-size:14px;line-height:1.6;min-height:1.6em}
+.cap{font-size:12.5px;line-height:1.6;padding-top:4px}
+.nav{display:flex;align-items:baseline;gap:10px}
+.status{font-size:13px;color:var(--text-muted)}
+svg text{font-family:inherit}
+table.bt td,table.bt th{padding:2px 16px 2px 0}
+table.bt td:first-child,table.bt th:first-child{text-align:left}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Adversarial examples demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Tiny crafted vs. large random<span>: why direction matters more than size</span></h1>
+<p class="quiz">In the paper&rsquo;s Figure 7, MNIST digits buried in heavy random noise are still read correctly much of the time, while adversarial digits that look almost untouched are always misread. The two kinds of change differ not in how big they are, but in <b>which way they point</b>. Below: the same comparison at every size, the arithmetic of high dimensions behind it, and the paper&rsquo;s bound on how much each layer can stretch a change.</p>
+
+<h2>1. Error rate as the change grows, random vs. along the gradient</h2>
+<div class="row"><span class="klab">network</span><select id="model"></select><span class="status" id="status">loading digits and networks&hellip;</span></div>
+<svg id="curve" viewBox="0 0 1120 300" role="img"><title>Error rate against the size of the change</title><desc>The fraction of 200 test digits the network gets wrong after adding a change of each size: Gaussian noise, and a change of the same size along the gradient of the loss.</desc><g id="gc"></g></svg>
+<div class="rd" id="rdA"></div>
+
+<h2>2. The arithmetic of many dimensions</h2>
+<div class="row">
+  <span class="klab">number of inputs n</span><input type="range" id="logn" min="0" max="6" step="0.01" value="2.894"><span class="knum" id="nv">784</span>
+  <button id="n784">MNIST (784)</button><button id="n150k">ImageNet (150,528)</button>
+</div>
+<svg id="lin" viewBox="0 0 1120 185" role="img"><title>Aligned versus random changes in n dimensions</title><desc>For a linear unit w&middot;x with n inputs, the change in its output when every input moves by epsilon: in the direction of sign(w), and in random directions.</desc><g id="gl"></g></svg>
+<div class="rd" id="rdB"></div>
+
+<h2>3. How much can each layer stretch a change? (the paper&rsquo;s Section 4.3)</h2>
+<div id="tbl"></div>
+<div class="rd" id="rdC"></div>
+
+<div class="cap">
+<div><b>Part 1.</b> For each size &sigma; (the root-mean-square change per pixel, the paper&rsquo;s distortion measure), every test digit gets either Gaussian noise of that size, clipped to the 0&ndash;1 pixel range, or a change of the same length pointing straight down the gradient of the loss for its true label: one gradient computed through the network to the input, scaled to length &sigma;&middot;&radic;784. The gradient direction is only the first step of a real attack (the <a href="attack.html">paper&rsquo;s search</a> does better), and it already needs a change many times smaller than noise to do the same damage.</div>
+<div><b>Part 2.</b> A unit computes w&middot;x. Move every input by &plusmn;&epsilon;. If the signs are random, the changes w<sub>i</sub>&epsilon; mostly cancel and the total grows only like &epsilon;&radic;n. If every sign agrees with sign(w<sub>i</sub>), nothing cancels and the total is &epsilon;&Sigma;|w<sub>i</sub>|, which grows like &epsilon;n. The ratio grows like &radic;n: about 22 for MNIST, about 310 for a 224&times;224 color image. So a change too small to see on any one pixel can move the unit a lot, if it is aligned. This is the &ldquo;linear explanation&rdquo; of Goodfellow et al. 2015, and it is why a random perturbation is nearly useless: in n dimensions a random direction is almost perpendicular to any given one, with |cos| around 1/&radic;n, which answers Tianyu&rsquo;s question. The network&rsquo;s sensitivity is very uneven across directions, and the gradient is how you find the sensitive ones.</div>
+<div><b>Part 3.</b> Szegedy et al. bound how far a change can travel. A layer with weights W can stretch a change by at most its largest singular value &Vert;W&Vert;; a sigmoid can shrink it but never stretch it by more than its largest slope, 1/4; so the whole network can stretch a change by at most the product. A large product does not prove a network is unstable (the bound may be loose), but it shows there is room: the largest-stretch directions exist, and gradient search finds them. The paper computed these bounds for the convolutional layers of AlexNet (Table 5) and suggested regularizing them; later work on Lipschitz and spectral-norm regularization took up that idea. Sai asked whether depth makes this worse: the bound is a product over layers, so it can grow with depth, though the measured stretch need not.</div>
+</div>
+
+<script src="advcore.js"></script>
+<script>
+var D=null,M=null,MODEL='FC100',CACHE={};
+function T(x,y,s,cls,anc,fill,extra){return '<text class="'+(cls||'tn')+'" x="'+(+x).toFixed(1)+'" y="'+(+y).toFixed(1)+'"'+(anc?' text-anchor="'+anc+'"':'')+(fill?' style="fill:'+fill+'"':'')+(extra||'')+'>'+s+'</text>';}
+function logp(net,x){var a=ADV.forward(net,x),p=a[a.length-1],l=Array.from(p,function(v){return Math.log(Math.max(v,1e-30));}),m=l.reduce(function(s,v){return s+v;},0)/l.length;return l.map(function(v){return v-m;});}
+// ---------------------------------------------------------------- part 1
+var SIG=[0,0.02,0.04,0.06,0.08,0.1,0.15,0.2,0.3,0.4,0.5,0.7];
+function computeCurves(){if(CACHE[MODEL])return CACHE[MODEL];
+ var net=M[MODEL],r=ADV.rng(5),idx=D.test.slice(0,200),noise=SIG.map(function(){return 0;}),grad=SIG.map(function(){return 0;}),cosv=[];
+ idx.forEach(function(i){var x=D.X[i],y=D.Y[i],g=ADV.inputGrad(net,x,y).g,gn=Math.sqrt(g.reduce(function(s,v){return s+v*v;},0))||1;
+  SIG.forEach(function(s,k){var L=s*Math.sqrt(784),xg=new Float32Array(784),xn=new Float32Array(784);
+   for(var j=0;j<784;j++){xg[j]=Math.max(0,Math.min(1,x[j]+L*g[j]/gn));xn[j]=Math.max(0,Math.min(1,x[j]+s*ADV.randn(r)));}
+   if(ADV.predict(net,xg)!==y)grad[k]++;if(ADV.predict(net,xn)!==y)noise[k]++;});
+  if(cosv.length<200){var nz=new Float32Array(784),nn=0,dp=0;for(var j=0;j<784;j++){nz[j]=ADV.randn(r);nn+=nz[j]*nz[j];dp+=nz[j]*g[j];}cosv.push(dp/Math.sqrt(nn)/gn);}});
+ var out={noise:noise.map(function(v){return v/idx.length;}),grad:grad.map(function(v){return v/idx.length;}),cos:cosv};CACHE[MODEL]=out;return out;}
+function drawA(){var c=computeCurves(),s='',x0=60,y0=20,W=640,H=220,smax=0.7;
+ var px=function(v){return x0+v/smax*W;},py=function(v){return y0+H-v*H;};
+ s+='<rect x="'+x0+'" y="'+y0+'" width="'+W+'" height="'+H+'" fill="var(--surface)" opacity="0.6" stroke="var(--border)"/>';
+ [0,0.25,0.5,0.75,1].forEach(function(v){s+='<line x1="'+x0+'" y1="'+py(v)+'" x2="'+(x0+W)+'" y2="'+py(v)+'" stroke="var(--border)" stroke-width="0.6"/>'+T(x0-6,py(v)+4,(v*100)+'%','tn','end');});
+ [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7].forEach(function(v){s+=T(px(v),y0+H+16,v.toFixed(1),'tn','middle');});
+ s+=T(x0+W/2,y0+H+34,'size of the change &sigma; (root-mean-square per pixel, pixels on a 0&ndash;1 scale)','tn','middle');
+ s+=T(x0,12,'fraction of 200 test digits misread','ts','start');
+ [['noise','var(--text-secondary)','Gaussian noise'],['grad','var(--pink)','along the gradient']].forEach(function(q){var pts=SIG.map(function(v,k){return px(v).toFixed(1)+','+py(c[q[0]][k]).toFixed(1);});
+  s+='<polyline points="'+pts.join(' ')+'" fill="none" stroke="'+q[1]+'" stroke-width="2.6"/>';SIG.forEach(function(v,k){s+='<circle cx="'+px(v).toFixed(1)+'" cy="'+py(c[q[0]][k]).toFixed(1)+'" r="3" fill="'+q[1]+'"/>';});});
+ s+=T(px(0.36),py(c.noise[8])+18,'Gaussian noise','tn','start','var(--text-secondary)')+T(px(0.05)+10,py(0.5),'along the gradient','tn','start','var(--pink-ink)');
+ // where a typical adversarial example sits
+ s+='<line x1="'+px(0.06)+'" y1="'+y0+'" x2="'+px(0.06)+'" y2="'+(y0+H)+'" stroke="var(--pink)" stroke-dasharray="3 3"/>'+T(px(0.06)+4,y0+H-34,'the paper&rsquo;s MNIST adversarial','tn','start','var(--pink-ink)')+T(px(0.06)+4,y0+H-18,'examples: 0.058&ndash;0.086','tn','start','var(--pink-ink)');
+ // cosine histogram
+ var hx=760,hw=330,hb=y0,hh=H,bins=new Array(21).fill(0),B=0.15;c.cos.forEach(function(v){var k=Math.round((v+B)/(2*B)*20);if(k>=0&&k<=20)bins[k]++;});var bm=Math.max.apply(null,bins);
+ s+=T(hx,12,'cosine between random noise and the gradient','ts','start');
+ bins.forEach(function(n,k){var X=hx+k*hw/21,h=n/bm*(hh-30);s+='<rect x="'+X.toFixed(1)+'" y="'+(hb+hh-h).toFixed(1)+'" width="'+(hw/21-2).toFixed(1)+'" height="'+h.toFixed(1)+'" fill="var(--text-muted)" opacity="0.7"/>';});
+ s+='<line x1="'+hx+'" y1="'+(hb+hh)+'" x2="'+(hx+hw)+'" y2="'+(hb+hh)+'" stroke="var(--border-strong)"/>';
+ [-B,0,B].forEach(function(v){s+=T(hx+(v+B)/(2*B)*hw,hb+hh+16,v.toFixed(2),'tn','middle');});
+ s+=T(hx+hw/2,hb+hh+34,'1/&radic;784 = 0.036; the gradient itself has cosine 1','tn','middle');
+ document.getElementById('gc').innerHTML=s;
+ var k1=SIG.indexOf(0.1),half=SIG.findIndex(function(v,k){return c.noise[k]>=0.5;});
+ document.getElementById('rdA').innerHTML='At &sigma; = 0.1, noise makes '+(c.noise[k1]*100).toFixed(0)+'% of digits misread and a change of the same size along the gradient makes '+(c.grad[k1]*100).toFixed(0)+'%. '+
+  (half>=0?'Noise needs &sigma; &asymp; '+SIG[half]+' to misread half the digits. ':'Even &sigma; = 0.7 of noise misreads fewer than half. ')+'Random noise points almost perpendicular to the gradient (cosines bunched near 0, right), so almost none of it pushes the way that matters.';}
+// ---------------------------------------------------------------- part 2
+var LOGN=Math.log10(784);
+function drawB(){var n=Math.round(Math.pow(10,LOGN)),eps=1,s='',x0=60,y0=30,W=640,H=170;
+ document.getElementById('nv').textContent=n.toLocaleString();
+ var aligned=n*Math.sqrt(2/Math.PI),rand=Math.sqrt(n),ratio=aligned/rand;   // E|w_i| for w ~ N(0,1), and the spread of a random +/- sum
+ var lmax=Math.log10(1e6*0.8);
+ function bar(v,yy,col,label){var w=Math.max(2,Math.log10(Math.max(1,v))/lmax*W);return '<rect x="'+x0+'" y="'+yy+'" width="'+w.toFixed(1)+'" height="36" fill="'+col+'" opacity="0.8" rx="3"/>'+T(x0+w+8,yy+23,label+': '+(v<100?v.toFixed(1):Math.round(v).toLocaleString())+'&middot;&epsilon;','tn','start');}
+ s+=T(x0,16,'change in w&middot;x when every input moves by &plusmn;&epsilon; (w ~ N(0, 1); log scale)','ts','start');
+ s+=bar(aligned,y0+10,'var(--pink)','signs aligned with w');
+ s+=bar(rand,y0+70,'var(--text-muted)','random signs (typical size)');
+ [1,10,100,1000,1e4,1e5].forEach(function(v){var X=x0+Math.log10(v)/lmax*W;s+='<line x1="'+X+'" y1="'+(y0+120)+'" x2="'+X+'" y2="'+(y0+126)+'" stroke="var(--border-strong)"/>'+T(X,y0+140,v>=1000?(v/1000)+'k':String(v),'tn','middle');});
+ s+=T(760,y0+30,'aligned / random','ts','start')+T(760,y0+75,'&asymp; '+ratio.toFixed(1)+'&times;','ts','start',null,' style="font-size:34px;fill:var(--text-primary)"')+T(760,y0+105,'grows like &radic;n','tn','start');
+ document.getElementById('gl').innerHTML=s;
+ var e=0.007;document.getElementById('rdB').innerHTML='With n = '+n.toLocaleString()+' inputs, an aligned change of &epsilon; per input moves the unit '+ratio.toFixed(1)+' times as far as a random one. '+
+  'On a 0&ndash;255 scale, &epsilon; = 2 levels (0.008) is invisible, yet aligned across '+n.toLocaleString()+' inputs with weights of typical size 1 it moves w&middot;x by about '+(aligned*0.008).toFixed(n>1000?0:2)+'.';}
+// ---------------------------------------------------------------- part 3
+function drawC(){var net=M[MODEL],L=net.layers,rows='',bound=1;
+ var norms=L.map(function(ly){return ADV.opNorm(ly,60);});
+ rows+='<tr><th>layer</th><th>shape</th><th>&Vert;W&Vert; (largest singular value)</th><th>times the sigmoid&rsquo;s largest slope</th><th>bound so far</th></tr>';
+ norms.forEach(function(nv,k){var last=k===L.length-1,f=last?nv:nv/4;bound*=f;
+  rows+='<tr><td>'+(last?'output':'hidden '+(k+1))+'</td><td>'+L[k].nin+' &rarr; '+L[k].nout+'</td><td>'+nv.toFixed(2)+'</td><td>'+(last?'(softmax input, no slope factor)':'&divide; 4 = '+f.toFixed(2))+'</td><td>'+bound.toFixed(1)+'</td></tr>';});
+ // measured stretch: change in centered log-probabilities per unit change in the input
+ var r=ADV.rng(8),sg=[],sr=[];D.test.slice(0,60).forEach(function(i){var x=D.X[i],g=ADV.inputGrad(net,x,D.Y[i]).g,gn=Math.sqrt(g.reduce(function(s,v){return s+v*v;},0))||1,h=0.02;
+  var z0=logp(net,x),xg=x.map(function(v,j){return v+h*g[j]/gn;}),zg=logp(net,xg),dz=Math.sqrt(zg.reduce(function(s,v,j){return s+(v-z0[j])*(v-z0[j]);},0))/h;sg.push(dz);
+  var nz=Array.from({length:784},function(){return ADV.randn(r);}),nn=Math.sqrt(nz.reduce(function(s,v){return s+v*v;},0)),xn=x.map(function(v,j){return v+h*nz[j]/nn;}),zn=logp(net,xn);
+  sr.push(Math.sqrt(zn.reduce(function(s,v,j){return s+(v-z0[j])*(v-z0[j]);},0))/h);});
+ var med=function(a){a=a.slice().sort(function(p,q){return p-q;});return a[Math.floor(a.length/2)];};
+ document.getElementById('tbl').innerHTML='<table class="bt">'+rows+'</table>';
+ document.getElementById('rdC').innerHTML='For '+net.meta.name+', no input change of length 1 can move the output scores by more than <b>'+bound.toFixed(0)+'</b>. Measured on 60 test digits, a small step along the gradient actually stretches by a median of <b>'+med(sg).toFixed(1)+'</b>, a random step by <b>'+med(sr).toFixed(2)+'</b>. The bound is loose, but the gap between the two measured numbers is the whole story: the network is far more sensitive in some directions than in others.';}
+// ---------------------------------------------------------------- wiring
+function drawAll(){drawA();drawB();drawC();}
+document.getElementById('logn').addEventListener('input',function(){LOGN=+this.value;drawB();});
+document.getElementById('n784').addEventListener('click',function(){LOGN=Math.log10(784);document.getElementById('logn').value=LOGN;drawB();});
+document.getElementById('n150k').addEventListener('click',function(){LOGN=Math.log10(150528);document.getElementById('logn').value=LOGN;drawB();});
+document.getElementById('model').addEventListener('change',function(){MODEL=this.value;document.getElementById('status').textContent='computing…';setTimeout(function(){drawAll();document.getElementById('status').textContent='';},20);});
+drawB();
+Promise.all([ADV.loadMNIST(''),ADV.loadModels('')]).then(function(a){D=a[0];M=a[1];
+ var sel=document.getElementById('model');Object.keys(M).forEach(function(k){var o=document.createElement('option');o.value=k;o.textContent=M[k].meta.name;if(k===MODEL)o.selected=true;sel.appendChild(o);});
+ document.getElementById('status').textContent='computing…';setTimeout(function(){drawAll();document.getElementById('status').textContent='';},20);}).catch(function(e){document.getElementById('status').textContent='could not load the data: '+e;});
+</script>
+</body>
+</html>

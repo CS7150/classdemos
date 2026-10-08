@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Backprop to the input</title>
+<meta name="description" content="The same backward pass that trains a network can be carried one step further, to the input. A small network trained live on a two-dimensional problem: step through backpropagation on a diagram, and see the gradient with respect to the weights move the decision boundary, while the gradient with respect to the input moves the point across it.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 24px;max-width:1150px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+.quiz{margin:0}
+.row{gap:7px}
+button{height:30px;font-size:13px;padding:0 10px}
+button.main{min-width:110px}
+.seg button{height:28px;font-size:12.5px;padding:0 10px}
+.rd{font-size:14px;line-height:1.6;min-height:4.8em}
+.rd .eq{font-family:ui-monospace,Menlo,monospace;font-size:13px;color:var(--text-primary)}
+.cap{font-size:12.5px;line-height:1.6;padding-top:4px}
+.nav{display:flex;align-items:baseline;gap:10px}
+.status{font-size:13px;color:var(--text-muted)}
+svg text{font-family:inherit}
+#plane{cursor:crosshair}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Adversarial examples demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Backprop to the input<span>: the same gradient, aimed at the image instead of the weights</span></h1>
+<p class="quiz">Training asks: <b>how should each weight change</b> to lower the loss on this example? An attack asks: <b>how should the input change</b> to raise it? Both are answered by the same backward pass through the same network. Training stops it at the weights; the attack carries it one step further, through the first layer, to the input. Below, a small network learns to separate two classes in the plane. Pick a point, run the backward pass, and use the gradient either way.</p>
+
+<div class="row">
+  <span class="klab">use the gradient for</span>
+  <div class="seg" id="modeSeg"><button data-m="train" class="on">training: &part;L/&part;w</button><button data-m="attack">an attack: &part;L/&part;x</button></div>
+  <button class="main" id="bstep">Backward step</button>
+  <button id="ball">Whole pass</button>
+  <button id="apply">Take a step</button>
+  <button id="walk">Keep stepping</button>
+  <button id="resetpt">Put it back</button>
+  <span class="status" id="status"></span>
+</div>
+
+<svg id="fig" viewBox="0 0 1120 460" role="img"><title>The network and the input plane</title><desc>Left, a diagram of a network with two inputs, six hidden units and two outputs, showing values from the forward pass and gradients from the backward pass. Right, the input plane colored by the network's decision, with the training points and the selected point; in attack mode an arrow shows the gradient with respect to the input.</desc><g id="g"></g></svg>
+<div class="rd" id="rd"></div>
+<div class="row">
+  <button id="retrain">Train a new network</button>
+  <span class="lg">Click a point in the plane to select it, or click anywhere to place a new one. Its class is the one it was drawn from; a new point takes the class the network gives it.</span>
+</div>
+
+<div class="cap">
+<div><b>One backward pass, two stopping places.</b> The forward pass computes a = W<sub>1</sub>x + b<sub>1</sub>, h = tanh(a), z = W<sub>2</sub>h + b<sub>2</sub>, p = softmax(z), and the loss L = &minus;log p<sub>y</sub>. Backward, the chain rule gives &part;L/&part;z = p &minus; onehot(y), then &part;L/&part;h = W<sub>2</sub><sup>T</sup>(p &minus; y), then &part;L/&part;a = &part;L/&part;h &odot; (1 &minus; h<sup>2</sup>). Every quantity so far is needed for both uses. Training then takes &part;L/&part;W<sub>1</sub> = (&part;L/&part;a) x<sup>T</sup> and moves the weights downhill, which moves the boundary. The attack takes &part;L/&part;x = W<sub>1</sub><sup>T</sup>(&part;L/&part;a), one more multiplication by the weights, and moves the input instead, while the weights stay frozen. Nothing new is needed: in PyTorch it is <code>x.requires_grad_(True)</code> and <code>loss.backward()</code>, then read <code>x.grad</code> instead of the weights&rsquo; <code>.grad</code>.</div>
+<div><b>Which way to step.</b> Training goes downhill on the loss for the true label. An attack can go uphill on the true label&rsquo;s loss (untargeted), or downhill on the loss for a chosen wrong label (targeted, as in Szegedy et al.). Here the attack is targeted at the other class: x &larr; x &minus; &alpha; &part;L(x, target)/&part;x. In two dimensions the point has to travel visibly to cross the boundary. On an MNIST image the input has 784 dimensions, and a step of the same total length, spread over all the pixels in exactly the right pattern, is almost invisible; that is where <a href="attack.html">finding an adversarial example</a> picks up.</div>
+</div>
+
+<script>
+function rng(seed){var a=seed>>>0;return function(){a|=0;a=a+0x6D2B79F5|0;var t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function randn(r){var u=0,v=0;while(!u)u=r();while(!v)v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+var NH=6,SEED=3,DATA=[],NET=null;
+function makeData(){var r=rng(SEED*17+1);DATA=[];
+ for(var i=0;i<70;i++){var t=Math.PI*r(),c=i%2;
+  var x=c?1-Math.cos(t):Math.cos(t),y=c?0.45-Math.sin(t):Math.sin(t);DATA.push({x:[x*1.6-0.8+randn(r)*0.11,y*1.6-0.35+randn(r)*0.11],c:c});}}
+function makeNet(){var r=rng(SEED*29+5);var n={W1:[],b1:[],W2:[],b2:[0,0]};
+ for(var j=0;j<NH;j++){n.W1.push([randn(r)*1.2,randn(r)*1.2]);n.b1.push(randn(r)*0.3);}
+ for(var k=0;k<2;k++){var row=[];for(j=0;j<NH;j++)row.push(randn(r)*0.6);n.W2.push(row);}
+ n.v=JSON.parse(JSON.stringify({W1:n.W1,b1:n.b1,W2:n.W2,b2:n.b2}));['W1','b1','W2','b2'].forEach(function(k){n.v[k]=JSON.parse(JSON.stringify(n[k]).replace(/-?\d+(\.\d+)?(e-?\d+)?/g,'0'));});
+ return n;}
+function fwd(n,x){var a=[],h=[],z=[0,0];for(var j=0;j<NH;j++){a[j]=n.W1[j][0]*x[0]+n.W1[j][1]*x[1]+n.b1[j];h[j]=Math.tanh(a[j]);}
+ for(var k=0;k<2;k++){z[k]=n.b2[k];for(j=0;j<NH;j++)z[k]+=n.W2[k][j]*h[j];}
+ var m=Math.max(z[0],z[1]),e0=Math.exp(z[0]-m),e1=Math.exp(z[1]-m),p=[e0/(e0+e1),e1/(e0+e1)];return {x:x,a:a,h:h,z:z,p:p};}
+function bwd(n,f,y){var dz=[f.p[0]-(y===0?1:0),f.p[1]-(y===1?1:0)],dh=[],da=[];
+ for(var j=0;j<NH;j++){dh[j]=n.W2[0][j]*dz[0]+n.W2[1][j]*dz[1];da[j]=dh[j]*(1-f.h[j]*f.h[j]);}
+ var dx=[0,0];for(j=0;j<NH;j++){dx[0]+=n.W1[j][0]*da[j];dx[1]+=n.W1[j][1]*da[j];}
+ var dW1=[],dW2=[[],[]];for(j=0;j<NH;j++){dW1.push([da[j]*f.x[0],da[j]*f.x[1]]);dW2[0][j]=dz[0]*f.h[j];dW2[1][j]=dz[1]*f.h[j];}
+ return {dz:dz,dh:dh,da:da,dx:dx,dW1:dW1,dW2:dW2,db1:da.slice(),db2:dz.slice()};}
+function sgd(n,pts,lr){var g={W1:n.W1.map(function(){return [0,0];}),b1:n.b1.map(function(){return 0;}),W2:[n.W1.map(function(){return 0;}),n.W1.map(function(){return 0;})],b2:[0,0]},L=0;
+ pts.forEach(function(d){var f=fwd(n,d.x),b=bwd(n,f,d.c);L-=Math.log(Math.max(f.p[d.c],1e-12));
+  for(var j=0;j<NH;j++){g.W1[j][0]+=b.dW1[j][0];g.W1[j][1]+=b.dW1[j][1];g.b1[j]+=b.db1[j];g.W2[0][j]+=b.dW2[0][j];g.W2[1][j]+=b.dW2[1][j];}g.b2[0]+=b.db2[0];g.b2[1]+=b.db2[1];});
+ var m=pts.length,mo=0.9;
+ for(var j=0;j<NH;j++){for(var i=0;i<2;i++){n.v.W1[j][i]=mo*n.v.W1[j][i]-lr*g.W1[j][i]/m;n.W1[j][i]+=n.v.W1[j][i];}n.v.b1[j]=mo*n.v.b1[j]-lr*g.b1[j]/m;n.b1[j]+=n.v.b1[j];
+  for(var k=0;k<2;k++){n.v.W2[k][j]=mo*n.v.W2[k][j]-lr*g.W2[k][j]/m;n.W2[k][j]+=n.v.W2[k][j];}}
+ for(k=0;k<2;k++){n.v.b2[k]=mo*n.v.b2[k]-lr*g.b2[k]/m;n.b2[k]+=n.v.b2[k];}
+ return L/m;}
+// ---------------------------------------------------------------- state
+var MODE='train',STAGE=0,SEL=null,TRAINING=0,LOSS=0,TRAIL=[],WALK=null,FLASH=null;
+// SEL: {x:[..], c, x0:[..], fromData:index or -1}
+function selectData(i){var d=DATA[i];SEL={x:d.x.slice(),c:d.c,x0:d.x.slice(),idx:i};TRAIL=[SEL.x.slice()];STAGE=0;}
+function retrain(){NET=makeNet();TRAINING=260;}
+function tick(){
+ if(TRAINING>0){for(var s=0;s<3&&TRAINING>0;s++){LOSS=sgd(NET,DATA,0.08);TRAINING--;}if(TRAINING===0&&!SEL)pickDefault();draw();}
+ requestAnimationFrame(tick);}
+function pickDefault(){   // a correctly classified point near the boundary is the most instructive
+ var best=0,bm=1e9;DATA.forEach(function(d,i){var p=fwd(NET,d.x).p[d.c];if(p>0.6&&p<bm){bm=p;best=i;}});selectData(best);}
+// ---------------------------------------------------------------- drawing
+function T(x,y,s,cls,anc,fill,extra){return '<text class="'+(cls||'tn')+'" x="'+(+x).toFixed(1)+'" y="'+(+y).toFixed(1)+'"'+(anc?' text-anchor="'+anc+'"':'')+(fill?' style="fill:'+fill+'"':'')+(extra||'')+'>'+s+'</text>';}
+var CA='#378ADD',CB='#D85A30';
+function f2(v){return (v>=0?'+':'&minus;')+Math.abs(v).toFixed(2);}
+function gcol(v,mx){var t=Math.min(1,Math.abs(v)/(mx||1e-9));return v>=0?'color-mix(in oklab, var(--pink) '+Math.round(t*100)+'%, var(--border))':'color-mix(in oklab, var(--green) '+Math.round(t*100)+'%, var(--border))';}
+var IX=70,HX=270,OX=470,IY=[170,300],HY=[],OY=[195,280];for(var j=0;j<NH;j++)HY.push(80+j*58);
+function draw(){
+ var s='',f=SEL?fwd(NET,SEL.x):null,y=SEL?(MODE==='attack'?1-SEL.c:SEL.c):0,b=f?bwd(NET,f,y):null;
+ // ---------- network
+ s+=T(20,22,MODE==='train'?'training: the gradient stops at the weights':'attack: the gradient goes on to the input','ts','start');
+ var wmax=0;NET.W1.forEach(function(r){r.forEach(function(v){wmax=Math.max(wmax,Math.abs(v));});});NET.W2.forEach(function(r){r.forEach(function(v){wmax=Math.max(wmax,Math.abs(v));});});
+ var gW1max=0,gW2max=0;if(b){b.dW1.forEach(function(r){r.forEach(function(v){gW1max=Math.max(gW1max,Math.abs(v));});});b.dW2.forEach(function(r){r.forEach(function(v){gW2max=Math.max(gW2max,Math.abs(v));});});}
+ var showW2grad=MODE==='train'&&STAGE>=2,showW1grad=MODE==='train'&&STAGE>=3;
+ // edges input->hidden
+ for(j=0;j<NH;j++)for(var i=0;i<2;i++){var w=NET.W1[j][i],col,wd;
+  if(showW1grad){col=gcol(b.dW1[j][i],gW1max);wd=1+5*Math.abs(b.dW1[j][i])/(gW1max||1);}
+  else{col=w>=0?'var(--blue)':'var(--warm)';wd=0.6+3*Math.abs(w)/wmax;}
+  var glow=MODE==='attack'&&STAGE>=3;
+  s+='<line x1="'+(IX+22)+'" y1="'+IY[i]+'" x2="'+(HX-20)+'" y2="'+HY[j]+'" stroke="'+col+'" stroke-width="'+wd.toFixed(1)+'" opacity="'+(glow?0.95:showW1grad?0.95:0.45)+'"'+(glow?' stroke-dasharray="6 4"':'')+'/>';}
+ for(var k=0;k<2;k++)for(j=0;j<NH;j++){w=NET.W2[k][j];
+  if(showW2grad){col=gcol(b.dW2[k][j],gW2max);wd=1+5*Math.abs(b.dW2[k][j])/(gW2max||1);}else{col=w>=0?'var(--blue)':'var(--warm)';wd=0.6+3*Math.abs(w)/wmax;}
+  glow=STAGE>=2&&!showW2grad;
+  s+='<line x1="'+(HX+20)+'" y1="'+HY[j]+'" x2="'+(OX-22)+'" y2="'+OY[k]+'" stroke="'+col+'" stroke-width="'+wd.toFixed(1)+'" opacity="'+(showW2grad||glow?0.9:0.45)+'"'+(glow?' stroke-dasharray="6 4"':'')+'/>';}
+ // weight lock for the attack
+ if(MODE==='attack')s+=T((IX+HX)/2,420,'&#128274; weights frozen','tn','middle')+T((HX+OX)/2,420,'&#128274; weights frozen','tn','middle');
+ else if(STAGE>=2)s+=T((HX+OX)/2,420,'edges: &part;L/&part;W<tspan dy="3" font-size="10">2</tspan>','tn','middle')+(STAGE>=3?T((IX+HX)/2,420,'edges: &part;L/&part;W<tspan dy="3" font-size="10">1</tspan>','tn','middle'):'')+
+   T(20,452,'pink: gradient &gt; 0, the weight will go down &middot; green: &lt; 0, it will go up &middot; width: size','tn','start');
+ else s+=T(20,452,'edges: weights (blue positive, orange negative)','tn','start');
+ // nodes
+ function node(x,yy,label,val,grad,gshow,r,hl){var g='<circle cx="'+x+'" cy="'+yy+'" r="'+r+'" fill="var(--surface)" stroke="'+(hl?'var(--text-primary)':'var(--border-strong)')+'" stroke-width="'+(hl?2.4:1.4)+'"/>'+
+   T(x,yy+5,val,'tn','middle',null,' style="font-size:12.5px;fill:var(--text-primary)"');
+  if(label)g+=T(x,yy-r-6,label,'tn','middle');
+  if(gshow)g+=T(x,yy+r+16,grad,'tn','middle',grad.indexOf('&minus;')>=0?'var(--green-ink)':'var(--pink-ink)',' style="font-size:12.5px;font-weight:600"');return g;}
+ if(f){
+  s+=node(IX,IY[0],'x&#8321;',f.x[0].toFixed(2),f2(b.dx[0]),MODE==='attack'&&STAGE>=3,22,MODE==='attack'&&STAGE>=3);
+  s+=node(IX,IY[1],'x&#8322;',f.x[1].toFixed(2),f2(b.dx[1]),MODE==='attack'&&STAGE>=3,22,MODE==='attack'&&STAGE>=3);
+  for(j=0;j<NH;j++)s+=node(HX,HY[j],j===0?'h = tanh(W&#8321;x + b&#8321;)':'',f.h[j].toFixed(2),f2(b.da[j]),STAGE>=2,20,false);
+  for(k=0;k<2;k++)s+=node(OX,OY[k],k===0?'p = softmax(z)':'',f.p[k].toFixed(2),f2(b.dz[k]),STAGE>=1,22,STAGE===1);
+  s+=T(OX+32,OY[0]+5,'class A','tn','start',CA)+T(OX+32,OY[1]+5,'class B','tn','start',CB);
+  s+=T(OX,OY[1]+62,'loss for: '+(y===0?'A':'B')+(MODE==='attack'?' (target)':' (true)'),'tn','middle',y===0?CA:CB);
+  if(STAGE>=1)s+=T(20,438,'numbers under the nodes: the gradient of the loss with respect to that value, computed right to left','tn','start');}
+ // ---------- plane
+ var PX=590,PY=30,PW=510,PH=390,R=[-2.75,2.75,-1.9,1.9],sx=PW/(R[1]-R[0]),sy=PH/(R[3]-R[2]);
+ var X=function(v){return PX+(v-R[0])*sx;},Y=function(v){return PY+PH-(v-R[2])*sy;};
+ var G=34,cw=PW/G,ch=PH/G*1.0,gr='';
+ for(var gx=0;gx<G;gx++)for(var gy=0;gy<G;gy++){var px=R[0]+(gx+0.5)/G*(R[1]-R[0]),py=R[2]+(gy+0.5)/G*(R[3]-R[2]),pp=fwd(NET,[px,py]).p[1];
+  gr+='<rect x="'+(PX+gx*cw).toFixed(1)+'" y="'+(PY+PH-(gy+1)*PH/G).toFixed(1)+'" width="'+(cw+1).toFixed(1)+'" height="'+(PH/G+1).toFixed(1)+'" fill="color-mix(in oklab, '+(pp>0.5?CB:CA)+' '+Math.round(8+32*Math.abs(pp-0.5)*2)+'%, var(--bg))"/>';}
+ s+='<g id="plane">'+gr+'<rect x="'+PX+'" y="'+PY+'" width="'+PW+'" height="'+PH+'" fill="transparent" stroke="var(--border)"/></g>';
+ s+=T(PX,22,'the input plane, colored by the network&rsquo;s decision','ts','start');
+ DATA.forEach(function(d,i){s+='<circle class="pt" data-i="'+i+'" cx="'+X(d.x[0]).toFixed(1)+'" cy="'+Y(d.x[1]).toFixed(1)+'" r="4.2" fill="'+(d.c?CB:CA)+'" stroke="var(--surface)" stroke-width="1" style="cursor:pointer"/>';});
+ if(SEL){
+  if(TRAIL.length>1)s+='<polyline points="'+TRAIL.map(function(q){return X(q[0]).toFixed(1)+','+Y(q[1]).toFixed(1);}).join(' ')+'" fill="none" stroke="var(--text-primary)" stroke-width="1.6" stroke-dasharray="4 3"/>';
+  s+='<circle cx="'+X(SEL.x[0]).toFixed(1)+'" cy="'+Y(SEL.x[1]).toFixed(1)+'" r="9" fill="'+(SEL.c?CB:CA)+'" stroke="var(--text-primary)" stroke-width="2.4"/>';
+  if(MODE==='attack'&&STAGE>=3){var gx2=-b.dx[0],gy2=-b.dx[1],gn=Math.hypot(gx2,gy2)||1,Lr=70;
+   var x1=X(SEL.x[0]),y1=Y(SEL.x[1]),x2=x1+gx2/gn*Lr,y2=y1-gy2/gn*Lr;
+   s+='<defs><marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10Z" fill="var(--text-primary)"/></marker></defs>'+
+     '<line x1="'+x1.toFixed(1)+'" y1="'+y1.toFixed(1)+'" x2="'+x2.toFixed(1)+'" y2="'+y2.toFixed(1)+'" stroke="var(--text-primary)" stroke-width="3" marker-end="url(#ah)"/>'+
+     T(x2+6,y2-6,'&minus;&part;L/&part;x','tn','start','var(--text-primary)',' style="font-weight:600"');}
+  if(FLASH)s+=T(PX+PW-8,PY+PH-10,FLASH,'tn','end','var(--text-primary)');}
+ document.getElementById('g').innerHTML=s;
+ Array.from(document.querySelectorAll('.pt')).forEach(function(c){c.addEventListener('click',function(e){e.stopPropagation();stopWalk();selectData(+c.dataset.i);FLASH=null;draw();});});
+ readout(f,b,y);}
+function readout(f,b,y){
+ var r='',st=document.getElementById('status');
+ st.textContent=TRAINING>0?'training the network… loss '+LOSS.toFixed(3):'network trained (loss '+LOSS.toFixed(3)+')';
+ if(!f){document.getElementById('rd').innerHTML='Training&hellip;';return;}
+ var cls=f.p[1]>0.5?'B':'A',tl=SEL.c?'B':'A';
+ if(STAGE===0)r='The selected point is <b>'+tl+'</b>; the network says <b>'+cls+'</b> ('+(Math.max(f.p[0],f.p[1])*100).toFixed(0)+'%). '+(MODE==='train'?'Training measures the loss for its true class, '+tl+'.':'The attack measures the loss for the other class, '+(SEL.c?'A':'B')+', and will try to lower it.')+' Press <b>Backward step</b>.';
+ if(STAGE===1)r='<b>Step 1, at the output.</b> <span class="eq">&part;L/&part;z = p &minus; onehot(y) = ['+f2(b.dz[0])+', '+f2(b.dz[1])+']</span>: too much probability on the wrong class gives a positive gradient, too little on the right one a negative gradient.';
+ if(STAGE===2)r='<b>Step 2, back through W&#8322; and tanh.</b> <span class="eq">&part;L/&part;h = W&#8322;&#7488;(p &minus; y)</span>, then <span class="eq">&part;L/&part;a = &part;L/&part;h &odot; (1 &minus; h&sup2;)</span>: each hidden unit&rsquo;s share of the blame, shrunk where tanh is flat. '+(MODE==='train'?'Training can already read off <span class="eq">&part;L/&part;W&#8322; = (p &minus; y) h&#7488;</span> (the edge colors).':'These hidden-unit gradients are exactly the same as in training.');
+ if(STAGE>=3){if(MODE==='train')r='<b>Step 3, training stops at the weights.</b> <span class="eq">&part;L/&part;W&#8321; = (&part;L/&part;a) x&#7488;</span>: each first-layer weight&rsquo;s gradient is its hidden unit&rsquo;s gradient times its input. <b>Take a step</b> moves the weights downhill on this one point: the boundary shifts, the point stays put.';
+  else r='<b>Step 3, the attack goes on to the input.</b> <span class="eq">&part;L/&part;x = W&#8321;&#7488;(&part;L/&part;a) = ['+f2(b.dx[0])+', '+f2(b.dx[1])+']</span>: one more multiplication by the weights. The arrow is &minus;&part;L/&part;x, the direction that most quickly makes the network say '+(SEL.c?'A':'B')+'. <b>Take a step</b> moves the point; the weights and the boundary stay put.';}
+ if(FLASH&&STAGE>=3)r+=' '+FLASH;
+ document.getElementById('rd').innerHTML=r;}
+// ---------------------------------------------------------------- actions
+function applyStep(){if(!SEL||TRAINING>0)return;STAGE=3;
+ var f=fwd(NET,SEL.x),y=MODE==='attack'?1-SEL.c:SEL.c,b=bwd(NET,f,y),before=f.p[1]>0.5?1:0;
+ if(MODE==='attack'){var gn=Math.hypot(b.dx[0],b.dx[1])||1,step=0.12;SEL.x[0]-=step*b.dx[0]/gn;SEL.x[1]-=step*b.dx[1]/gn;TRAIL.push(SEL.x.slice());}
+ else{for(var r=0;r<1;r++)sgd(NET,[{x:SEL.x,c:SEL.c}],0.25);}
+ var after=fwd(NET,SEL.x).p[1]>0.5?1:0;
+ FLASH=after!==before?(MODE==='attack'?'It crossed: the network now says '+(after?'B':'A')+', for a point that started as '+(SEL.c?'B':'A')+'.':'The boundary moved past the point: now classified '+(after?'B':'A')+'.'):null;
+ draw();return after!==before;}
+function stopWalk(){if(WALK){clearInterval(WALK);WALK=null;document.getElementById('walk').textContent='Keep stepping';}}
+document.getElementById('walk').addEventListener('click',function(){if(WALK){stopWalk();return;}this.textContent='Stop';var n=0;
+ WALK=setInterval(function(){var crossed=applyStep();n++;if((crossed&&MODE==='attack')||n>40)stopWalk();},220);});
+seg('modeSeg',function(b){MODE=b.dataset.m;stopWalk();STAGE=0;FLASH=null;draw();});
+function seg(id,fn){document.getElementById(id).addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;Array.from(this.children).forEach(function(x){x.classList.toggle('on',x===b);});fn(b);});}
+document.getElementById('bstep').addEventListener('click',function(){STAGE=Math.min(3,STAGE+1);draw();});
+document.getElementById('ball').addEventListener('click',function(){STAGE=3;draw();});
+document.getElementById('apply').addEventListener('click',function(){stopWalk();applyStep();});
+document.getElementById('resetpt').addEventListener('click',function(){stopWalk();if(!SEL)return;SEL.x=SEL.x0.slice();TRAIL=[SEL.x.slice()];FLASH=null;STAGE=0;
+ if(MODE==='train'){/* undo weight steps by retraining from the saved copy */if(SAVED)NET=JSON.parse(JSON.stringify(SAVED));}draw();});
+var SAVED=null;
+document.getElementById('retrain').addEventListener('click',function(){stopWalk();SEED++;makeData();SEL=null;retrain();});
+document.getElementById('fig').addEventListener('click',function(e){var pt=this.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;var q=pt.matrixTransform(this.getScreenCTM().inverse());
+ var PX=590,PY=30,PW=510,PH=390,R=[-2.75,2.75,-1.9,1.9];if(q.x<PX||q.x>PX+PW||q.y<PY||q.y>PY+PH||TRAINING>0)return;
+ var x=[R[0]+(q.x-PX)/PW*(R[1]-R[0]),R[2]+(PY+PH-q.y)/PH*(R[3]-R[2])];stopWalk();var c=fwd(NET,x).p[1]>0.5?1:0;SEL={x:x.slice(),c:c,x0:x.slice(),idx:-1};TRAIL=[x.slice()];STAGE=0;FLASH=null;draw();});
+// keep a copy of the trained weights so "Put it back" can undo training steps
+makeData();retrain();
+(function watch(){if(TRAINING===0&&!SAVED&&NET){SAVED=JSON.parse(JSON.stringify(NET));}else if(TRAINING>0)SAVED=null;requestAnimationFrame(watch);})();
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>

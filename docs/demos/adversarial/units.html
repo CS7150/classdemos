@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Units vs. random directions</title>
+<meta name="description" content="The first property in Szegedy et al. 2014, as a guessing game: rows of the test digits that most strongly drive a single hidden unit, mixed with rows that most strongly drive a random direction in the same layer. If you cannot tell them apart, single neurons are no more meaningful than random combinations of them.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 24px;max-width:1150px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+.quiz{margin:0}
+.row{gap:7px}
+button{height:30px;font-size:13px;padding:0 10px}
+button.main{min-width:120px}
+.seg button{height:28px;font-size:12.5px;padding:0 9px}
+.klab{font-size:12.5px}
+.rd{font-size:14px;line-height:1.6;min-height:1.6em}
+.cap{font-size:12.5px;line-height:1.6;padding-top:4px}
+.nav{display:flex;align-items:baseline;gap:10px}
+.status{font-size:13px;color:var(--text-muted)}
+#grid{display:flex;flex-direction:column;gap:6px}
+.gr{display:flex;align-items:center;gap:10px}
+.gr .imgs{display:flex;gap:3px}
+.gr canvas{width:52px;height:52px;image-rendering:pixelated;border-radius:3px;background:#000}
+.gr .tag{width:52px;font-size:13px;color:var(--text-secondary)}
+.gr .guess{display:inline-flex;gap:4px}
+.gr .guess button{height:26px;font-size:12px;padding:0 8px}
+.gr .guess button.on{background:var(--surface-1);box-shadow:inset 0 -2px 0 var(--blue);font-weight:600}
+.gr .ans{font-size:13px;font-weight:600;min-width:200px}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Adversarial examples demos</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Units vs. random directions<span>: the paper&rsquo;s first property, as a guessing game</span></h1>
+<p class="quiz">People inspect a network by finding the inputs that most excite one neuron, and then naming what those inputs share. Szegedy et al. ran the same search for a <b>random direction</b> in the same layer, a random weighted mix of all the neurons, and found the results just as coherent. Each row below is one or the other: the ten test digits that most strongly drive a single unit of a trained network, or the ten that most strongly drive a random direction. <b>Guess which is which</b>, then reveal.</p>
+
+<div class="row">
+  <span class="klab">layer</span><div class="seg" id="layerSeg"><button data-l="1" class="on">hidden layer 1 (100 units)</button><button data-l="2">hidden layer 2 (100 units)</button></div>
+  <button class="main" id="newrows">New rows</button>
+  <button id="reveal">Reveal</button>
+  <span class="status" id="status">loading digits and networks&hellip;</span>
+</div>
+<div id="grid"></div>
+<div class="rd" id="rd"></div>
+
+<div class="cap">
+<div><b>What the paper says.</b> Write &phi;(x) for the activations of a layer. The usual analysis takes a single unit, the natural basis vector e<sub>i</sub>, and collects the held-out images x that maximize &lang;&phi;(x), e<sub>i</sub>&rang;, the unit&rsquo;s activation. The paper takes a random vector v instead and maximizes &lang;&phi;(x), v&rang;. For both an MNIST network and AlexNet, the two kinds of image set looked equally semantically coherent (their Figures 1&ndash;4). So, they conclude, &ldquo;the natural basis is not better than a random basis,&rdquo; and it is the whole space of activations, not individual units, that carries the meaning. This is the property Joseph and Ling asked about. Here the network is the paper&rsquo;s fully connected FC100-100-10, the images are the 2,000 held-out test digits, and each random direction is a Gaussian vector over the 100 units of the layer.</div>
+<div><b>Why it matters, and what came after.</b> If meaning lives in directions rather than neurons, then looking at single neurons can miss most of what a network represents, and a neuron that looks like a &ldquo;7 detector&rdquo; might be one view of something spread across many units. Later interpretability work took both sides: some units really are selective (network dissection found many single-concept units in convolutional networks), but many representations are distributed and superposed, which is why methods now look for directions (probes, sparse dictionaries) as much as for neurons. Ling&rsquo;s question, whether there is a way to explain every feature when features are not single neurons, is close to the current research frontier.</div>
+</div>
+
+<script src="advcore.js"></script>
+<script>
+var D=null,M=null,LAYER=1,ACT=null,ROWS=[],GUESS={},REVEAL=false,SEED=1;
+function paint(cv,x){var cx=cv.getContext('2d'),im=cx.createImageData(28,28);for(var i=0;i<784;i++){var v=Math.round(Math.max(0,Math.min(1,x[i]))*255);im.data[i*4]=im.data[i*4+1]=im.data[i*4+2]=v;im.data[i*4+3]=255;}cx.putImageData(im,0,0);}
+function activations(){var net=M.FC100;ACT=D.test.map(function(i){return ADV.forward(net,D.X[i])[LAYER];});}
+function topFor(v){var sc=ACT.map(function(h,k){var s=0;for(var j=0;j<h.length;j++)s+=h[j]*v[j];return [s,k];});sc.sort(function(a,b){return b[0]-a[0];});return sc.slice(0,10).map(function(q){return D.test[q[1]];});}
+function makeRows(){var r=ADV.rng(SEED*977+LAYER),H=ACT[0].length,rows=[];
+ // single units: choose units that are not dead (vary across the test set)
+ var vari=[];for(var j=0;j<H;j++){var m=0,m2=0;ACT.forEach(function(h){m+=h[j];m2+=h[j]*h[j];});m/=ACT.length;vari.push([m2/ACT.length-m*m,j]);}
+ vari.sort(function(a,b){return b[0]-a[0];});var pool=vari.slice(0,60).map(function(q){return q[1];});
+ for(var k=0;k<4;k++){var u=pool.splice(Math.floor(r()*pool.length),1)[0],e=new Float32Array(H);e[u]=1;rows.push({kind:'unit',label:'unit '+(u+1),imgs:topFor(e)});}
+ for(k=0;k<4;k++){var v=new Float32Array(H);for(j=0;j<H;j++)v[j]=ADV.randn(r);rows.push({kind:'dir',label:'a random direction',imgs:topFor(v)});}
+ for(k=rows.length-1;k>0;k--){var q=Math.floor(r()*(k+1));var t=rows[k];rows[k]=rows[q];rows[q]=t;}
+ ROWS=rows;GUESS={};REVEAL=false;draw();}
+function draw(){var g=document.getElementById('grid');g.innerHTML='';
+ ROWS.forEach(function(row,k){var d=document.createElement('div');d.className='gr';
+  var tag=document.createElement('div');tag.className='tag';tag.textContent='row '+(k+1);d.appendChild(tag);
+  var im=document.createElement('div');im.className='imgs';row.imgs.forEach(function(i){var c=document.createElement('canvas');c.width=28;c.height=28;paint(c,D.X[i]);im.appendChild(c);});d.appendChild(im);
+  var gs=document.createElement('div');gs.className='guess';[['unit','one unit'],['dir','random direction']].forEach(function(o){var b=document.createElement('button');b.textContent=o[1];if(GUESS[k]===o[0])b.className='on';
+   b.addEventListener('click',function(){GUESS[k]=o[0];draw();});gs.appendChild(b);});d.appendChild(gs);
+  var a=document.createElement('div');a.className='ans';if(REVEAL){var right=GUESS[k]===row.kind;a.innerHTML=(row.kind==='unit'?row.label:'a random direction')+(GUESS[k]?' <span style="color:'+(right?'var(--green-ink)':'var(--pink-ink)')+'">'+(right?'&#10003;':'&#10007;')+'</span>':'');}
+  d.appendChild(a);g.appendChild(d);});
+ var n=Object.keys(GUESS).length,ok=Object.keys(GUESS).filter(function(k){return GUESS[k]===ROWS[k].kind;}).length;
+ document.getElementById('rd').innerHTML=REVEAL?(n?'You got <b>'+ok+' of '+n+'</b> right. Chance is half. ':'')+'Four rows are single units and four are random directions. The paper&rsquo;s claim is that you should not be able to do much better than chance; try a few sets of rows, and both layers.':
+  'Four of the eight rows are single units and four are random directions. Mark your guesses, then press <b>Reveal</b>.';}
+function seg(id,fn){document.getElementById(id).addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;Array.from(this.children).forEach(function(x){x.classList.toggle('on',x===b);});fn(b);});}
+seg('layerSeg',function(b){LAYER=+b.dataset.l;activations();makeRows();});
+document.getElementById('newrows').addEventListener('click',function(){if(!D)return;SEED++;makeRows();});
+document.getElementById('reveal').addEventListener('click',function(){REVEAL=true;draw();});
+Promise.all([ADV.loadMNIST(''),ADV.loadModels('')]).then(function(a){D=a[0];M=a[1];document.getElementById('status').textContent='';activations();makeRows();})
+ .catch(function(e){document.getElementById('status').textContent='could not load the data: '+e;});
+</script>
+</body>
+</html>
