@@ -217,9 +217,9 @@ function slot(el,p,n,val){
 // fading into the sum as they converge.  MUL holds each kind's timing: when the multiplicands
 // have arrived, and when they drop.
 var MUL={y:{mv:[0.1,0.3],dw:[0.36,0.44],go:[0.5,0.82]},x:{mv:[0.46,0.6],dw:[0.63,0.69],go:[0.71,0.85]},a:{mv:[0.46,0.6],dw:[0.63,0.69],go:[0.71,0.85]}};
-// a multiplicand and its target share the target's cell, one above the other, small enough
-// that every pair stays inside its own cell even when a whole column is multiplying
-var HO=7.5,TD=7.5,PS=0.68;
+// a multiplicand hovers just above its target at full size, crowding it a little, and the
+// target steps down a touch to meet it
+var HO=15,TD=3,PS=1;
 // products fade into the sum as they close in, before they can pile up on one another
 function sumWin(k){var g=MUL[k].go,L=g[1]-g[0];return [g[0]+0.3*L,g[0]+0.78*L];}
 function travellers(J,Q){
@@ -316,9 +316,6 @@ function layoutAlg(){
  // backward jobs begin with the nudge: ε on the scalar, the change it makes in y, and the rows
  // that carry it to y and on to L
  var bw=J&&(J.k==='x'||J.k==='a'),ov='';
- if(J&&J.k!=='g'){var M=MUL[J.k],po=smooth(M.mv[1]-0.06,M.mv[1],u)*(1-smooth(M.dw[1]-0.02,M.dw[1]+0.03,u));
-  if(po>0)for(i=0;i<R;i++)for(j=0;j<C;j++)if((J.k==='y'&&i===J.i)||(J.k==='x'&&j===J.j)||(J.k==='a'&&i===J.i&&j===J.j))
-   ov+='<rect x="'+(j*CW+5)+'" y="'+(i*CH+1.5)+'" width="'+(CW-10)+'" height="'+(CH-3)+'" rx="8" fill="var(--surface)" stroke="'+(J.k==='y'?'var(--blue)':'var(--grad)')+'" stroke-width="1.2" opacity="'+po.toFixed(2)+'"/>';}
  if(bw){var j0=J.j;
   if(J.k==='x')place(els.nx,L2([Q.XX+CW*0.6,Q.xoff+j0*CH-CH*0.55],[j0*CW,-CH*1.05],ease(smooth(0.1,0.22,u))),lit*(1-smooth(0.3,0.4,u)));
   else place(els.nx,[j0*CW+CW*0.55,J.i*CH-CH*0.6],lit*(1-smooth(0.6,0.66,u)));
