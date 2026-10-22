@@ -43,6 +43,7 @@ input.cel[type=number]{-moz-appearance:textfield}
 .brk:before,.brk:after{content:"";position:absolute;top:0;bottom:0;width:7px;border:2px solid currentColor}
 .brk:before{left:0;border-right:0;border-radius:3px 0 0 3px}
 .brk:after{right:0;border-left:0;border-radius:0 3px 3px 0}
+.bk{position:absolute;left:0;top:0;width:44px;height:30px;border-radius:8px;pointer-events:none}
 .hl{position:absolute;left:0;top:0;border:2.5px solid var(--wig);border-radius:9px;pointer-events:none;
  background:color-mix(in srgb,var(--wig) 8%,transparent)}
 .dim{font-size:15px;color:var(--text-secondary)}
@@ -109,7 +110,7 @@ function L2(p,q,f){return [lerp(p[0],q[0],f),lerp(p[1],q[1],f)];}
 function fmt(v){var a=Math.abs(v),b=Math.abs(a-Math.round(a))<1e-9?String(Math.round(a)):a.toFixed(1);
  return (v<0?'−':'')+b;}
 function par(v){return v<0?'('+fmt(v)+')':fmt(v);}
-function eps(v){return v===0?'0':(v>0?'+':'')+fmt(v)+'ε';}
+function eps(v){return v===0?'+0':(v>0?'+':'')+fmt(v)+'ε';}
 function yv(i){var s=0;for(var j=0;j<C;j++)s+=A[i][j]*X[j];return s;}
 function dxv(j){var s=0;for(var i=0;i<R;i++)s+=G[i]*A[i][j];return s;}
 
@@ -156,7 +157,7 @@ function geom(){
  return {xoff:xoff,top:top,bot:bot,XX:XX,YX:YX,GX:GX,yDX:yDX,yGA:yGA,W:GX+CW+40,Htop:top-46,Hbot:yGA+R*CH+16};
 }
 function build(){
- var h='<div class="hl" id="hl"></div><svg id="ov" width="10" height="10"></svg>',i,j,k;
+ var h='<div class="bk" id="bkx" style="background:color-mix(in srgb,var(--wig) 18%,transparent)"></div><div class="bk" id="bkg" style="background:color-mix(in srgb,var(--grad) 18%,transparent)"></div><div class="hl" id="hl"></div><svg id="ov" width="10" height="10"></svg>',i,j,k;
  ['bA','bX','bY','bG','bDX','bGA'].forEach(function(k){h+='<div class="brk" id="'+k+'"></div>';});
  h+='<div class="lbl" id="lA">A</div><div class="lbl" id="lX">x</div><div class="lbl" id="lY">y</div>'+
     '<div class="lbl g" id="lG" style="cursor:pointer" onclick="ask(idx(\'g\'))">g = ∂L/∂y</div><div class="lbl" id="lL">→ L</div>'+
@@ -284,6 +285,10 @@ function layoutAlg(){
  els.lGA.innerHTML='∂L/∂A'+(alla?' = g xᵀ':' <small>entry (i, j) under A<sub>ij</sub></small>');
  place(els.lDX,[C*CW+18,Q.yDX+6],1);place(els.lGA,[C*CW+18,Q.yGA+R*CH/2-11],1);
 
+ // a weight's gradient uses one x and one g and nothing else: tint those two
+ var bo=J&&J.k==='a'?lit:0;
+ place(els.bkx,[Q.XX+3,Q.xoff+(J&&J.j!==undefined?J.j:0)*CH+2],bo);
+ place(els.bkg,[Q.GX+3,(J&&J.i!==undefined?J.i:0)*CH+2],bo*(t>=idx('g')?1:0));
  // the box around what this job reads
  var hl=els.hl;
  if(J&&J.k!=='g'){var r=J.k==='y'?[-3,J.i*CH-3,C*CW+6,CH+6]:J.k==='x'?[J.j*CW-3,-4,CW+6,R*CH+8]:[J.j*CW-3,J.i*CH-3,CW+6,CH+6];
@@ -319,8 +324,9 @@ function layoutAlg(){
   else place(els.nx,[j0*CW+CW*0.55,J.i*CH-CH*0.6],lit*(1-smooth(0.6,0.66,u)));
   var fw=smooth(0.22,0.34,u),o2=smooth(0.34,0.44,u),lo=smooth(0.2,0.24,u)*(1-smooth(0.68,0.74,u));
   for(i=0;i<R;i++){var on=J.k==='x'||i===J.i,d=J.k==='x'?A[i][j0]:(i===J.i?X[j0]:0);
-   els['dy'+i].textContent='Δy'+SUB[i]+' '+eps(d);
-   place(els['dy'+i],[Q.YX+CW+6,i*CH+8],smooth(0.3,0.36,u)*(1-smooth(0.94,1,u))*(on?1:0.55));
+   // the change beside each output it reaches; a weight reaches only its own row
+   els['dy'+i].textContent=eps(d);
+   place(els['dy'+i],[Q.YX+CW+6,i*CH+8],on?smooth(0.3,0.36,u)*(1-smooth(0.94,1,u)):0);
    if(!on)continue;
    // along the bottom of the row, under the numbers it passes
    var y0=i*CH+CH-4,x0=j0*CW+CW-4,x1=Q.YX+4;
@@ -380,7 +386,7 @@ function drawWire(){
      TXT(NY,yi+5.5,'y'+SUB[i],'var(--text-primary)','middle','ts',' font-style="italic"');
   s+='<circle class="nhit" data-y="'+i+'" cx="'+NY+'" cy="'+yi.toFixed(1)+'" r="'+(NR+4)+'"/>';
   if(done(n))s+=TXT(NY,yi-NR-7,fmt(yv(i)),'var(--text-primary)','middle','ts');
-  if(bw&&fw>0.95){var d=J.k==='x'?A[i][J.j]:(i===J.i?X[J.j]:0);
+  if(bw&&fw>0.95&&(J.k==='x'||i===J.i)){var d=J.k==='x'?A[i][J.j]:(i===J.i?X[J.j]:0);
    s+=TXT(NY,yi+NR+17,eps(d),'var(--wig-ink)','middle','tn',' font-weight="600" opacity="'+lit.toFixed(2)+'"');}}
  s+=TXT(VW/2-10,VH-10,J?'':'click a node or a wire to see its derivative','var(--text-muted)','middle','tn');
  return s;
