@@ -70,6 +70,17 @@ footer a{color:var(--text-secondary)}
   <a class="go" href="autograd.html">Open the explainer &rarr;</a>
 </li>
 
+<li class="done">
+  <div class="qtag">Matrices</div>
+  <h2><a href="matvec-backward.html">Backprop through y = Ax</a></h2>
+  <p class="what">Why the backward pass multiplies by Aᵀ. The forward product drawn as wires, then run in
+     reverse: the gradient g deals one entry to each row of A, the scaled rows add up to ∂L/∂x = Aᵀg, and
+     the product rule on each wire gives the weight gradient ∂L/∂A = g xᵀ. The left panel replays the
+     <a href="../quiz0/matvec.html">matrix &times; vector</a> animation on Aᵀ and g; click any wire to see the
+     product rule on it.</p>
+  <a class="go" href="matvec-backward.html">Open the explainer &rarr;</a>
+</li>
+
 </ol>
 
 <footer>
