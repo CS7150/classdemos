@@ -171,7 +171,7 @@ function build(){
  for(i=0;i<R;i++)h+='<input class="cel" type="number" step="1" id="g'+i+'" style="color:var(--grad-ink);font-weight:500" aria-label="g entry '+(i+1)+'">';
  for(j=0;j<C;j++)h+='<div class="cel slot" id="sx'+j+'" title="∂L/∂x'+SUB[j]+'" onclick="ask(idx(\'x\',undefined,'+j+'))"></div>';
  for(i=0;i<R;i++)for(j=0;j<C;j++)h+='<div class="cel slot" id="sa'+i+'_'+j+'" title="∂L/∂A'+SUB[i]+SUB[j]+'" onclick="ask(idx(\'a\','+i+','+j+'))"></div>';
- h+='<div class="cel chip" id="nx" style="color:var(--wig-ink)">ε</div><div class="cel" id="gin"></div>';
+ h+='<div class="cel chip" id="nx" style="color:var(--wig-ink)">+ε</div><div class="cel" id="gin"></div>';
  NP=Math.max(R,C)+1;
  for(k=0;k<NP;k++)h+='<div class="cel chip" id="m'+k+'"></div><div class="cel chip" id="p'+k+'"></div>';
  for(i=0;i<R;i++)h+='<div class="tag" id="dy'+i+'"></div>';
