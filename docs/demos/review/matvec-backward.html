@@ -171,6 +171,8 @@ function build(){
  for(i=0;i<R;i++)h+='<input class="cel" type="number" step="1" id="g'+i+'" style="color:var(--grad-ink);font-weight:500" aria-label="g entry '+(i+1)+'">';
  for(j=0;j<C;j++)h+='<div class="cel slot" id="sx'+j+'" title="∂L/∂x'+SUB[j]+'" onclick="ask(idx(\'x\',undefined,'+j+'))"></div>';
  for(i=0;i<R;i++)for(j=0;j<C;j++)h+='<div class="cel slot" id="sa'+i+'_'+j+'" title="∂L/∂A'+SUB[i]+SUB[j]+'" onclick="ask(idx(\'a\','+i+','+j+'))"></div>';
+ // the cover a weight's x_j and g_i settle on, exactly the size of the entry it hides
+ h+='<div class="cel" id="cv" style="border-radius:7px;background:var(--tint)"></div>';
  h+='<div class="cel chip" id="nx" style="color:var(--wig-ink)">+ε</div><div class="cel" id="gin"></div>';
  NP=Math.max(R,C)+1;
  for(k=0;k<NP;k++)h+='<div class="cel chip" id="m'+k+'"></div><div class="cel chip" id="p'+k+'"></div>';
@@ -236,9 +238,11 @@ function travellers(J,Q){
   for(i=0;i<R;i++){mul(fmt(G[i]),'var(--grad-ink)',[Q.GX,i*CH],[j*CW,i*CH]);
    prod(fmt(G[i]*A[i][j]),'var(--grad-ink)',[j*CW,i*CH],[j*CW,Q.yDX]);}}
  else{i=J.i;j=J.j;
-  // x_j takes A_ij's place: a nudge to A_ij reaches y_i multiplied by x_j
-  T.push({m:1,txt:fmt(X[j]),c:'var(--text-primary)',a:[Q.XX,Q.xoff+j*CH],b:[j*CW,i*CH],mv:[0.1,0.24],fi:0.08,sh:[M.mv[1]-0.05,M.mv[1]],dw:M.dw,hold:1});
-  mul(fmt(G[i]),'var(--grad-ink)',[Q.GX,i*CH],[j*CW,i*CH]);
+  // x_j and g_i set off together and settle as a pair over A_ij, g_i above and x_j below,
+  // covering it between them; neither takes its place.  Then they merge into the product.
+  var HP=10,cell=[j*CW,i*CH];
+  T.push({m:1,txt:fmt(X[j]),c:'var(--text-primary)',a:[Q.XX,Q.xoff+j*CH],b:[cell[0],cell[1]+HP],mv:M.mv,fi:M.mv[0]-0.02,d:cell,dw:M.dw,cov:1});
+  T.push({m:1,txt:fmt(G[i]),c:'var(--grad-ink)',a:[Q.GX,i*CH],b:[cell[0],cell[1]-HP],mv:M.mv,fi:M.mv[0]-0.02,d:cell,dw:M.dw,cov:1});
   prod(fmt(G[i]*X[j]),'var(--grad-ink)',[j*CW,i*CH],[j*CW,Q.yGA+i*CH]);}
  return T;
 }
@@ -317,15 +321,21 @@ function layoutAlg(){
   // is uncovered the way a card sliding off it would uncover it
   if(q.sum){var mvd=Math.hypot(pos[0]-q.a[0],pos[1]-q.a[1]);var cell=Math.abs(q.b[1]-q.a[1])>Math.abs(q.b[0]-q.a[0])?CH:CW;
    cover=u<MUL[J.k].go[0]?1:1-smooth(0.8*cell,cell,mvd);}
-  else if(q.sh)cover=smooth(0.2,0.24,u);
   el.style.background=cover>0?'color-mix(in srgb,'+(J.k==='y'?'var(--bg)':'var(--tint)')+' '+(cover*100).toFixed(0)+'%,transparent)':'transparent';
   place(el,pos,op,sc);});
+ if(J&&J.k==='a'){var Mc=MUL.a;place(els.cv,[J.j*CW,J.i*CH],smooth(Mc.mv[1]-0.04,Mc.mv[1],u)*(u<Mc.go[0]+0.02?1:0));}
+ else els.cv.style.opacity=0;
  // backward jobs begin with the nudge: ε on the scalar, the change it makes in y, and the rows
  // that carry it to y and on to L
  var bw=J&&(J.k==='x'||J.k==='a'),ov='';
  if(bw){var j0=J.j;
+  if(J.k==='x'){els.nx.textContent='+ε';}
   if(J.k==='x')place(els.nx,L2([Q.XX+CW*0.6,Q.xoff+j0*CH-CH*0.55],[j0*CW,-CH*1.05],ease(smooth(0.1,0.22,u))),lit*(1-smooth(0.3,0.4,u)));
-  else place(els.nx,[j0*CW+CW*0.55,J.i*CH-CH*0.6],lit*(1-smooth(0.6,0.66,u)));
+  else{
+   // the nudge on a weight becomes x_j times as large by the time it reaches y_i
+   var gr=smooth(0.16,0.22,u);
+   els.nx.textContent=u<0.19?'+ε':eps(X[j0]);
+   place(els.nx,[j0*CW+CW*0.55,J.i*CH-CH*0.6],lit*(1-smooth(0.46,0.52,u)),1+0.3*Math.sin(Math.PI*gr));}
   var fw=smooth(0.22,0.34,u),o2=smooth(0.34,0.44,u),lo=smooth(0.2,0.24,u)*(1-smooth(0.68,0.74,u));
   for(i=0;i<R;i++){var on=J.k==='x'||i===J.i,d=J.k==='x'?A[i][j0]:(i===J.i?X[j0]:0);
    // the change beside each output it reaches; a weight reaches only its own row
