@@ -360,7 +360,10 @@ function drawWire(){
  var fw=smooth(0.22,0.34,u),o2=smooth(0.34,0.44,u),bk=smooth(0.46,0.66,u);
  for(i=0;i<R;i++){var yp=[NY+NR,nyp(i,R)],lp=[NL-24,Ly],on=bw&&(J.k==='x'||i===J.i);
   s+=LINE(yp,lp,on&&lit>0.3?'var(--wig)':'var(--border-strong)',on?2.4:1.4,1,on?'':'4 4',0);
-  if(gon||(J&&J.k==='g'&&u>0.5))s+=TXT((yp[0]+lp[0])/2+6,(yp[1]+lp[1])/2-6,'×'+fmt(G[i]),'var(--grad-ink)','middle','tn',' font-weight="600"');
+  // g_i written underneath its edge, the way the backprop exercises write gradients under arrows
+  if(gon||(J&&J.k==='g'&&u>0.5)){var ex=lp[0]-yp[0],ey=lp[1]-yp[1],el=Math.hypot(ex,ey),nx=-ey/el,ny=ex/el;
+   if(ny<0){nx=-nx;ny=-ny;}
+   s+=TXT((yp[0]+lp[0])/2+nx*15,(yp[1]+lp[1])/2+ny*15+5,fmt(G[i]),'var(--grad-ink)','middle','tn',' font-weight="600"');}
   if(J&&J.k==='g'&&u>0.1&&u<0.6)s+=DOT(L2(lp,yp,(u-0.1)/0.5),'var(--grad)');
   if(on&&o2>0&&o2<1)s+=DOT(L2(yp,lp,o2),'var(--wig)');
   if(on&&bk>0&&bk<0.5)s+=DOT(L2(lp,yp,bk*2),'var(--grad)');}
@@ -374,7 +377,7 @@ function drawWire(){
   s+=LINE(P0,Q0,on&&lit>0.3?cc:'var(--border-strong)',on?3:1.4,on?1:0.7,'',1);
   s+='<line class="hit" data-e="'+i+','+j+'" x1="'+P0[0]+'" y1="'+P0[1].toFixed(1)+'" x2="'+Q0[0]+'" y2="'+Q0[1].toFixed(1)+'"/>';
   if(on){var m=L2(P0,Q0,0.32);
-   s+=TXT(m[0],m[1]-6,'×'+fmt(J.k==='a'?X[j]:A[i][j]),fwd?'var(--blue-ink)':'var(--wig-ink)','middle','tn',' font-weight="600" opacity="'+lit.toFixed(2)+'"');
+   s+=TXT(m[0],m[1]-6,fmt(J.k==='a'?X[j]:A[i][j]),fwd?'var(--blue-ink)':'var(--wig-ink)','middle','tn',' font-weight="600" opacity="'+lit.toFixed(2)+'"');
    if(fwd&&u>0.3&&u<0.82)s+=DOT(L2(P0,Q0,(u-0.3)/0.52),'var(--blue)');
    if(bw&&fw>0&&fw<1)s+=DOT(L2(P0,Q0,fw),'var(--wig)');
    if(bw&&bk>0.5&&bk<1)s+=DOT(L2(Q0,P0,(bk-0.5)*2),'var(--grad)');}}
