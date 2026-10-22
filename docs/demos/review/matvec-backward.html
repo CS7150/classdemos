@@ -33,7 +33,8 @@ input.cel[type=number]{-moz-appearance:textfield}
 .slot.full:hover{border-color:var(--grad)}
 .slot.fwd.full{color:var(--text-primary)}
 .slot.fwd:hover{border-color:var(--blue);color:var(--blue-ink)}
-.chip{font-size:16px;font-weight:600;pointer-events:none}
+.chip{font-size:16px;font-weight:600;pointer-events:none;border-radius:7px}
+#algin{--tint:color-mix(in srgb,var(--wig) 8%,var(--bg))}
 .tag{position:absolute;left:0;top:0;font-size:14px;color:var(--wig-ink);font-weight:600;white-space:nowrap;pointer-events:none}
 .op{position:absolute;left:0;top:0;font-size:20px;color:var(--text-muted)}
 .lbl{position:absolute;left:0;top:0;font-size:17px;font-style:italic;color:var(--text-secondary);white-space:nowrap}
@@ -251,14 +252,12 @@ function layoutAlg(){
   setv(el,A[i][j]);
   var on=part&&lit>0.5,col=J&&J.k==='y'?'var(--blue-ink)':'var(--wig-ink)';
   el.style.color=on?col:'';el.style.fontWeight=on?'600':'';
-  // a cell about to be multiplied steps down to make room for its multiplicand, then gives
-  // way to the product; a weight being nudged gives way to x_j instead
-  var sh=0,fd=0;
-  if(part){var M=MUL[J.k],back=smooth(0.86,0.9,u);
-   if(J.k==='a')fd=smooth(0.18,0.24,u);
-   else{sh=smooth(M.mv[1]-0.05,M.mv[1],u);fd=smooth(M.dw[0]+0.6*(M.dw[1]-M.dw[0]),M.dw[1],u);}
-   sh*=1-back;fd*=1-back;}
-  place(el,[j*CW,i*CH+TD*sh],1-0.88*fd,lerp(1,PS,sh));}
+  // a cell about to be multiplied steps down to meet its multiplicand.  It never fades: the
+  // product (or, for a weight, x_j) covers it, and it is simply there again once that slides off.
+  // It steps back up while covered.
+  var sh=0;
+  if(part&&J.k!=='a'){var M=MUL[J.k];sh=smooth(M.mv[1]-0.05,M.mv[1],u)*(u<M.dw[1]?1:0);}
+  place(el,[j*CW,i*CH+TD*sh],1,1);}
  for(j=0;j<C;j++){var el=els['x'+j],on=J&&lit>0.5&&(J.k==='y'||((J.k==='x'||J.k==='a')&&J.j===j));
   setv(el,X[j]);el.style.color=on?(J.k==='y'?'var(--blue-ink)':'var(--wig-ink)'):'';el.style.fontWeight=on?'600':'';
   place(el,[Q.XX,Q.xoff+j*CH],1);}
@@ -312,6 +311,14 @@ function layoutAlg(){
   if(q.sum){var w=sumWin(J.k),cf2=MUL[J.k].dw[0]+0.6*(MUL[J.k].dw[1]-MUL[J.k].dw[0]);
    op=smooth(cf2,MUL[J.k].dw[1],u)*(1-smooth(w[0],w[1],u));sc=lerp(PS,1,smooth(cf2,MUL[J.k].dw[1],u));
    if(u<MUL[J.k].dw[1])pos=[q.a[0],q.a[1]+TD*0.5];}
+  // what sits on a cell hides it: an opaque backing while it is there, dropped as it slides away
+  var cover=0;
+  // a product keeps its backing until it has moved a full cell off its source, so the cell
+  // is uncovered the way a card sliding off it would uncover it
+  if(q.sum){var mvd=Math.hypot(pos[0]-q.a[0],pos[1]-q.a[1]);var cell=Math.abs(q.b[1]-q.a[1])>Math.abs(q.b[0]-q.a[0])?CH:CW;
+   cover=u<MUL[J.k].go[0]?1:1-smooth(0.8*cell,cell,mvd);}
+  else if(q.sh)cover=smooth(0.2,0.24,u);
+  el.style.background=cover>0?'color-mix(in srgb,'+(J.k==='y'?'var(--bg)':'var(--tint)')+' '+(cover*100).toFixed(0)+'%,transparent)':'transparent';
   place(el,pos,op,sc);});
  // backward jobs begin with the nudge: ε on the scalar, the change it makes in y, and the rows
  // that carry it to y and on to L
