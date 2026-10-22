@@ -4,74 +4,73 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Backprop through Ax</title>
-<meta name="description" content="The backward pass through y = Ax, animated: the gradient deals its entries to the rows of A, so the input gradient is A-transpose times g, and the product rule on each wire gives the weight gradient g x-transpose.">
+<meta name="description" content="The forward and backward passes through y = Ax, one dot product at a time: each output is a row of A dotted with x, and each input gradient is a column of A dotted with g, so the input gradient is g-transpose A and the weight gradient is g x-transpose.">
 <link rel="stylesheet" href="../demo.css">
 <style>
-:root{--grad:#D2601A;--grad-ink:#B04A0E}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--grad:#f0a060;--grad-ink:#f0a060}}
-:root[data-theme="dark"]{--grad:#f0a060;--grad-ink:#f0a060}
-#stagewrap{flex:0 0 auto;height:clamp(300px,50vh,600px);display:flex;gap:10px;align-items:stretch}
-#alg{position:relative;flex:0 0 480px;min-width:260px;overflow:hidden}
-#wire{position:relative;flex:1 1 auto;min-width:280px}
+:root{--grad:#D2601A;--grad-ink:#B04A0E;--wig:#1D9E75;--wig-ink:#0F6E56}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--grad:#f0a060;--grad-ink:#f0a060;--wig:#4fbb99;--wig-ink:#4fbb99}}
+:root[data-theme="dark"]{--grad:#f0a060;--grad-ink:#f0a060;--wig:#4fbb99;--wig-ink:#4fbb99}
+#stagewrap{flex:0 0 auto;height:clamp(340px,54vh,620px);display:flex;gap:10px;align-items:stretch}
+#alg{position:relative;flex:1 1 56%;min-width:280px;overflow:hidden}
+#algin{position:absolute;left:0;top:0;transform-origin:0 0}
+#ov{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
+#wire{position:relative;flex:1 1 44%;min-width:260px}
 #wire svg{position:absolute;inset:0;width:100%;height:100%}
-.cel{position:absolute;left:0;top:0;width:44px;height:30px;display:flex;align-items:center;justify-content:center;
- font-size:17px;font-variant-numeric:tabular-nums;transform-origin:22px 15px;white-space:nowrap}
+#wire svg .hit{stroke:transparent;stroke-width:16;cursor:pointer;pointer-events:stroke}
+#wire svg .nhit{fill:transparent;cursor:pointer}
+.cel{position:absolute;left:0;top:0;width:50px;height:34px;display:flex;align-items:center;justify-content:center;
+ font-size:18px;font-variant-numeric:tabular-nums;white-space:nowrap;transform-origin:25px 17px}
 input.cel{border:1px solid transparent;border-radius:6px;background:transparent;text-align:center;
  font-family:inherit;padding:0;color:inherit}
 input.cel:hover{border-color:var(--border);cursor:ns-resize}
 input.cel:focus{outline:none;border-color:var(--blue);background:var(--surface)}
 input.cel::-webkit-outer-spin-button,input.cel::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 input.cel[type=number]{-moz-appearance:textfield}
-.op{position:absolute;left:0;top:0;font-size:20px;color:var(--text-muted);transform-origin:0 0}
-.lbl{position:absolute;left:0;top:0;font-size:17px;font-style:italic;color:var(--text-secondary);
- white-space:nowrap;text-align:center;line-height:1.25}
+.slot{border:1.5px dashed var(--border-strong);border-radius:7px;width:44px;height:30px;margin:2px 3px;
+ color:var(--text-muted);cursor:pointer;background:var(--surface);font-weight:500}
+.slot:hover{border-color:var(--grad);color:var(--grad-ink)}
+.slot.full{border-style:solid;border-color:var(--border);color:var(--grad-ink)}
+.slot.full:hover{border-color:var(--grad)}
+.slot.fwd.full{color:var(--text-primary)}
+.slot.fwd:hover{border-color:var(--blue);color:var(--blue-ink)}
+.chip{font-size:16px;font-weight:600;pointer-events:none}
+.tag{position:absolute;left:0;top:0;font-size:14px;color:var(--wig-ink);font-weight:600;white-space:nowrap;pointer-events:none}
+.op{position:absolute;left:0;top:0;font-size:20px;color:var(--text-muted)}
+.lbl{position:absolute;left:0;top:0;font-size:17px;font-style:italic;color:var(--text-secondary);white-space:nowrap}
 .lbl.g{color:var(--grad-ink)}
-.brk{position:absolute;left:0;top:0;pointer-events:none;color:var(--border-strong);transform-origin:0 0}
+.lbl small{font-style:normal;font-size:14px;color:var(--text-muted)}
+.brk{position:absolute;left:0;top:0;pointer-events:none;color:var(--border-strong)}
 .brk:before,.brk:after{content:"";position:absolute;top:0;bottom:0;width:7px;border:2px solid currentColor}
 .brk:before{left:0;border-right:0;border-radius:3px 0 0 3px}
 .brk:after{right:0;border-left:0;border-radius:0 3px 3px 0}
-.phases{display:flex;gap:0;font-size:13.5px;color:var(--text-muted);margin-top:-2px}
-.phases span{flex:1;text-align:center;padding:4px 0;border-top:2px solid var(--border);cursor:pointer;user-select:none}
-.phases span:hover{color:var(--text-primary);background:var(--surface-1)}
-.phases span.on{color:var(--text-primary);border-top-color:var(--grad)}
+.hl{position:absolute;left:0;top:0;border:2.5px solid var(--wig);border-radius:9px;pointer-events:none;
+ background:color-mix(in srgb,var(--wig) 8%,transparent)}
 .dim{font-size:15px;color:var(--text-secondary)}
 select.sm{height:34px;padding:0 6px;font-size:15px}
-#wire svg .hit{stroke:transparent;stroke-width:16;cursor:pointer;pointer-events:stroke}
-#lower{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:12px;align-items:start}
-.card0{background:var(--surface);border:1px solid var(--border);border-radius:12px}
-#zwrap{padding:8px 10px 4px}
-#zwrap .hd,#panel .hd{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--text-muted);margin:0 0 2px}
-#panel{padding:10px 14px 12px;font-size:15.5px;line-height:1.6;color:var(--text-secondary)}
-#panel h3{font-size:17px;margin:2px 0 6px;color:var(--text-primary);font-weight:600}
-#panel p{margin:6px 0}
-#panel b{color:var(--text-primary);font-weight:500}
 .gr{color:var(--grad-ink);font-weight:500}
-.eq{font-size:16.5px;color:var(--text-primary);margin:4px 0 4px 14px;font-variant-numeric:tabular-nums}
-.cap .eq{font-size:15.5px}
-#zoom{width:100%;height:auto}
-#zoom .zn{font-size:19px;font-style:italic;fill:var(--text-primary)}
-#zoom .zv{font-size:16px;fill:var(--text-primary);font-variant-numeric:tabular-nums}
-#zoom .zg{font-size:16px;fill:var(--grad-ink);font-weight:500;font-variant-numeric:tabular-nums}
-#zoom .zs{font-size:13.5px;fill:var(--text-muted)}
-@media (max-width:980px){#lower{grid-template-columns:1fr}}
-@media (max-width:860px){#stagewrap{flex-direction:column;height:auto}#alg{flex:0 0 320px}#wire{flex:0 0 auto;aspect-ratio:4/3}}
+.wg{color:var(--wig-ink);font-weight:500}
+.rd{min-height:5.2em}
+.cap a{color:var(--blue-ink)}
+.phases{display:flex;gap:0;font-size:13.5px;color:var(--text-muted);margin-top:-2px}
+.phases span{text-align:center;padding:4px 0;border-top:2px solid var(--border);cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden}
+.phases span:hover{color:var(--text-primary);background:var(--surface-1)}
+.phases span.on{color:var(--text-primary);border-top-color:var(--grad)}
+@media (max-width:860px){#stagewrap{flex-direction:column;height:auto}#alg{flex:0 0 360px}#wire{flex:0 0 auto;aspect-ratio:4/3}}
 </style>
 </head>
 <body>
 <div class="nav"><a href="./">&larr; Review topics</a> &middot; <a href="../../">CS7150 class demos</a></div>
-<h1>Backprop through y = Ax<span>: the same wires, run the other way</span></h1>
-<p class="quiz"><b>Forward, x deals its entries to the columns of A. Backward, the gradient deals its entries to the rows.</b>
- Edit any number, change the shape, and press play. Click a wire to see the product rule on it.</p>
+<h1>Backprop through y = Ax<span>: one dot product at a time</span></h1>
+<p class="quiz"><b>Forward, each output is a row of A dotted with x. Backward, each input’s gradient is a column of A dotted with g.</b>
+ Press play, drag the slider, or click any entry to see where it comes from. Every number above the line is editable.</p>
 
 <div id="stagewrap">
   <div id="alg"><div id="algin"></div></div>
   <div id="wire">
     <svg viewBox="0 0 560 420" role="img" preserveAspectRatio="xMidYMid meet" id="wsvg">
     <title>y = Ax drawn as wires</title>
-    <desc>Each input x_j is joined to each output y_i by a wire of weight A_ij. Forward, values flow from x to y and are summed at each y. Backward, the gradient g_i at each y_i flows back along the same wires, is multiplied by the same weights, and is summed at each x_j.</desc>
-    <defs>
-     <marker id="ar" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></marker>
-    </defs>
+    <desc>Each input x_j is joined to each output y_i by a wire of weight A_ij, and each y_i feeds the loss L with sensitivity g_i. The wires light up as each output is computed going forward, and as each gradient entry is computed coming back.</desc>
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5.5" markerHeight="5.5" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
     <g id="stage"></g>
     </svg>
   </div>
@@ -79,198 +78,211 @@ select.sm{height:34px;padding:0 6px;font-size:15px}
 
 <div class="row">
 <button class="main" id="play" onclick="toggle()">Play</button>
+<button id="nxt" onclick="nextStep()">Next &rarr;</button>
 <span class="dim">shape</span>
 <select class="sm" id="rows" onchange="setdim()"><option>1</option><option selected>2</option><option>3</option></select>
 <span class="dim">&#215;</span>
-<select class="sm" id="cols" onchange="setdim()"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select>
+<select class="sm" id="cols" onchange="setdim()"><option>1</option><option>2</option><option selected>3</option><option>4</option></select>
 <button onclick="quiz()">Quiz values</button>
 <button onclick="rnd()">Random</button>
+<label class="cb"><input type="checkbox" id="slow"> slow</label>
 </div>
 <div class="row">
-<span class="klab">build</span>
-<input type="range" id="ts" min="0" max="800" step="1" value="0" oninput="setT(+this.value/100,1)">
-<button id="nxt" onclick="nextStep()">Next step &rarr;</button>
+<input type="range" id="ts" min="0" max="100" step="1" value="0" oninput="setT(+this.value/100)">
 </div>
-<div class="phases" id="ph">
- <span onclick="gotoStep(0)">forward</span><span onclick="gotoStep(1)">gradient arrives</span><span onclick="gotoStep(2)">transpose</span><span onclick="gotoStep(3)">split</span><span onclick="gotoStep(4)">deal</span><span onclick="gotoStep(5)">scale</span><span onclick="gotoStep(6)">add</span><span onclick="gotoStep(7)">weights</span></div>
+<div class="phases" id="ph"></div>
 <div class="rd" id="readout"></div>
-
-<div id="lower">
- <div class="card0" id="zwrap"><div class="hd" id="zhd">One wire, zoomed in</div>
-  <svg id="zoom" viewBox="0 0 600 270" role="img" aria-label="one wire of y = Ax, zoomed in"></svg></div>
- <div class="card0" id="panel"></div>
-</div>
 <div class="cap" id="caption"></div>
 
 <script>
 var R=2,C=3,A=[[1,2,-1],[0,1,0]],X=[3,4,5],G=[2,-1];
-// Rows of A are the actors of the backward pass, so colour follows the row index i
-// (the index A shares with y and g).  Orange is kept for gradients alone.
-var COL=['#378ADD','#7F77DD','#D4537E'];
-var INK=['var(--blue-ink)','var(--violet-ink)','var(--pink-ink)'];
+var JOBS=[],t=0,STOP=0,playing=false,raf=null,last=0;
+var CW=50,CH=34,els={},NP=5;
 var SUB=['₁','₂','₃','₄','₅'];
-var CW=44,CH=30,SG=40,GX=40,NB=8;
-var t=0,playing=false,raf=null,last=0,STOP=NB;
-var els={},SEL=[0,0];
 
+function $(id){return document.getElementById(id);}
 function cl(v){return Math.max(0,Math.min(1,v));}
 function ease(f){return f<0.5?2*f*f:1-Math.pow(-2*f+2,2)/2;}
-function smooth(a,b,x){var u=cl((x-a)/(b-a));return u*u*(3-2*u);}
+function smooth(a,b,x){var w=cl((x-a)/(b-a));return w*w*(3-2*w);}
 function lerp(a,b,f){return a+(b-a)*f;}
-function E(k){return ease(cl(t-(k-1)));}
+function L2(p,q,f){return [lerp(p[0],q[0],f),lerp(p[1],q[1],f)];}
 function fmt(v){var a=Math.abs(v),b=Math.abs(a-Math.round(a))<1e-9?String(Math.round(a)):a.toFixed(1);
  return (v<0?'−':'')+b;}
 function par(v){return v<0?'('+fmt(v)+')':fmt(v);}
-function Y(){var y=[];for(var i=0;i<R;i++){var s=0;for(var j=0;j<C;j++)s+=A[i][j]*X[j];y.push(s);}return y;}
-function GXv(){var r=[];for(var j=0;j<C;j++){var s=0;for(var i=0;i<R;i++)s+=G[i]*A[i][j];r.push(s);}return r;}
-function rowv(i){return A[i].slice();}
+function eps(v){return v===0?'0':(v>0?'+':'')+fmt(v)+'ε';}
+function yv(i){var s=0;for(var j=0;j<C;j++)s+=A[i][j]*X[j];return s;}
+function dxv(j){var s=0;for(var i=0;i<R;i++)s+=G[i]*A[i][j];return s;}
+
+/* ---------- the sequence ---------- */
+// The whole computation is a list of scalar jobs, each one dot product: every y_i going
+// forward, the arrival of g, then every ∂L/∂x_j and every ∂L/∂A_ij coming back.  The slider
+// is a position in that list, so what is filled in is exactly what has been computed.
+function makeJobs(){
+ var i,j;JOBS=[];
+ for(i=0;i<R;i++)JOBS.push({k:'y',i:i});
+ JOBS.push({k:'g'});
+ for(j=0;j<C;j++)JOBS.push({k:'x',j:j});
+ for(i=0;i<R;i++)for(j=0;j<C;j++)JOBS.push({k:'a',i:i,j:j});
+ $('ts').max=JOBS.length*100;
+ var segs=[['forward: y = Ax',R,0],['g arrives',1,R],['∂L/∂x',C,R+1],['∂L/∂A',R*C,R+1+C]],h='';
+ segs.forEach(function(s){h+='<span style="flex:'+s[1]+'" data-s="'+s[2]+'" onclick="jump('+s[2]+')">'+s[0]+'</span>';});
+ $('ph').innerHTML=h;
+}
+function idx(k,i,j){for(var n=0;n<JOBS.length;n++){var J=JOBS[n];if(J.k===k&&(J.i===undefined||J.i===i)&&(J.j===undefined||J.j===j))return n;}return -1;}
+function cur(){var n=Math.min(JOBS.length-1,Math.floor(t));return {n:n,J:t<JOBS.length?JOBS[n]:null,u:t-n};}
+// a job's answer shows once its sum has landed
+var FILL=0.86;
+function done(n){return t>=n+FILL;}
 
 /* ---------- the algebra panel ---------- */
-// Three layouts share one set of cells.  Phase I is the forward product A x = y with
-// g beside it.  Phase II is the matvec animation of the forward demo, run on Aᵀ and g.
-// Phase III is the outer product g xᵀ.  Cells that live in two phases are carried
-// between them by interpolating their absolute positions.
-function build(){
- var h='',i,j;
- ['bA','bX','bY','bG','bR','bGB','bXB','bQ'].forEach(function(k){h+='<div class="brk" id="'+k+'"></div>';});
- for(i=0;i<R;i++)h+='<div class="brk" id="bC'+i+'" style="color:'+COL[i]+'"></div>';
- h+='<div class="lbl" id="lA">A</div><div class="lbl" id="lAT">Aᵀ</div><div class="lbl" id="lX">x</div>'+
-    '<div class="lbl" id="lY">y</div><div class="lbl g" id="lG">g = ∂L/∂y</div><div class="lbl g" id="lR">Aᵀg</div>'+
-    '<div class="lbl g" id="lR3">∂L/∂x<br>= Aᵀg</div><div class="lbl" id="lGB">g</div><div class="lbl" id="lXB">xᵀ</div>'+
-    '<div class="lbl g" id="lQ">∂L/∂A<br>= g xᵀ</div>';
- for(i=0;i<R;i++)for(j=0;j<C;j++)
-  h+='<input class="cel" type="number" step="1" id="a'+i+'_'+j+'" style="color:'+INK[i]+
-     '" aria-label="A row '+(i+1)+' column '+(j+1)+'">';
- for(j=0;j<C;j++)h+='<input class="cel" type="number" step="1" id="x'+j+'" aria-label="x entry '+(j+1)+'">';
- for(i=0;i<R;i++)h+='<div class="cel" id="y'+i+'"></div>';
- for(i=0;i<R;i++)h+='<input class="cel" type="number" step="1" id="g'+i+'" style="color:'+INK[i]+
-     ';font-weight:500" aria-label="g entry '+(i+1)+'">';
- for(j=0;j<C;j++)h+='<div class="cel" id="r'+j+'" style="color:var(--grad-ink);font-weight:500"></div>';
- for(i=0;i<R;i++)h+='<div class="cel" id="gb'+i+'" style="color:'+INK[i]+';font-weight:500"></div>';
- for(j=0;j<C;j++)h+='<div class="cel" id="xb'+j+'"></div>';
- for(i=0;i<R;i++)for(j=0;j<C;j++)h+='<div class="cel" id="q'+i+'_'+j+'" style="color:var(--grad-ink);font-weight:500"></div>';
- for(i=0;i<R-1;i++)h+='<div class="op" id="p'+i+'">+</div>';
- h+='<div class="op" id="eq">=</div>';
- document.getElementById('algin').innerHTML=h;
- els={};
- document.querySelectorAll('#algin [id]').forEach(function(e){els[e.id]=e;});
- for(i=0;i<R;i++)for(j=0;j<C;j++)hook(els['a'+i+'_'+j],function(i,j){return function(v){A[i][j]=v;};}(i,j),0);
- for(j=0;j<C;j++)hook(els['x'+j],function(j){return function(v){X[j]=v;};}(j),0);
- for(i=0;i<R;i++)hook(els['g'+i],function(i){return function(v){G[i]=v;};}(i),2);
+// Above the line, A x = y and g = ∂L/∂y, with y and g empty until computed.  Below the line,
+// the gradients: ∂L/∂x as a row with entry j under column j, and ∂L/∂A with entry (i,j) under A_ij.
+function geom(){
+ var xoff=(R-C)*CH/2,top=Math.min(0,xoff),bot=Math.max(R*CH,xoff+C*CH);
+ var XX=C*CW+26,YX=XX+CW+40,GX=YX+CW+70;
+ var yDX=bot+46,yGA=yDX+CH+48;
+ return {xoff:xoff,top:top,bot:bot,XX:XX,YX:YX,GX:GX,yDX:yDX,yGA:yGA,W:GX+CW+40,Htop:top-46,Hbot:yGA+R*CH+16};
 }
-// Typing works, and so does dragging a cell up and down.  Either way the timeline
-// rewinds to where that number was set: x and A at the start, g once it has arrived.
-function hook(el,set,t0){
- function put(v){v=Math.max(-9,Math.min(9,Math.round(v)));set(v);el.value=v;
-  t=t0;pause();draw();}
+function build(){
+ var h='<svg id="ov" width="10" height="10"></svg>',i,j,k;
+ ['bA','bX','bY','bG','bDX','bGA'].forEach(function(k){h+='<div class="brk" id="'+k+'"></div>';});
+ h+='<div class="hl" id="hl"></div>';
+ h+='<div class="lbl" id="lA">A</div><div class="lbl" id="lX">x</div><div class="lbl" id="lY">y</div>'+
+    '<div class="lbl g" id="lG">g = ∂L/∂y</div><div class="lbl" id="lL">→ L</div>'+
+    '<div class="lbl g" id="lDX"></div><div class="lbl g" id="lGA"></div><div class="op" id="eq">=</div>'+
+    '<div id="line" style="position:absolute;left:0;top:0;height:0;border-top:1px solid var(--border)"></div>';
+ for(i=0;i<R;i++)for(j=0;j<C;j++)h+='<input class="cel" type="number" step="1" id="a'+i+'_'+j+'" aria-label="A row '+(i+1)+' column '+(j+1)+'">';
+ for(j=0;j<C;j++)h+='<input class="cel" type="number" step="1" id="x'+j+'" aria-label="x entry '+(j+1)+'">';
+ for(i=0;i<R;i++)h+='<div class="cel slot fwd" id="sy'+i+'" title="y'+SUB[i]+'" onclick="ask(idx(\'y\','+i+'))"></div>';
+ for(i=0;i<R;i++)h+='<input class="cel" type="number" step="1" id="g'+i+'" style="color:var(--grad-ink);font-weight:500" aria-label="g entry '+(i+1)+'">';
+ for(j=0;j<C;j++)h+='<div class="cel slot" id="sx'+j+'" title="∂L/∂x'+SUB[j]+'" onclick="ask(idx(\'x\',undefined,'+j+'))"></div>';
+ for(i=0;i<R;i++)for(j=0;j<C;j++)h+='<div class="cel slot" id="sa'+i+'_'+j+'" title="∂L/∂A'+SUB[i]+SUB[j]+'" onclick="ask(idx(\'a\','+i+','+j+'))"></div>';
+ h+='<div class="cel chip" id="nx" style="color:var(--wig-ink)">ε</div><div class="cel" id="gin"></div>';
+ NP=Math.max(R,C)+1;
+ for(k=0;k<NP;k++)h+='<div class="cel chip" id="m'+k+'"></div><div class="cel chip" id="p'+k+'"></div>';
+ for(i=0;i<R;i++)h+='<div class="tag" id="dy'+i+'"></div>';
+ $('algin').innerHTML=h;
+ els={};document.querySelectorAll('#algin [id]').forEach(function(e){els[e.id]=e;});
+ for(i=0;i<R;i++)for(j=0;j<C;j++)hook(els['a'+i+'_'+j],function(i,j){return function(v){A[i][j]=v;};}(i,j));
+ for(j=0;j<C;j++)hook(els['x'+j],function(j){return function(v){X[j]=v;};}(j));
+ for(i=0;i<R;i++)hook(els['g'+i],function(i){return function(v){G[i]=v;};}(i));
+}
+// Typing works, and so does dragging a cell up and down.  Computed entries are formulas,
+// so they follow the new numbers at once.
+function hook(el,set){
+ function put(v){v=Math.max(-9,Math.min(9,Math.round(v)));set(v);el.value=v;draw();}
  el.addEventListener('input',function(){var v=parseFloat(el.value);if(!isNaN(v))put(v);});
  el.addEventListener('pointerdown',function(e){
   var y0=e.clientY,v0=+el.value,moved=false;
   el.setPointerCapture(e.pointerId);
-  el.onpointermove=function(ev){var d=Math.round((y0-ev.clientY)/16);
-   if(d)moved=true;if(moved)put(v0+d);};
+  el.onpointermove=function(ev){var d=Math.round((y0-ev.clientY)/16);if(d)moved=true;if(moved)put(v0+d);};
   el.onpointerup=function(ev){el.onpointermove=null;el.onpointerup=null;
    try{el.releasePointerCapture(ev.pointerId);}catch(_){}};});
 }
-function place(el,x,y,op,sc,cen){
- if(!el)return;
- el.style.transform='translate('+x.toFixed(1)+'px,'+y.toFixed(1)+'px)'+(cen?' translateX(-50%)':'')+
-  (sc!==1?' scale('+sc.toFixed(3)+')':'');
+function place(el,p,op,sc){
+ el.style.transform='translate('+p[0].toFixed(1)+'px,'+p[1].toFixed(1)+'px)'+(sc&&sc!==1?' scale('+sc.toFixed(3)+')':'');
  el.style.opacity=op.toFixed(3);
- el.style.pointerEvents=op>0.5?'auto':'none';
 }
 function brk(el,x,y,w,h,op){
- if(!el)return;
  el.style.width=(w+14)+'px';el.style.height=(h+10)+'px';
- el.style.transform='translate('+(x-7).toFixed(1)+'px,'+(y-5).toFixed(1)+'px)';
- el.style.opacity=op.toFixed(3);
+ el.style.transform='translate('+(x-7)+'px,'+(y-5)+'px)';el.style.opacity=op;
 }
 function setv(el,v){if(document.activeElement!==el){if(el.tagName==='INPUT')el.value=v;else el.textContent=v;}}
-function L2(p,q,f){return [lerp(p[0],q[0],f),lerp(p[1],q[1],f)];}
+function slot(el,p,n,val){
+ var full=done(n),me=cur().n===n&&t<JOBS.length,pop=me?smooth(FILL,FILL+0.06,cur().u):1;
+ el.textContent=full?fmt(val):'?';el.classList.toggle('full',full);
+ place(el,p,1,full&&me?lerp(1.35,1,pop):1);
+}
+
+// Each job is drawn as a set of travellers: copies of numbers that fly to where they are
+// multiplied, become products, and fly on to the slot where they add up.
+function travellers(J,Q){
+ var T=[],i,j;
+ if(!J)return T;
+ if(J.k==='y'){i=J.i;
+  for(j=0;j<C;j++){T.push({m:1,txt:fmt(X[j]),c:'var(--text-primary)',a:[Q.XX,Q.xoff+j*CH],b:[j*CW,i*CH],mv:[0.1,0.3],vis:[0.08,0.36]});
+   T.push({m:0,txt:fmt(A[i][j]*X[j]),c:'var(--blue-ink)',a:[j*CW,i*CH],b:[Q.YX,i*CH],mv:[0.5,0.82],vis:[0.34,0.88]});}}
+ else if(J.k==='x'){j=J.j;
+  for(i=0;i<R;i++){T.push({m:1,txt:fmt(G[i]),c:'var(--grad-ink)',a:[Q.GX,i*CH],b:[j*CW,i*CH],mv:[0.46,0.62],vis:[0.45,0.64]});
+   T.push({m:0,txt:fmt(G[i]*A[i][j]),c:'var(--grad-ink)',a:[j*CW,i*CH],b:[j*CW,Q.yDX],mv:[0.68,0.84],vis:[0.62,0.88]});}}
+ else if(J.k==='a'){i=J.i;j=J.j;
+  T.push({m:1,txt:fmt(X[j]),c:'var(--text-primary)',a:[Q.XX,Q.xoff+j*CH],b:[j*CW,i*CH],mv:[0.1,0.24],vis:[0.08,0.64]});
+  T.push({m:1,txt:fmt(G[i]),c:'var(--grad-ink)',a:[Q.GX,i*CH],b:[j*CW+CW*0.5,i*CH],mv:[0.46,0.6],vis:[0.45,0.64]});
+  T.push({m:0,txt:fmt(G[i]*X[j]),c:'var(--grad-ink)',a:[j*CW,i*CH],b:[j*CW,Q.yGA+i*CH],mv:[0.68,0.84],vis:[0.62,0.88]});}
+ return T;
+}
 function layoutAlg(){
- var box=document.getElementById('alg'),W=box.clientWidth,H=box.clientHeight;
- var e1=E(1),e2=E(2),e3=E(3),e4=E(4),r5=cl(t-4),e6=E(6),e7=E(7),e8=E(8),i,j,k;
- var y=Y(),gx=GXv();
- // phase I: A x = y, and g beside y
- var G1=34,XA=C*CW+G1,xo1=(R*CH-C*CH)/2,XY=XA+CW+G1,XG=XY+CW+G1,W1=XG+CW;
- var o1=[Math.max(6,(W-W1)/2),Math.max(-xo1+12,(H-R*CH)/2-8)];
- // phase II: the forward demo's beats on M = Aᵀ (C rows, R columns) and g
- var nr=C,nc=R,gap=SG*e4,cw=CW+gap,MX=((nc-1)*cw)/2,AWs=(nc-1)*cw+CW,BH=nr*CH,fade=1-smooth(0.55,1,e7);
- var sa=smooth(0,0.34,r5),sb=smooth(0.34,0.68,r5),sc=smooth(0.68,1,r5);
- function cx(l){return lerp(l*cw,MX,e7);}
- var XR=AWs+GX,goff=(BH-nc*CH)/2,rc=[XR+CW/2,goff+nc*CH/2],st=[AWs/2,-(nc*CH)/2-CH*0.6],
-     cc=[lerp(rc[0],st[0],sb),lerp(rc[1],st[1],sa)],th=-Math.PI/2*sb,sn=Math.sin(th),cs=Math.cos(th);
- var right=lerp(XR+CW,cx(nc-1)+CW,sa);
- var o2=[Math.max(6,(W-right)/2),Math.max(nc*CH+CH*1.8,(H-BH)/2+6)];
- // phase III: g down the side, xᵀ across the top, their products in the grid; Aᵀg moves aside
- var GQ=CW+26,XRr=GQ+C*CW+58,ro3=(R*CH-C*CH)/2,W3=XRr+CW;
- var o3=[Math.max(6,(W-W3)/2),Math.max(CH*2.4,-ro3+12,(H-Math.max(R,C)*CH)/2)];
- var O12=L2(o1,o2,e3);
-
- // A flips over its diagonal into Aᵀ: in grid units the component along the diagonal
- // stays and the one across it turns through a half turn, so mid-flip the matrix is edge-on.
- var cf=Math.cos(Math.PI*e3),fo=0.25+0.75*Math.abs(cf),sw=e6<0.5?1-2*e6:2*e6-1;
- for(i=0;i<R;i++)for(j=0;j<C;j++){
-  var a=(i+j)/2,b=(j-i)/2,uu=a+b*cf,vv=a-b*cf,el=els['a'+i+'_'+j];
-  setv(el,e6<0.5?A[i][j]:A[i][j]*G[i]);
-  place(el,O12[0]+(uu-i)*CW+cx(i),O12[1]+vv*CH,fade*fo*(e6>0&&e6<1?sw:1),1);}
- var xo=1-smooth(0,0.5,e3),yo=smooth(0.25,0.9,e1)*xo;
- for(j=0;j<C;j++){setv(els['x'+j],X[j]);place(els['x'+j],o1[0]+XA,o1[1]+xo1+j*CH,xo,1);}
- for(i=0;i<R;i++){setv(els['y'+i],fmt(y[i]));place(els['y'+i],o1[0]+XY,o1[1]+i*CH,yo,1);}
- place(els.eq,o1[0]+XA+CW+G1/2-6,o1[1]+R*CH/2-14,yo,1);
- // g: arrives beside y, slides to sit beside Aᵀ, then rises, turns and deals as x did
- var gin=smooth(0,0.6,e2);
- for(i=0;i<R;i++){
-  var yy=(i-(nc-1)/2)*CH,rx=cc[0]-yy*sn-CW/2,ry=cc[1]+yy*cs-CH/2,
-      px=lerp(rx,cx(i),sc),py=lerp(ry,-CH*1.6,sc),
-      P1=[o1[0]+XG,o1[1]+i*CH],P2=[o2[0]+px,o2[1]+py+e6*CH*1.1],P=L2(P1,P2,e3);
+ var box=$('alg'),Q=geom(),i,j,k,c=cur(),J=c.J,u=c.u;
+ var Wc=Q.W,Hc=Q.Hbot-Q.Htop,s=Math.min(1.3,box.clientWidth/Wc,box.clientHeight/Hc);
+ $('algin').style.transform='translate('+((box.clientWidth-Wc*s)/2).toFixed(1)+'px,'+((box.clientHeight-Hc*s)/2-Q.Htop*s).toFixed(1)+'px) scale('+s.toFixed(4)+')';
+ var lit=J?smooth(0,0.08,u)*(1-smooth(0.94,1,u)):0;
+ // A: the cells taking part step back while a product sits on them
+ for(i=0;i<R;i++)for(j=0;j<C;j++){var el=els['a'+i+'_'+j],part=J&&((J.k==='y'&&i===J.i)||(J.k==='x'&&j===J.j)||(J.k==='a'&&i===J.i&&j===J.j));
+  setv(el,A[i][j]);
+  var on=part&&lit>0.5,col=J&&J.k==='y'?'var(--blue-ink)':'var(--wig-ink)';
+  el.style.color=on?col:'';el.style.fontWeight=on?'600':'';
+  var dim=part?1-0.85*smooth(J.k==='a'?0.2:0.32,J.k==='a'?0.24:0.36,u)*(1-smooth(0.86,0.9,u)):1;
+  place(el,[j*CW,i*CH],dim);}
+ for(j=0;j<C;j++){var el=els['x'+j],on=J&&lit>0.5&&(J.k==='y'||((J.k==='x'||J.k==='a')&&J.j===j));
+  setv(el,X[j]);el.style.color=on?(J.k==='y'?'var(--blue-ink)':'var(--wig-ink)'):'';el.style.fontWeight=on?'600':'';
+  place(el,[Q.XX,Q.xoff+j*CH],1);}
+ var nG=idx('g');
+ for(i=0;i<R;i++){slot(els['sy'+i],[Q.YX,i*CH],idx('y',i),yv(i));
   setv(els['g'+i],G[i]);
-  place(els['g'+i],P[0],P[1],gin*(1-e6),lerp(1,0.55,e6));}
- for(k=0;k<R-1;k++)place(els['p'+k],o2[0]+cx(k)+CW+gap/2-6,o2[1]+BH/2-14,e4*fade*(gap>18?1:0),1);
- // Aᵀg, built in phase II and carried aside in phase III
- var rin=smooth(0.3,0.9,e7);
- for(j=0;j<C;j++){var P=L2([o2[0]+MX,o2[1]+j*CH],[o3[0]+XRr,o3[1]+ro3+j*CH],e8);
-  setv(els['r'+j],fmt(gx[j]*e7));place(els['r'+j],P[0],P[1],rin,1);}
- // the outer product: g and xᵀ come in, then the grid fills one cell at a time
- var gbo=smooth(0.1,0.45,e8),xbo=smooth(0.2,0.55,e8);
- for(i=0;i<R;i++){setv(els['gb'+i],fmt(G[i]));place(els['gb'+i],o3[0],o3[1]+i*CH,gbo,1);}
- for(j=0;j<C;j++){setv(els['xb'+j],fmt(X[j]));
-  place(els['xb'+j],o3[0]+GQ+j*CW,o3[1]-CH*1.5-(1-xbo)*CH*0.8,xbo,1);}
- for(i=0;i<R;i++)for(j=0;j<C;j++){var s0=0.45+0.4*(i*C+j)/(R*C);
-  setv(els['q'+i+'_'+j],fmt(G[i]*X[j]));
-  var qo=smooth(s0,s0+0.15,e8);place(els['q'+i+'_'+j],o3[0]+GQ+j*CW,o3[1]+i*CH,qo,lerp(1.5,1,qo));}
+  place(els['g'+i],[Q.GX,i*CH],t>=nG?lerp(0,1,smooth(nG+0.15,nG+0.7,t)):0);}
+ // g's slots stay visible as dashes until it arrives, so the space is there to be filled
+ els.gin.innerHTML='';
+ place(els.eq,[Q.XX+CW+12,R*CH/2-14],1);
+ brk(els.bA,0,0,C*CW,R*CH,1);brk(els.bX,Q.XX,Q.xoff,CW,C*CH,1);brk(els.bY,Q.YX,0,CW,R*CH,1);
+ brk(els.bG,Q.GX,0,CW,R*CH,t>=nG?0.3+0.7*smooth(nG,nG+0.5,t):0.3);
+ var hy=Q.top-36;
+ place(els.lA,[C*CW/2-6,hy],1);place(els.lX,[Q.XX+CW/2-5,hy],1);place(els.lY,[Q.YX+CW/2-5,hy],1);
+ place(els.lG,[Q.GX-12,hy],1);place(els.lL,[Q.GX+CW+12,R*CH/2-12],1);
+ var ly=(Q.bot+Q.yDX)/2-4;els.line.style.width=Q.W+'px';place(els.line,[-10,ly],1);
+ for(j=0;j<C;j++)slot(els['sx'+j],[j*CW,Q.yDX],idx('x',undefined,j),dxv(j));
+ for(i=0;i<R;i++)for(j=0;j<C;j++)slot(els['sa'+i+'_'+j],[j*CW,Q.yGA+i*CH],idx('a',i,j),G[i]*X[j]);
+ brk(els.bDX,0,Q.yDX,C*CW,CH,1);brk(els.bGA,0,Q.yGA,C*CW,R*CH,1);
+ var allx=done(idx('x',undefined,C-1)),alla=done(JOBS.length-1);
+ els.lDX.innerHTML='∂L/∂x'+(allx?' = gᵀA <small>(Aᵀg, laid on its side)</small>':' <small>entry j under column j</small>');
+ els.lGA.innerHTML='∂L/∂A'+(alla?' = g xᵀ':' <small>entry (i, j) under A<sub>ij</sub></small>');
+ place(els.lDX,[C*CW+18,Q.yDX+6],1);place(els.lGA,[C*CW+18,Q.yGA+R*CH/2-11],1);
 
- // brackets
- brk(els.bA,O12[0],O12[1],lerp(C*CW,R*CW,e3),lerp(R*CH,C*CH,e3),(1-smooth(0,0.35,e4))*(0.35+0.65*Math.abs(cf)));
- brk(els.bX,o1[0]+XA,o1[1]+xo1,CW,C*CH,xo);
- brk(els.bY,o1[0]+XY,o1[1],CW,R*CH,yo);
- for(k=0;k<R;k++)brk(els['bC'+k],o2[0]+cx(k),o2[1],CW,BH,smooth(0.25,0.8,e4)*fade);
- var Pr=L2([o2[0]+MX,o2[1]],[o3[0]+XRr,o3[1]+ro3],e8);
- brk(els.bR,Pr[0],Pr[1],CW,C*CH,rin);
- brk(els.bGB,o3[0],o3[1],CW,R*CH,gbo);
- brk(els.bXB,o3[0]+GQ,o3[1]-CH*1.5-(1-xbo)*CH*0.8,C*CW,CH,xbo);
- brk(els.bQ,o3[0]+GQ,o3[1],C*CW,R*CH,smooth(0.45,0.9,e8));
- // g's bracket rides with the block and turns with it, as x's did going forward
- var bxw=CW+14,bxh=R*CH+10,gc=L2([o1[0]+XG+CW/2,o1[1]+R*CH/2],[o2[0]+cc[0],o2[1]+cc[1]],e3);
- els.bG.style.width=bxw+'px';els.bG.style.height=bxh+'px';els.bG.style.transformOrigin='50% 50%';
- els.bG.style.transform='translate('+(gc[0]-bxw/2).toFixed(1)+'px,'+(gc[1]-bxh/2).toFixed(1)+'px) rotate('+(th*180/Math.PI).toFixed(1)+'deg)';
- els.bG.style.opacity=(gin*(1-smooth(0.3,1,sb))).toFixed(3);
- // names, centred under their brackets
- place(els.lA,o1[0]+C*CW/2,o1[1]+R*CH+12,1-smooth(0,0.4,e3),1,1);
- place(els.lAT,o2[0]+R*CW/2,o2[1]+C*CH+12,smooth(0.6,1,e3)*(1-smooth(0,0.35,e4)),1,1);
- place(els.lX,o1[0]+XA+CW/2,o1[1]+xo1+C*CH+12,xo,1,1);
- place(els.lY,o1[0]+XY+CW/2,o1[1]+R*CH+12,yo,1,1);
- var lg=L2([o1[0]+XG+CW/2,o1[1]+R*CH+12],[o2[0]+cc[0],o2[1]+cc[1]+nc*CH/2+12],e3);
- place(els.lG,lg[0],lg[1],gin*(1-smooth(0,0.4,sa)),1,1);
- place(els.lR,o2[0]+MX+CW/2,o2[1]+C*CH+12,rin*(1-smooth(0,0.3,e8)),1,1);
- place(els.lR3,o3[0]+XRr+CW/2,o3[1]+ro3+C*CH+12,smooth(0.6,1,e8),1,1);
- place(els.lGB,o3[0]+CW/2,o3[1]+R*CH+12,gbo,1,1);
- place(els.lXB,o3[0]+GQ-24,o3[1]-CH*1.5+3,xbo,1,1);
- place(els.lQ,o3[0]+GQ+C*CW/2,o3[1]+R*CH+12,smooth(0.85,1,e8),1,1);
+ // the box around what this job reads
+ var hl=els.hl;
+ if(J&&J.k!=='g'){var r=J.k==='y'?[-3,J.i*CH-3,C*CW+6,CH+6]:J.k==='x'?[J.j*CW-3,-4,CW+6,R*CH+8]:[J.j*CW-3,J.i*CH-3,CW+6,CH+6];
+  hl.style.width=r[2]+'px';hl.style.height=r[3]+'px';
+  hl.style.borderColor=J.k==='y'?'var(--blue)':'';hl.style.background=J.k==='y'?'transparent':'';
+  place(hl,[r[0],r[1]],lit);}
+ else if(J&&J.k==='g'){hl.style.width=(CW+6)+'px';hl.style.height=(R*CH+8)+'px';hl.style.borderColor='var(--grad)';hl.style.background='transparent';
+  place(hl,[Q.GX-3,-4],lit);}
+ else place(hl,[0,0],0);
+ // travellers
+ var T=travellers(J,Q),nm=0,np=0;
+ for(k=0;k<NP;k++){els['m'+k].style.opacity=0;els['p'+k].style.opacity=0;}
+ T.forEach(function(q){var el=q.m?els['m'+(nm++)]:els['p'+(np++)];
+  el.textContent=q.txt;el.style.color=q.c;
+  place(el,L2(q.a,q.b,ease(smooth(q.mv[0],q.mv[1],u))),smooth(q.vis[0],q.vis[0]+0.03,u)*(1-smooth(q.vis[1]-0.03,q.vis[1],u)));});
+ // backward jobs begin with the nudge: ε on the scalar, the change it makes in y, and the rows
+ // that carry it to y and on to L
+ var bw=J&&(J.k==='x'||J.k==='a'),ov='';
+ if(bw){var j0=J.j;
+  if(J.k==='x')place(els.nx,L2([Q.XX+CW*0.6,Q.xoff+j0*CH-CH*0.55],[j0*CW,-CH*1.05],ease(smooth(0.1,0.22,u))),lit*(1-smooth(0.3,0.4,u)));
+  else place(els.nx,[j0*CW+CW*0.55,J.i*CH-CH*0.6],lit*(1-smooth(0.6,0.66,u)));
+  var fw=smooth(0.22,0.34,u),o2=smooth(0.34,0.44,u),lo=smooth(0.2,0.24,u)*(1-smooth(0.68,0.74,u));
+  for(i=0;i<R;i++){var on=J.k==='x'||i===J.i,d=J.k==='x'?A[i][j0]:(i===J.i?X[j0]:0);
+   els['dy'+i].textContent='Δy'+SUB[i]+' '+eps(d);
+   place(els['dy'+i],[Q.YX+CW+6,i*CH+8],smooth(0.3,0.36,u)*(1-smooth(0.94,1,u))*(on?1:0.55));
+   if(!on)continue;
+   var y0=i*CH+CH/2,x0=j0*CW+CW-4,x1=Q.YX+4;
+   ov+='<line x1="'+x0+'" y1="'+y0+'" x2="'+lerp(x0,x1,fw).toFixed(1)+'" y2="'+y0+'" stroke="var(--wig)" stroke-width="3" opacity="'+(0.45*lo).toFixed(2)+'" stroke-linecap="round"/>';
+   if(fw>0&&fw<1)ov+='<circle cx="'+lerp(x0,x1,fw).toFixed(1)+'" cy="'+y0+'" r="5" fill="var(--wig)"/>';
+   if(o2>0&&o2<1)ov+='<circle cx="'+lerp(x1+CW,Q.GX+CW+30,o2).toFixed(1)+'" cy="'+y0+'" r="5" fill="var(--wig)"/>';}}
+ else{els.nx.style.opacity=0;for(i=0;i<R;i++)els['dy'+i].style.opacity=0;}
+ $('ov').innerHTML=ov;
 }
 
 /* ---------- the wires ---------- */
-var VW=560,VH=420,NX=150,NY=360,NL=500,NR=19;
+var VW=560,VH=420,NX=130,NY=340,NL=490,NR=19;
 function nyp(k,n){var sp=n>1?Math.min(110,(VH-130)/(n-1)):0;return VH/2+14+(k-(n-1)/2)*sp;}
 function TXT(x,y,s,c,anc,cls,extra){return '<text class="'+(cls||'ts')+' gl" x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+
  '" style="fill:'+c+'"'+(anc?' text-anchor="'+anc+'"':'')+(extra||'')+'>'+s+'</text>';}
@@ -278,201 +290,156 @@ function LINE(p,q,c,w,op,dash,arrow){
  return '<line x1="'+p[0].toFixed(1)+'" y1="'+p[1].toFixed(1)+'" x2="'+q[0].toFixed(1)+'" y2="'+q[1].toFixed(1)+
   '" stroke="'+c+'" stroke-width="'+w+'" stroke-linecap="round" opacity="'+op.toFixed(2)+'"'+
   (dash?' stroke-dasharray="'+dash+'"':'')+(arrow?' marker-end="url(#ar)"':'')+'/>';}
-function NODE(x,y,name,hi){
- return '<circle cx="'+x+'" cy="'+y.toFixed(1)+'" r="'+NR+'" fill="var(--surface)" stroke="'+(hi||'var(--text-secondary)')+
-  '" stroke-width="'+(hi?2.6:1.6)+'"/>'+TXT(x,y+5.5,name,'var(--text-primary)','middle','ts',' font-style="italic"');}
+function DOT(p,c){return '<circle cx="'+p[0].toFixed(1)+'" cy="'+p[1].toFixed(1)+'" r="5" fill="'+c+'"/>';}
 function drawWire(){
- var e1=E(1),e2=E(2),e3=E(3),e4=E(4),r5=cl(t-4),e6=E(6),e7=E(7),e8=E(8),s='',i,j;
- var y=Y(),gx=GXv(),back=e3>0.5;
- var hy=Math.min(nyp(0,C),nyp(0,R),VH/2-8)-44;
+ var s='',i,j,c=cur(),J=c.J,u=c.u,lit=J?smooth(0,0.08,u)*(1-smooth(0.94,1,u)):0;
+ var hy=Math.min(nyp(0,C),nyp(0,R),VH/2-8)-44,Ly=VH/2+14,nG=idx('g'),gon=t>=nG+0.5;
+ var fwd=J&&J.k==='y',bw=J&&(J.k==='x'||J.k==='a');
  s+=TXT(NX,hy,'inputs x','var(--text-muted)','middle','tn')+TXT(NY,hy,'outputs y','var(--text-muted)','middle','tn')+
     TXT(NL,hy,'loss','var(--text-muted)','middle','tn');
- // what the two numbers beside each node mean, once the second one exists
- var lo=smooth(0.3,0.8,e7),lg=smooth(0.6,1,e2);
- if(lo>0)s+='<text class="tn" x="'+NX+'" y="'+(hy+18)+'" text-anchor="middle" opacity="'+lo.toFixed(2)+'">value, <tspan style="fill:var(--grad-ink)">∂L/∂x</tspan></text>';
- if(lg>0)s+='<text class="tn" x="'+NY+'" y="'+(hy+18)+'" text-anchor="middle" opacity="'+lg.toFixed(2)+'">value, <tspan style="fill:var(--grad-ink)">g = ∂L/∂y</tspan></text>';
- var Ly=VH/2+14;
- // y to L: the rest of the network, dashed because we never look inside it
- for(i=0;i<R;i++){var yp=[NY+NR,nyp(i,R)],lp=[NL-24,Ly];
-  s+=LINE(yp,lp,'var(--border-strong)',1.4,1,'4 4',!back);
-  if(e2>0){var f=1-e2,dp=L2(lp,yp,e2);
-   if(e2<0.98)s+='<circle cx="'+dp[0].toFixed(1)+'" cy="'+dp[1].toFixed(1)+'" r="5" fill="var(--grad)"/>';}}
+ var fw=smooth(0.22,0.34,u),o2=smooth(0.34,0.44,u),bk=smooth(0.46,0.66,u);
+ for(i=0;i<R;i++){var yp=[NY+NR,nyp(i,R)],lp=[NL-24,Ly],on=bw&&(J.k==='x'||i===J.i);
+  s+=LINE(yp,lp,on&&lit>0.3?'var(--wig)':'var(--border-strong)',on?2.4:1.4,1,on?'':'4 4',0);
+  if(gon||(J&&J.k==='g'&&u>0.5))s+=TXT((yp[0]+lp[0])/2+6,(yp[1]+lp[1])/2-6,'×'+fmt(G[i]),'var(--grad-ink)','middle','tn',' font-weight="600"');
+  if(J&&J.k==='g'&&u>0.1&&u<0.6)s+=DOT(L2(lp,yp,(u-0.1)/0.5),'var(--grad)');
+  if(on&&o2>0&&o2<1)s+=DOT(L2(yp,lp,o2),'var(--wig)');
+  if(on&&bk>0&&bk<0.5)s+=DOT(L2(lp,yp,bk*2),'var(--grad)');}
  s+='<rect x="'+(NL-24)+'" y="'+(Ly-22)+'" width="48" height="44" rx="8" fill="var(--surface)" stroke="var(--text-secondary)" stroke-width="1.6"/>'+
    TXT(NL,Ly+6,'L','var(--text-primary)','middle','ts',' font-style="italic"');
- s+=TXT(NL,Ly+44,'the rest','var(--text-muted)','middle','tn')+TXT(NL,Ly+61,'of the net','var(--text-muted)','middle','tn');
- // the R×C wires, each with its weight
- var share=smooth(0.45,0.7,e6),wgt=smooth(0.3,0.7,e8);
+ if(bw&&o2>0.6){var dl=0;for(i=0;i<R;i++)dl+=G[i]*(J.k==='x'?A[i][J.j]:(i===J.i?X[J.j]:0));
+  s+=TXT(NL,Ly+44,'ΔL = '+eps(dl),'var(--wig-ink)','middle','ts',' font-weight="600" opacity="'+(smooth(0.6,1,o2)*lit).toFixed(2)+'"');}
  for(i=0;i<R;i++)for(j=0;j<C;j++){
-  var P=[NX+NR,nyp(j,C)],Q=[NY-NR,nyp(i,R)],sel=SEL[0]===i&&SEL[1]===j;
-  var op=lerp(0.45,0.85,smooth(0,1,e4))*(r5>0&&r5<1&&!sel?lerp(1,0.6,Math.sin(Math.PI*r5)):1);
-  s+=back?LINE(Q,P,COL[i],sel?3.4:1.8,sel?1:op,'',1):LINE(P,Q,COL[i],sel?3.4:1.8,sel?1:op,'',1);
-  s+='<line class="hit" data-e="'+i+','+j+'" x1="'+P[0]+'" y1="'+P[1].toFixed(1)+'" x2="'+Q[0]+'" y2="'+Q[1].toFixed(1)+'"/>';
-  // forward a value rides each wire from x to y; backward a gradient rides it home
-  if(e1>0&&e1<0.98){var d=L2(P,Q,e1);s+='<circle cx="'+d[0].toFixed(1)+'" cy="'+d[1].toFixed(1)+'" r="4.5" fill="var(--text-secondary)"/>';}
-  if(e6>0&&e6<0.98){var d=L2(Q,P,e6);s+='<circle cx="'+d[0].toFixed(1)+'" cy="'+d[1].toFixed(1)+'" r="5" fill="var(--grad)"/>';}
-  var lw=L2(P,Q,0.3),lb=lw;
-  if(R*C>6&&j!==SEL[1])continue;
-  if(share<1)s+=TXT(lw[0],lw[1]-5,'×'+fmt(A[i][j]),INK[i],'middle','tn')
-    .replace('<text','<text opacity="'+(1-share).toFixed(2)+'"');
-  if(share>0)s+=TXT(lw[0],lw[1]-5,fmt(G[i]*A[i][j]),'var(--grad-ink)','middle','tn',' font-weight="600"')
-    .replace('<text','<text opacity="'+(share*(1-wgt)).toFixed(2)+'"');
-  if(wgt>0){var tw=fmt(G[i]*X[j]).length*8+14;
-   s+='<g opacity="'+wgt.toFixed(2)+'"><rect x="'+(lb[0]-tw/2).toFixed(1)+'" y="'+(lb[1]-11).toFixed(1)+'" width="'+tw+
-    '" height="21" rx="6" fill="var(--surface)" stroke="var(--grad)" stroke-width="1.3"/>'+
-    TXT(lb[0],lb[1]+5,fmt(G[i]*X[j]),'var(--grad-ink)','middle','tn',' font-weight="600"')+'</g>';}
- }
- for(j=0;j<C;j++){var yj=nyp(j,C),hi=SEL[1]===j?'var(--text-primary)':'';
-  s+=NODE(NX,yj,'x'+SUB[j],hi);
-  s+=TXT(NX-NR-8,yj+(e7>0?-3:5),fmt(X[j]),'var(--text-primary)','end','ts');
-  if(e7>0)s+=TXT(NX-NR-8,yj+16,fmt(gx[j]*e7),'var(--grad-ink)','end','ts',' font-weight="600" opacity="'+smooth(0,0.5,e7).toFixed(2)+'"');}
- for(i=0;i<R;i++){var yi=nyp(i,R),hi=SEL[0]===i?COL[i]:'';
-  s+=NODE(NY,yi,'y'+SUB[i],hi);
-  if(e1>0.5)s+=TXT(NY+NR+6,yi-9,fmt(y[i]),'var(--text-primary)','start','ts',' opacity="'+smooth(0.5,0.9,e1).toFixed(2)+'"');
-  if(e2>0.6)s+=TXT(NY+NR+6,yi+22,fmt(G[i]),INK[i],'start','ts',' font-weight="600" opacity="'+smooth(0.6,1,e2).toFixed(2)+'"');}
- if(wgt>0.5)s+=TXT(VW/2-10,VH-10,'boxed: ∂L/∂Aᵢⱼ = gᵢ xⱼ, each wire’s own weight gradient'+(R*C>6?' (wires of x'+SUB[SEL[1]]+')':''),'var(--grad-ink)','middle','tn',' opacity="'+wgt.toFixed(2)+'"');
- else s+=TXT(VW/2-10,VH-10,'click a wire to zoom in'+(R*C>6?'; labels follow the chosen input':''),'var(--text-muted)','middle','tn');
+  var P0=[NX+NR,nyp(j,C)],Q0=[NY-NR,nyp(i,R)],
+      on=J&&((fwd&&i===J.i)||(bw&&j===J.j&&(J.k==='x'||i===J.i))),cc=fwd?'var(--blue)':'var(--wig)';
+  s+=LINE(P0,Q0,on&&lit>0.3?cc:'var(--border-strong)',on?3:1.4,on?1:0.7,'',1);
+  s+='<line class="hit" data-e="'+i+','+j+'" x1="'+P0[0]+'" y1="'+P0[1].toFixed(1)+'" x2="'+Q0[0]+'" y2="'+Q0[1].toFixed(1)+'"/>';
+  if(on){var m=L2(P0,Q0,0.32);
+   s+=TXT(m[0],m[1]-6,'×'+fmt(J.k==='a'?X[j]:A[i][j]),fwd?'var(--blue-ink)':'var(--wig-ink)','middle','tn',' font-weight="600" opacity="'+lit.toFixed(2)+'"');
+   if(fwd&&u>0.3&&u<0.82)s+=DOT(L2(P0,Q0,(u-0.3)/0.52),'var(--blue)');
+   if(bw&&fw>0&&fw<1)s+=DOT(L2(P0,Q0,fw),'var(--wig)');
+   if(bw&&bk>0.5&&bk<1)s+=DOT(L2(Q0,P0,(bk-0.5)*2),'var(--grad)');}}
+ for(j=0;j<C;j++){var yj=nyp(j,C),on=bw&&J.j===j&&lit>0.3,n=idx('x',undefined,j);
+  s+='<circle cx="'+NX+'" cy="'+yj.toFixed(1)+'" r="'+NR+'" fill="var(--surface)" stroke="'+(on?'var(--wig)':'var(--text-secondary)')+'" stroke-width="'+(on?3:1.6)+'"/>'+
+     TXT(NX,yj+5.5,'x'+SUB[j],'var(--text-primary)','middle','ts',' font-style="italic"');
+  s+='<circle class="nhit" data-x="'+j+'" cx="'+NX+'" cy="'+yj.toFixed(1)+'" r="'+(NR+4)+'"/>';
+  s+=TXT(NX-NR-8,yj+(done(n)?-3:5),fmt(X[j]),'var(--text-primary)','end','ts');
+  if(on&&J.k==='x')s+=TXT(NX,yj-NR-7,'+ε','var(--wig-ink)','middle','tn',' font-weight="600"');
+  if(done(n))s+=TXT(NX-NR-8,yj+16,fmt(dxv(j)),'var(--grad-ink)','end','ts',' font-weight="600"');}
+ for(i=0;i<R;i++){var yi=nyp(i,R),n=idx('y',i),on=(bw&&(J.k==='x'||i===J.i)&&fw>0.95)||(fwd&&J.i===i&&lit>0.3);
+  s+='<circle cx="'+NY+'" cy="'+yi.toFixed(1)+'" r="'+NR+'" fill="var(--surface)" stroke="'+(on?(fwd?'var(--blue)':'var(--wig)'):'var(--text-secondary)')+'" stroke-width="'+(on?3:1.6)+'"/>'+
+     TXT(NY,yi+5.5,'y'+SUB[i],'var(--text-primary)','middle','ts',' font-style="italic"');
+  s+='<circle class="nhit" data-y="'+i+'" cx="'+NY+'" cy="'+yi.toFixed(1)+'" r="'+(NR+4)+'"/>';
+  if(done(n))s+=TXT(NY,yi-NR-7,fmt(yv(i)),'var(--text-primary)','middle','ts');
+  if(bw&&fw>0.95){var d=J.k==='x'?A[i][J.j]:(i===J.i?X[J.j]:0);
+   s+=TXT(NY,yi+NR+17,eps(d),'var(--wig-ink)','middle','tn',' font-weight="600" opacity="'+lit.toFixed(2)+'"');}}
+ s+=TXT(VW/2-10,VH-10,J?'':'click a node or a wire to see its derivative','var(--text-muted)','middle','tn');
  return s;
 }
 
-/* ---------- one wire, zoomed: the product rule ---------- */
-function drawZoom(){
- var i=SEL[0],j=SEL[1],a=A[i][j],x=X[j],g=G[i],y=Y(),I=SUB[i],J=SUB[j],s='';
- var pA=[92,82],pX=[92,196],pM=[300,139],pS=[470,139],pL=[575,139];
- function box(p,name,v,c){return '<rect x="'+(p[0]-48)+'" y="'+(p[1]-19)+'" width="96" height="38" rx="8" fill="var(--surface-1)" stroke="'+c+'" stroke-width="2"/>'+
-  TXT(p[0],p[1]+6,name+' = '+fmt(v),'var(--text-primary)','middle','zv');}
- s+=LINE([pA[0]+48,pA[1]+8],[pM[0]-23,pM[1]-8],COL[i],2.4,1,'',0)+LINE([pX[0]+48,pX[1]-8],[pM[0]-23,pM[1]+8],'var(--text-secondary)',2.4,1,'',0)+
-    LINE([pM[0]+24,pM[1]],[pS[0]-24,pS[1]],'var(--text-secondary)',2.4,1,'',0)+
-    LINE([pS[0]+24,pS[1]],[pL[0]-16,pL[1]],'var(--border-strong)',1.6,1,'4 4',0);
- s+=box(pA,'A'+I+J,a,COL[i])+box(pX,'x'+J,x,'var(--text-secondary)');
- s+='<circle cx="'+pM[0]+'" cy="'+pM[1]+'" r="23" fill="var(--surface)" stroke="var(--text-secondary)" stroke-width="2"/>'+
-    TXT(pM[0],pM[1]+7,'×','var(--text-primary)','middle','zn');
- s+='<circle cx="'+pS[0]+'" cy="'+pS[1]+'" r="23" fill="var(--surface)" stroke="'+COL[i]+'" stroke-width="2"/>'+
-    TXT(pS[0],pS[1]+7,'+','var(--text-primary)','middle','zn')+TXT(pL[0],pL[1]+6,'L','var(--text-primary)','middle','zn');
- // forward above the line, backward below it
- s+=TXT(385,pM[1]-10,fmt(a*x),'var(--text-primary)','middle','zv')+TXT(522,pS[1]-10,'y'+I+' = '+fmt(y[i]),'var(--text-primary)','middle','zv');
- s+=TXT(522,pS[1]+24,'← '+fmt(g),'var(--grad-ink)','middle','zg')+TXT(385,pS[1]+24,'← '+fmt(g),'var(--grad-ink)','middle','zg')+
-    TXT(385,pS[1]+42,'a sum passes it on','var(--text-muted)','middle','zs');
- if(C>1)s+=TXT(pS[0]+6,pS[1]+64,'+ the other '+(C-1)+' term'+(C===2?'':'s'),'var(--text-muted)','middle','zs')+
-    TXT(pS[0]+6,pS[1]+80,'of row '+(i+1),'var(--text-muted)','middle','zs');
- // the product rule: each factor's gradient is the upstream gradient times the other factor
- s+=TXT(44,pA[1]-34,'∂L/∂A'+I+J+' = g'+I+' · x'+J+' = '+fmt(g)+' · '+par(x)+' = '+fmt(g*x),'var(--grad-ink)','start','zg');
- s+=TXT(44,pX[1]+46,'share for x'+J+' = g'+I+' · A'+I+J+' = '+fmt(g)+' · '+par(a)+' = '+fmt(g*a),'var(--grad-ink)','start','zg');
- s+=TXT(198,pM[1]+5,'swap','var(--grad-ink)','start','zs');
- s+='<path d="M150 '+(pX[1]-22)+' L190 '+(pA[1]+22)+'M150 '+(pA[1]+22)+' L190 '+(pX[1]-22)+'" fill="none" stroke="var(--grad)" stroke-width="1.3" stroke-dasharray="4 3" opacity=".7"/>';
- document.getElementById('zoom').innerHTML=s;
- document.getElementById('zhd').textContent='Wire x'+J+' → y'+I+', zoomed in';
- // the panel beside it
- var col=[],sh=[];for(var k=0;k<R;k++){col.push(par(G[k])+'·'+par(A[k][j]));sh.push(G[k]*A[k][j]);}
- var tot=sh.reduce(function(p,q){return p+q;},0);
- var h='<div class="hd">The product rule on this wire</div>'+
-  '<h3>y'+I+' contains the term A'+I+J+' · x'+J+'</h3>'+
-  '<p>Nudge both factors and the term moves by</p><div class="eq">d(A'+I+J+'x'+J+') = <span style="color:'+INK[i]+'">x'+J+'</span>·dA'+I+J+' + <span style="color:'+INK[i]+'">A'+I+J+'</span>·dx'+J+'</div>'+
-  '<p>Each factor’s derivative is <b>the other factor</b>. So the <span class="gr">g'+I+' = '+fmt(g)+'</span> arriving from y'+I+
-  ' leaves the × node two ways: the weight gets <span class="gr">g'+I+'x'+J+' = '+fmt(g*x)+'</span> and the input gets <span class="gr">g'+I+'A'+I+J+' = '+fmt(g*a)+'</span>.</p>';
- if(R>1)h+='<p>But x'+J+' feeds all '+R+' outputs, so it collects a share from each of its '+R+' wires, and the chain rule adds them:</p>'+
-  '<div class="eq">∂L/∂x'+J+' = '+col.join(' + ')+' = <span class="gr">'+fmt(tot)+'</span></div>'+
-  '<p>That sum runs down column '+(j+1)+' of A, which is row '+(j+1)+' of Aᵀ. Hence <b>Aᵀg</b>. The weight A'+I+J+' sits on one wire only, so its gradient needs no sum: <b>g xᵀ</b>.</p>';
- else h+='<p>With one output there is one wire per input and nothing to add, so ∂L/∂x'+J+' = <span class="gr">'+fmt(tot)+'</span>.</p>';
- document.getElementById('panel').innerHTML=h;
-}
-
-/* ---------- frame ---------- */
-function draw(){
- layoutAlg();
- document.getElementById('stage').innerHTML=drawWire();
- drawZoom();
- document.getElementById('ts').value=Math.round(t*100);
- var k=Math.min(NB-1,Math.ceil(t-1e-9)-1);
- var sp=document.getElementById('ph').children;
- for(var i=0;i<NB;i++)sp[i].classList.toggle('on',t>0&&i===k);
- document.getElementById('nxt').textContent=t>=NB?'Start over':'Next step →';
- readout();caption();
-}
-function readout(){
- var h,kk=Math.ceil(t-1e-9)-1,y=Y(),gx=GXv(),i,e=[];
- if(t<=0)h='<b>y = Ax, forward and then backward.</b> Going back, every wire is used again with the same weight, in the opposite direction.';
- else if(kk===0)h='<b>Forward.</b> Each x<sub>j</sub> travels along '+R+' wire'+(R>1?'s':'')+', is multiplied by the wire’s weight A<sub>ij</sub>, and each y<sub>i</sub> adds what arrives: y = ('+y.map(fmt).join(', ')+').';
- else if(kk===1)h='<b>The gradient arrives.</b> Whatever comes after y hands back <span class="gr">g = ∂L/∂y = ('+G.map(fmt).join(', ')+')</span>: how fast L changes per unit of each y<sub>i</sub>. That is all backprop needs to know about the rest of the network.';
- else if(kk===2)h='<b>Run the wires backward.</b> Going home, a gradient reaching x<sub>j</sub> comes down every wire that leaves it: one per row of A, so it reads down column j. Reading A by columns is reading Aᵀ by rows, so A flips over its diagonal.';
- else if(kk===3)h='Aᵀ comes apart into its '+R+' column'+(R>1?'s':'')+', which are the rows of A. Row i is ∂y<sub>i</sub>/∂x: how y<sub>i</sub> alone responds to each input.';
- else if(kk===4){for(i=0;i<R;i++)e.push('g'+SUB[i]+' to row '+(i+1));
-  h='g rises, turns, and deals one entry to each row of A: '+e.join(', ')+'. Forward, x dealt to the columns; here g deals to the rows.';}
- else if(kk===5){for(i=0;i<R;i++)e.push('<span style="color:'+INK[i]+'">'+par(G[i])+'·row'+SUB[i]+'</span>');
-  h='Each row is scaled by its gradient: '+e.join(', ')+'. On the wires these are the shares g<sub>i</sub>A<sub>ij</sub> travelling back toward x.';}
- else if(kk===6)h='The shares meet at each x<sub>j</sub> and add. A variable used in '+R+' place'+(R>1?'s':'')+' collects '+R+' gradient'+(R>1?'s':'')+': <span class="gr">∂L/∂x = Aᵀg = ('+gx.map(fmt).join(', ')+')</span>.';
- else if(t<NB)h='<b>The weights.</b> Every wire also has a weight, and by the product rule its gradient is the gradient arriving at its head times the value at its tail: g<sub>i</sub>x<sub>j</sub>. All of them at once are an outer product.';
- else h='Both gradients: <span class="gr">∂L/∂x = Aᵀg</span>, a weighted sum of the rows of A, and <span class="gr">∂L/∂A = g xᵀ</span>, every gradient times every input. Each has the shape of the thing it is the gradient of.';
- document.getElementById('readout').innerHTML=h;
+/* ---------- words ---------- */
+function explain(){
+ var c=cur(),J=c.J,u=c.u,h='',i,j,terms=[],cols=[],prods=[],s=0;
+ function at(a){return u>=a;}
+ if(t<=0)return '<b>Press play to compute y = Ax and then backprop through it, one scalar at a time.</b> '+
+  'Going forward, each y<sub>i</sub> is one dot product. Coming back, so is each gradient entry. Or click any ? to jump straight to it.';
+ if(!J)return '<b>Everything computed.</b> Forward, y<sub>i</sub> = (row i of A)·x. Backward, ∂L/∂x<sub>j</sub> = g·(column j of A), which all together is <span class="gr">gᵀA</span> '+
+  '(written as a column, Aᵀg), and ∂L/∂A<sub>ij</sub> = g<sub>i</sub>x<sub>j</sub>, which all together is <span class="gr">g xᵀ</span>. Click any entry to see it again.';
+ if(J.k==='y'){i=J.i;
+  for(j=0;j<C;j++){terms.push(par(A[i][j])+'·'+par(X[j]));}
+  h='<b>Forward: y'+SUB[i]+'.</b> Row '+(i+1)+' of A dotted with x. ';
+  if(at(0.1))h+='Each x<sub>j</sub> lands on its entry of the row, ';
+  if(at(0.34))h+='the pairs multiply, ';
+  if(at(0.5))h+='and the products add up: y'+SUB[i]+' = '+terms.join(' + ')+' = <b>'+fmt(yv(i))+'</b>.';
+  return h;}
+ if(J.k==='g')return '<b>g = ∂L/∂y arrives</b> from whatever comes after y: the rest of the network and the loss. '+
+  'It says how much L moves per unit change in each y<sub>i</sub>: for a small change Δy, ΔL ≈ g·Δy. That is all backprop through this layer needs from downstream.';
+ if(J.k==='x'){j=J.j;
+  for(i=0;i<R;i++){cols.push(fmt(A[i][j]));prods.push(par(G[i])+'·'+par(A[i][j]));}
+  h='<b>Backward: ∂L/∂x'+SUB[j]+'.</b> Nudge x'+SUB[j]+' by ε. ';
+  if(at(0.1))h+='In Ax, x'+SUB[j]+' multiplies <span class="wg">column '+(j+1)+' of A</span>, ';
+  if(at(0.22))h+='so every output moves: <span class="wg">Δy = ε·('+cols.join(', ')+')</span>. ';
+  if(at(0.46))h+='Each change reaches L scaled by its g<sub>i</sub>, ';
+  if(at(0.62))h+='so ΔL = ('+prods.join(' + ')+')ε ';
+  if(at(FILL))h+='and <span class="gr">∂L/∂x'+SUB[j]+' = g·(column '+(j+1)+') = '+fmt(dxv(j))+'</span>. A row times each column of A, side by side, is gᵀA.';
+  return h;}
+ i=J.i;j=J.j;
+ h='<b>Backward: ∂L/∂A'+SUB[i]+SUB[j]+'.</b> Nudge A'+SUB[i]+SUB[j]+' by ε. ';
+ if(at(0.1))h+='It appears once, in the term A'+SUB[i]+SUB[j]+'·x'+SUB[j]+' of y'+SUB[i]+', so the nudge is multiplied by <span class="wg">the other factor, x'+SUB[j]+' = '+fmt(X[j])+'</span> (the product rule) ';
+ if(at(0.22))h+='and only y'+SUB[i]+' moves: <span class="wg">Δy'+SUB[i]+' = '+eps(X[j])+'</span>. ';
+ if(at(0.46))h+='L feels it through g'+SUB[i]+': ΔL = '+par(G[i])+'·'+par(X[j])+'ε, ';
+ if(at(FILL))h+='so <span class="gr">∂L/∂A'+SUB[i]+SUB[j]+' = g'+SUB[i]+'x'+SUB[j]+' = '+fmt(G[i]*X[j])+'</span>: the gradient at the row’s output times the input at the column’s top. All of them together are the outer product g xᵀ.';
+ return h;
 }
 function caption(){
- var gx=GXv(),i,j,tm=[],fw=[],y=Y(),h='';
- for(i=0;i<R;i++)tm.push('<span style="color:'+INK[i]+'">'+par(G[i])+'('+rowv(i).map(fmt).join(', ')+')</span>');
- for(j=0;j<C;j++)fw.push(par(X[j])+'·col'+SUB[j]);
- h+='<div><b>Why the transpose.</b> y<sub>i</sub> = Σ<sub>j</sub> A<sub>ij</sub>x<sub>j</sub>, so ∂y<sub>i</sub>/∂x<sub>j</sub> = A<sub>ij</sub>: A is its own Jacobian. '+
-  'The chain rule adds over every path from x<sub>j</sub> to L, one path through each y<sub>i</sub>:</div>'+
-  '<div class="eq">∂L/∂x<sub>j</sub> = Σ<sub>i</sub> (∂L/∂y<sub>i</sub>)(∂y<sub>i</sub>/∂x<sub>j</sub>) = Σ<sub>i</sub> g<sub>i</sub>A<sub>ij</sub> = (Aᵀg)<sub>j</sub></div>'+
-  '<div>The summed index i is A’s row index, so the sum adds up rows: Aᵀg = '+tm.join(' + ')+' = <b class="gr">('+gx.map(fmt).join(', ')+')</b>. '+
-  'Forward, Ax adds up columns, weighted by x. Backward, Aᵀg adds up rows, weighted by g.</div>';
- h+='<div style="margin-top:8px"><b>The product rule, for matrices.</b> Nudge both factors of y = Ax and keep them in order: '+
-  '<span class="eq" style="margin:0">dy = (dA)x + A(dx)</span>, just as d(ax) = x da + a dx. Backprop asks how L moves, and L sees y only through g:</div>'+
-  '<div class="eq">dL = gᵀdy = gᵀ(dA)x + gᵀA dx = Σ<sub>ij</sub> g<sub>i</sub>x<sub>j</sub> dA<sub>ij</sub> + (Aᵀg)·dx</div>'+
-  '<div>Read the coefficients off: <b class="gr">∂L/∂A = g xᵀ</b> and <b class="gr">∂L/∂x = Aᵀg</b>.</div>';
- h+='<div class="ans" style="margin-top:8px">Shapes check the answer. ∂L/∂x needs '+C+' entr'+(C>1?'ies':'y')+' like x, and the only way to get them from g ('+R+') and A ('+R+'&#215;'+C+') is ('+C+'&#215;'+R+')('+R+'&#215;1): Aᵀg. '+
-  '∂L/∂A needs to be '+R+'&#215;'+C+' like A, and from g and x that is ('+R+'&#215;1)(1&#215;'+C+'): g xᵀ. '+
-  'The forward product is animated in <a href="../quiz0/matvec.html">Matrix &times; vector</a>.</div>';
- document.getElementById('caption').innerHTML=h;
+ $('caption').innerHTML='<div><b>Forward and backward are the same kind of step.</b> Forward, y<sub>i</sub> is row i of A dotted with x. '+
+  'Backward, ∂L/∂x<sub>j</sub> is column j of A dotted with g: nudging x<sub>j</sub> moves y by ε·(column j), and L sees a change in y as g·Δy. '+
+  'Rows going forward, columns coming back.</div>'+
+  '<div><b>Why a transpose.</b> All the columns dotted with g at once is the row-times-matrix product <b class="gr">gᵀA</b>, one entry per input. '+
+  'Stood up as a column, the shape of x, the same numbers are (gᵀA)ᵀ = <b class="gr">Aᵀg</b>, which is how backprop code writes it. The transpose only turns the row upright.</div>'+
+  '<div><b>Weights and the product rule.</b> A<sub>ij</sub> enters one term, A<sub>ij</sub>x<sub>j</sub> in y<sub>i</sub>. A nudge to one factor of a product is scaled by the other factor, '+
+  'so Δy<sub>i</sub> = x<sub>j</sub>ε, only g<sub>i</sub> sees it, and ∂L/∂A<sub>ij</sub> = g<sub>i</sub>x<sub>j</sub>: <b class="gr">∂L/∂A = g xᵀ</b>. '+
+  'Read the same rule the other way and a nudge to x<sub>j</sub> moves the term by A<sub>ij</sub>, which is where the columns came from.</div>'+
+  '<div class="ans">Each gradient has the shape of the thing it is the gradient of: ∂L/∂x has '+C+' entr'+(C>1?'ies':'y')+' like x, and ∂L/∂A is '+R+'&#215;'+C+' like A. '+
+  'The forward product as a sum of columns is animated in <a href="../quiz0/matvec.html">Matrix &times; vector</a>.</div>';
 }
 
 /* ---------- controls ---------- */
-function setT(v,stop){t=Math.max(0,Math.min(NB,v));if(stop)pause();draw();}
+function draw(){
+ layoutAlg();
+ $('stage').innerHTML=drawWire();
+ $('readout').innerHTML=explain();
+ $('ts').value=Math.round(t*100);
+ var sp=$('ph').children,n=cur().n,N=JOBS.length;
+ for(var k=0;k<sp.length;k++){var a=+sp[k].getAttribute('data-s'),b=k+1<sp.length?+sp[k+1].getAttribute('data-s'):N;
+  sp[k].classList.toggle('on',t>0&&t<N&&n>=a&&n<b);}
+ $('play').textContent=playing?'Pause':(t>=N?'Replay':'Play');
+ $('nxt').textContent=t>=N?'Start over':'Next →';
+}
+function dur(){return $('slow').checked?8:3.6;}
 function step(now){
  var dt=Math.min(0.05,(now-last)/1000);last=now;
- if(playing){t+=dt*0.8;if(t>=STOP){t=STOP;pause();}}
+ if(playing){t+=dt/dur();if(t>=STOP){t=STOP;playing=false;}}
  draw();
  raf=playing?requestAnimationFrame(step):null;
 }
-function pause(){playing=false;document.getElementById('play').textContent=t>=NB?'Replay':'Play';
- if(raf){cancelAnimationFrame(raf);raf=null;}}
-function toggle(){if(playing){pause();return;}
- if(t>=NB)t=0;STOP=NB;playing=true;document.getElementById('play').textContent='Pause';
- last=performance.now();raf=requestAnimationFrame(step);}
-function nextStep(){
- if(playing)pause();
- if(t>=NB){t=0;draw();}
- STOP=Math.min(NB,Math.floor(t+1e-9)+1);playing=true;document.getElementById('play').textContent='Pause';
- last=performance.now();raf=requestAnimationFrame(step);}
-function gotoStep(k){setT(k+1,1);}
+function go(to){STOP=to;playing=true;last=performance.now();if(!raf)raf=requestAnimationFrame(step);draw();}
+function pause(){playing=false;draw();}
+function setT(v){t=Math.max(0,Math.min(JOBS.length,v));pause();}
+function toggle(){if(playing){pause();return;}if(t>=JOBS.length)t=0;go(JOBS.length);}
+// Next plays one scalar's computation and stops with its answer in place.
+function nextStep(){if(t>=JOBS.length){t=0;pause();return;}go(Math.min(JOBS.length,Math.floor(t+1e-9)+1));}
+// Clicking an entry rewinds to the start of its computation and plays just that one.
+function ask(n){if(n<0)return;t=n;go(n+1);}
+function jump(n){setT(n);}
 function setdim(){
- var nr=+document.getElementById('rows').value,nc=+document.getElementById('cols').value,i,j,B=[];
+ var nr=+$('rows').value,nc=+$('cols').value,i,j,B=[];
  for(i=0;i<nr;i++){B.push([]);for(j=0;j<nc;j++)B[i].push(i<R&&j<C?A[i][j]:(i===j%nr?1:0));}
  var Xn=[],Gn=[];for(j=0;j<nc;j++)Xn.push(j<C?X[j]:2);for(i=0;i<nr;i++)Gn.push(i<R?G[i]:1);
- R=nr;C=nc;A=B;X=Xn;G=Gn;SEL=[Math.min(SEL[0],R-1),Math.min(SEL[1],C-1)];
- reset();
+ R=nr;C=nc;A=B;X=Xn;G=Gn;reset();
 }
-function quiz(){R=2;C=3;A=[[1,2,-1],[0,1,0]];X=[3,4,5];G=[2,-1];SEL=[0,0];
- document.getElementById('rows').value='2';document.getElementById('cols').value='3';reset();}
+function quiz(){R=2;C=3;A=[[1,2,-1],[0,1,0]];X=[3,4,5];G=[2,-1];$('rows').value='2';$('cols').value='3';reset();}
 function rnd(){
  var i,j;
- for(i=0;i<R;i++){var z=true;
-  while(z){for(j=0;j<C;j++){A[i][j]=Math.floor(Math.random()*7)-3;if(A[i][j])z=false;}}
-  G[i]=Math.floor(Math.random()*7)-3||1;}
+ for(i=0;i<R;i++){for(j=0;j<C;j++)A[i][j]=Math.floor(Math.random()*7)-3;G[i]=Math.floor(Math.random()*7)-3||1;}
  for(j=0;j<C;j++)X[j]=Math.floor(Math.random()*7)-3||2;
  if(R>1&&G.every(function(v){return v>0;}))G[Math.floor(Math.random()*R)]*=-1;
- reset();
+ draw();caption();
 }
-document.getElementById('wsvg').addEventListener('click',function(e){
- var d=e.target.getAttribute&&e.target.getAttribute('data-e');if(!d)return;
- SEL=d.split(',').map(Number);if(!playing)draw();});
-function reset(){build();t=0;pause();draw();}
-window.addEventListener('resize',function(){draw();});
-if(window.ResizeObserver)new ResizeObserver(function(){draw();}).observe(document.getElementById('alg'));
+$('wsvg').addEventListener('click',function(e){
+ var el=e.target;if(!el.getAttribute)return;
+ var d=el.getAttribute('data-e'),x=el.getAttribute('data-x'),y=el.getAttribute('data-y');
+ if(d){d=d.split(',').map(Number);ask(idx('a',d[0],d[1]));}
+ else if(x!==null)ask(idx('x',undefined,+x));
+ else if(y!==null)ask(idx('y',+y));});
+function reset(){playing=false;t=0;makeJobs();build();draw();caption();}
+window.addEventListener('resize',draw);
+if(window.ResizeObserver)new ResizeObserver(function(){if(!playing)draw();}).observe($('alg'));
 document.addEventListener('keydown',function(e){
  if(e.target.tagName==='INPUT'&&e.target.type==='number')return;
  if(e.key===' '){e.preventDefault();toggle();}
  else if(e.key==='Enter'){e.preventDefault();nextStep();}
- else if(e.key==='ArrowLeft')setT(t-0.1,1);
- else if(e.key==='ArrowRight')setT(t+0.1,1);
- else if(e.key==='n'||e.key==='N')rnd();
+ else if(e.key==='ArrowLeft')setT(t-0.1);
+ else if(e.key==='ArrowRight')setT(t+0.1);
 });
 reset();
 </script>

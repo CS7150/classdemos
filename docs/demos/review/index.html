@@ -60,11 +60,11 @@ footer a{color:var(--text-secondary)}
 <li class="done">
   <div class="qtag">Matrices</div>
   <h2><a href="matvec-backward.html">Backprop through y = Ax</a></h2>
-  <p class="what">Why the backward pass multiplies by Aᵀ. The forward product drawn as wires, then run in
-     reverse: the gradient g deals one entry to each row of A, the scaled rows add up to ∂L/∂x = Aᵀg, and
-     the product rule on each wire gives the weight gradient ∂L/∂A = g xᵀ. The left panel replays the
-     <a href="../quiz0/matvec.html">matrix &times; vector</a> animation on Aᵀ and g; click any wire to see the
-     product rule on it.</p>
+  <p class="what">The forward and backward passes through a linear layer, one scalar at a time. Each output
+     is a row of A dotted with x; each input gradient is found by nudging that input, following the nudge through
+     its column of A to y, and letting g = ∂L/∂y carry it to the loss, so it is a column of A dotted with g. All
+     of them together are gᵀA (that is, Aᵀg), and the product rule on each weight gives g xᵀ. Click any entry to
+     see where it comes from.</p>
   <a class="go" href="matvec-backward.html">Open the explainer &rarr;</a>
 </li>
 
