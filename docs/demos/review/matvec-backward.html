@@ -130,7 +130,7 @@ function makeJobs(){
  $('ph').innerHTML=h;
 }
 function idx(k,i,j){for(var n=0;n<JOBS.length;n++){var J=JOBS[n];if(J.k===k&&(J.i===undefined||J.i===i)&&(J.j===undefined||J.j===j))return n;}return -1;}
-function cur(){var n=Math.min(JOBS.length-1,Math.floor(t));return {n:n,J:t<JOBS.length?JOBS[n]:null,u:t-n};}
+function cur(){var n=Math.max(0,Math.min(JOBS.length-1,Math.floor(t)));return {n:n,J:t<JOBS.length?JOBS[n]:null,u:t-n};}
 // Within a phase entries can be asked for in any order, so which ones are filled is kept
 // in KEEP; every earlier phase counts as finished and every later one as not yet begun.
 // A job's answer starts to show once its products have come close enough to overlap,
@@ -454,7 +454,8 @@ function draw(){
 function dur(){return $('slow').checked?8:3.6;}
 var ALL=false;
 function step(now){
- var dt=Math.min(0.05,(now-last)/1000);last=now;
+ // a frame's timestamp can predate the moment the run began; never step backwards
+ var dt=Math.max(0,Math.min(0.05,(now-last)/1000));last=now;
  if(playing){t+=dt/dur();
   if(t>=STOP){t=STOP;var n=cur().n;KEEP[n]=true;
    if(ALL){var m=nextUndone();
@@ -464,7 +465,7 @@ function step(now){
  draw();
  raf=playing?requestAnimationFrame(step):null;
 }
-function go(to){STOP=to;playing=true;last=performance.now();if(!raf)raf=requestAnimationFrame(step);draw();}
+function go(to){STOP=to;playing=true;last=performance.now();if(raf)cancelAnimationFrame(raf);raf=requestAnimationFrame(step);draw();}
 function pause(){playing=false;ALL=false;draw();}
 // The slider runs everything in order, so a position on it fills its phase in order too.
 function setT(v){t=Math.max(0,Math.min(JOBS.length,v));KEEP={};
