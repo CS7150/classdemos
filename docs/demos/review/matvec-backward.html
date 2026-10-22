@@ -13,7 +13,7 @@
 #stagewrap{flex:0 0 auto;height:clamp(340px,54vh,620px);display:flex;gap:10px;align-items:stretch}
 #alg{position:relative;flex:1 1 56%;min-width:280px;overflow:hidden}
 #algin{position:absolute;left:0;top:0;transform-origin:0 0}
-#ov{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
+#ov{position:absolute;left:0;top:0;width:10px;height:10px;max-height:none;overflow:visible;pointer-events:none}
 #wire{position:relative;flex:1 1 44%;min-width:260px}
 #wire svg{position:absolute;inset:0;width:100%;height:100%}
 #wire svg .hit{stroke:transparent;stroke-width:16;cursor:pointer;pointer-events:stroke}
@@ -130,9 +130,21 @@ function makeJobs(){
 }
 function idx(k,i,j){for(var n=0;n<JOBS.length;n++){var J=JOBS[n];if(J.k===k&&(J.i===undefined||J.i===i)&&(J.j===undefined||J.j===j))return n;}return -1;}
 function cur(){var n=Math.min(JOBS.length-1,Math.floor(t));return {n:n,J:t<JOBS.length?JOBS[n]:null,u:t-n};}
-// a job's answer shows once its sum has landed
-var FILL=0.86;
-function done(n){return t>=n+FILL;}
+// Within a phase entries can be asked for in any order, so which ones are filled is kept
+// in KEEP; every earlier phase counts as finished and every later one as not yet begun.
+// A job's answer starts to show once its products have come close enough to overlap,
+// and fades in over FW as they fade out.
+var KEEP={},FW={y:[0.62,0.8],g:[0.15,0.7],x:[0.76,0.85],a:[0.76,0.85]},PHASE={y:0,g:1,x:2,a:3},END=0.9999;
+function phase(n){return PHASE[JOBS[n].k];}
+function done(n){
+ if(t>=JOBS.length)return true;
+ var c=cur(),pm=phase(n),pc=phase(c.n);
+ if(pm!==pc)return pm<pc;
+ if(n===c.n)return c.u>=FW[JOBS[n].k][0];
+ return !!KEEP[n];
+}
+function allDone(k){for(var n=0;n<JOBS.length;n++)if(JOBS[n].k===k&&!done(n))return false;return true;}
+function nextUndone(){for(var n=0;n<JOBS.length;n++)if(!done(n))return n;return -1;}
 
 /* ---------- the algebra panel ---------- */
 // Above the line, A x = y and g = ∂L/∂y, with y and g empty until computed.  Below the line,
@@ -144,9 +156,8 @@ function geom(){
  return {xoff:xoff,top:top,bot:bot,XX:XX,YX:YX,GX:GX,yDX:yDX,yGA:yGA,W:GX+CW+40,Htop:top-46,Hbot:yGA+R*CH+16};
 }
 function build(){
- var h='<svg id="ov" width="10" height="10"></svg>',i,j,k;
+ var h='<div class="hl" id="hl"></div><svg id="ov" width="10" height="10"></svg>',i,j,k;
  ['bA','bX','bY','bG','bDX','bGA'].forEach(function(k){h+='<div class="brk" id="'+k+'"></div>';});
- h+='<div class="hl" id="hl"></div>';
  h+='<div class="lbl" id="lA">A</div><div class="lbl" id="lX">x</div><div class="lbl" id="lY">y</div>'+
     '<div class="lbl g" id="lG" style="cursor:pointer" onclick="ask(idx(\'g\'))">g = ∂L/∂y</div><div class="lbl" id="lL">→ L</div>'+
     '<div class="lbl g" id="lDX"></div><div class="lbl g" id="lGA"></div><div class="op" id="eq">=</div>'+
@@ -154,7 +165,7 @@ function build(){
  for(i=0;i<R;i++)for(j=0;j<C;j++)h+='<input class="cel" type="number" step="1" id="a'+i+'_'+j+'" aria-label="A row '+(i+1)+' column '+(j+1)+'">';
  for(j=0;j<C;j++)h+='<input class="cel" type="number" step="1" id="x'+j+'" aria-label="x entry '+(j+1)+'">';
  for(i=0;i<R;i++)h+='<div class="cel slot fwd" id="sy'+i+'" title="y'+SUB[i]+'" onclick="ask(idx(\'y\','+i+'))"></div>';
- for(i=0;i<R;i++)h+='<div class="cel slot" id="sg'+i+'" title="g'+SUB[i]+' = ∂L/∂y'+SUB[i]+'" onclick="ask(idx(\'g\'))"></div>';
+ for(i=0;i<R;i++)h+='<div class="cel slot" id="sg'+i+'" title="g'+SUB[i]+' = ∂L/∂y'+SUB[i]+'" onclick="ask(idx(\'g\'))">?</div>';
  for(i=0;i<R;i++)h+='<input class="cel" type="number" step="1" id="g'+i+'" style="color:var(--grad-ink);font-weight:500" aria-label="g entry '+(i+1)+'">';
  for(j=0;j<C;j++)h+='<div class="cel slot" id="sx'+j+'" title="∂L/∂x'+SUB[j]+'" onclick="ask(idx(\'x\',undefined,'+j+'))"></div>';
  for(i=0;i<R;i++)for(j=0;j<C;j++)h+='<div class="cel slot" id="sa'+i+'_'+j+'" title="∂L/∂A'+SUB[i]+SUB[j]+'" onclick="ask(idx(\'a\','+i+','+j+'))"></div>';
@@ -190,26 +201,43 @@ function brk(el,x,y,w,h,op){
 }
 function setv(el,v){if(document.activeElement!==el){if(el.tagName==='INPUT')el.value=v;else el.textContent=v;}}
 function slot(el,p,n,val){
- var full=done(n),me=cur().n===n&&t<JOBS.length,pop=me?smooth(FILL,FILL+0.06,cur().u):1;
- el.textContent=full?fmt(val):'?';el.classList.toggle('full',full);
- place(el,p,1,full&&me?lerp(1.35,1,pop):1);
+ var c=cur(),full=done(n),me=t<JOBS.length&&c.n===n;
+ // the ? clears as the products arrive, and the sum fades in as they fade out
+ if(me){var w=FW[JOBS[n].k];
+  el.innerHTML=c.u<w[0]?'<span style="opacity:'+(1-smooth(w[0]-0.1,w[0],c.u)).toFixed(2)+'">?</span>'
+   :'<span style="opacity:'+smooth(w[0],w[1],c.u).toFixed(2)+'">'+fmt(val)+'</span>';}
+ else el.textContent=full?fmt(val):'?';
+ el.classList.toggle('full',full);
+ place(el,p,1);
 }
 
-// Each job is drawn as a set of travellers: copies of numbers that fly to where they are
-// multiplied, become products, and fly on to the slot where they add up.
+// Each job is drawn as a set of travellers: copies of numbers that fly to hover just above
+// the number they multiply, drop into it and become the product, and then fly on to the slot,
+// fading into the sum as they converge.  MUL holds each kind's timing: when the multiplicands
+// have arrived, and when they drop.
+var MUL={y:{mv:[0.1,0.3],dw:[0.36,0.44],go:[0.5,0.82]},x:{mv:[0.46,0.6],dw:[0.63,0.69],go:[0.71,0.85]},a:{mv:[0.46,0.6],dw:[0.63,0.69],go:[0.71,0.85]}};
+// a multiplicand and its target share the target's cell, one above the other, small enough
+// that every pair stays inside its own cell even when a whole column is multiplying
+var HO=7.5,TD=7.5,PS=0.68;
+// products fade into the sum as they close in, before they can pile up on one another
+function sumWin(k){var g=MUL[k].go,L=g[1]-g[0];return [g[0]+0.3*L,g[0]+0.78*L];}
 function travellers(J,Q){
  var T=[],i,j;
- if(!J)return T;
+ if(!J||J.k==='g')return T;
+ var M=MUL[J.k];
+ function mul(txt,c,from,cell){T.push({m:1,txt:txt,c:c,a:from,b:[cell[0],cell[1]-HO],sc:PS,mv:M.mv,d:[cell[0],cell[1]+TD],dw:M.dw,fi:M.mv[0]-0.02});}
+ function prod(txt,c,cell,to){T.push({m:0,txt:txt,c:c,a:cell,b:to,mv:M.go,fi:M.dw[1]-0.03,sum:1});}
  if(J.k==='y'){i=J.i;
-  for(j=0;j<C;j++){T.push({m:1,txt:fmt(X[j]),c:'var(--text-primary)',a:[Q.XX,Q.xoff+j*CH],b:[j*CW,i*CH],mv:[0.1,0.3],vis:[0.08,0.36]});
-   T.push({m:0,txt:fmt(A[i][j]*X[j]),c:'var(--blue-ink)',a:[j*CW,i*CH],b:[Q.YX,i*CH],mv:[0.5,0.82],vis:[0.34,0.88]});}}
+  for(j=0;j<C;j++){mul(fmt(X[j]),'var(--text-primary)',[Q.XX,Q.xoff+j*CH],[j*CW,i*CH]);
+   prod(fmt(A[i][j]*X[j]),'var(--blue-ink)',[j*CW,i*CH],[Q.YX,i*CH]);}}
  else if(J.k==='x'){j=J.j;
-  for(i=0;i<R;i++){T.push({m:1,txt:fmt(G[i]),c:'var(--grad-ink)',a:[Q.GX,i*CH],b:[j*CW,i*CH],mv:[0.46,0.62],vis:[0.45,0.64]});
-   T.push({m:0,txt:fmt(G[i]*A[i][j]),c:'var(--grad-ink)',a:[j*CW,i*CH],b:[j*CW,Q.yDX],mv:[0.68,0.84],vis:[0.62,0.88]});}}
- else if(J.k==='a'){i=J.i;j=J.j;
-  T.push({m:1,txt:fmt(X[j]),c:'var(--text-primary)',a:[Q.XX,Q.xoff+j*CH],b:[j*CW,i*CH],mv:[0.1,0.24],vis:[0.08,0.64]});
-  T.push({m:1,txt:fmt(G[i]),c:'var(--grad-ink)',a:[Q.GX,i*CH],b:[j*CW+CW*0.5,i*CH],mv:[0.46,0.6],vis:[0.45,0.64]});
-  T.push({m:0,txt:fmt(G[i]*X[j]),c:'var(--grad-ink)',a:[j*CW,i*CH],b:[j*CW,Q.yGA+i*CH],mv:[0.68,0.84],vis:[0.62,0.88]});}
+  for(i=0;i<R;i++){mul(fmt(G[i]),'var(--grad-ink)',[Q.GX,i*CH],[j*CW,i*CH]);
+   prod(fmt(G[i]*A[i][j]),'var(--grad-ink)',[j*CW,i*CH],[j*CW,Q.yDX]);}}
+ else{i=J.i;j=J.j;
+  // x_j takes A_ij's place: a nudge to A_ij reaches y_i multiplied by x_j
+  T.push({m:1,txt:fmt(X[j]),c:'var(--text-primary)',a:[Q.XX,Q.xoff+j*CH],b:[j*CW,i*CH],mv:[0.1,0.24],fi:0.08,sh:[M.mv[1]-0.05,M.mv[1]],dw:M.dw,hold:1});
+  mul(fmt(G[i]),'var(--grad-ink)',[Q.GX,i*CH],[j*CW,i*CH]);
+  prod(fmt(G[i]*X[j]),'var(--grad-ink)',[j*CW,i*CH],[j*CW,Q.yGA+i*CH]);}
  return T;
 }
 function layoutAlg(){
@@ -222,8 +250,14 @@ function layoutAlg(){
   setv(el,A[i][j]);
   var on=part&&lit>0.5,col=J&&J.k==='y'?'var(--blue-ink)':'var(--wig-ink)';
   el.style.color=on?col:'';el.style.fontWeight=on?'600':'';
-  var dim=part?1-0.85*smooth(J.k==='a'?0.2:0.32,J.k==='a'?0.24:0.36,u)*(1-smooth(0.86,0.9,u)):1;
-  place(el,[j*CW,i*CH],dim);}
+  // a cell about to be multiplied steps down to make room for its multiplicand, then gives
+  // way to the product; a weight being nudged gives way to x_j instead
+  var sh=0,fd=0;
+  if(part){var M=MUL[J.k],back=smooth(0.86,0.9,u);
+   if(J.k==='a')fd=smooth(0.18,0.24,u);
+   else{sh=smooth(M.mv[1]-0.05,M.mv[1],u);fd=smooth(M.dw[0]+0.6*(M.dw[1]-M.dw[0]),M.dw[1],u);}
+   sh*=1-back;fd*=1-back;}
+  place(el,[j*CW,i*CH+TD*sh],1-0.88*fd,lerp(1,PS,sh));}
  for(j=0;j<C;j++){var el=els['x'+j],on=J&&lit>0.5&&(J.k==='y'||((J.k==='x'||J.k==='a')&&J.j===j));
   setv(el,X[j]);el.style.color=on?(J.k==='y'?'var(--blue-ink)':'var(--wig-ink)'):'';el.style.fontWeight=on?'600':'';
   place(el,[Q.XX,Q.xoff+j*CH],1);}
@@ -245,7 +279,7 @@ function layoutAlg(){
  for(j=0;j<C;j++)slot(els['sx'+j],[j*CW,Q.yDX],idx('x',undefined,j),dxv(j));
  for(i=0;i<R;i++)for(j=0;j<C;j++)slot(els['sa'+i+'_'+j],[j*CW,Q.yGA+i*CH],idx('a',i,j),G[i]*X[j]);
  brk(els.bDX,0,Q.yDX,C*CW,CH,1);brk(els.bGA,0,Q.yGA,C*CW,R*CH,1);
- var allx=done(idx('x',undefined,C-1)),alla=done(JOBS.length-1);
+ var allx=allDone('x'),alla=allDone('a');
  els.lDX.innerHTML='∂L/∂x'+(allx?' = gᵀA <small>(Aᵀg, laid on its side)</small>':' <small>entry j under column j</small>');
  els.lGA.innerHTML='∂L/∂A'+(alla?' = g xᵀ':' <small>entry (i, j) under A<sub>ij</sub></small>');
  place(els.lDX,[C*CW+18,Q.yDX+6],1);place(els.lGA,[C*CW+18,Q.yGA+R*CH/2-11],1);
@@ -264,10 +298,22 @@ function layoutAlg(){
  for(k=0;k<NP;k++){els['m'+k].style.opacity=0;els['p'+k].style.opacity=0;}
  T.forEach(function(q){var el=q.m?els['m'+(nm++)]:els['p'+(np++)];
   el.textContent=q.txt;el.style.color=q.c;
-  place(el,L2(q.a,q.b,ease(smooth(q.mv[0],q.mv[1],u))),smooth(q.vis[0],q.vis[0]+0.03,u)*(1-smooth(q.vis[1]-0.03,q.vis[1],u)));});
+  var f=smooth(q.mv[0],q.mv[1],u),pos=L2(q.a,q.b,ease(f)),sc=q.sc?lerp(1,q.sc,f):1,op=smooth(q.fi,q.fi+0.03,u);
+  if(q.sh){var h=smooth(q.sh[0],q.sh[1],u);pos=[pos[0],pos[1]+TD*h];sc=lerp(1,PS,h);}
+  // the drop lands first, then the pair crossfades into its product
+  if(q.dw){var cf=q.dw[0]+0.6*(q.dw[1]-q.dw[0]);
+   if(q.d)pos=L2(pos,q.d,ease(smooth(q.dw[0],cf,u)));
+   op*=1-smooth(cf,q.dw[1],u);}
+  if(q.sum){var w=sumWin(J.k),cf2=MUL[J.k].dw[0]+0.6*(MUL[J.k].dw[1]-MUL[J.k].dw[0]);
+   op=smooth(cf2,MUL[J.k].dw[1],u)*(1-smooth(w[0],w[1],u));sc=lerp(PS,1,smooth(cf2,MUL[J.k].dw[1],u));
+   if(u<MUL[J.k].dw[1])pos=[q.a[0],q.a[1]+TD*0.5];}
+  place(el,pos,op,sc);});
  // backward jobs begin with the nudge: ε on the scalar, the change it makes in y, and the rows
  // that carry it to y and on to L
  var bw=J&&(J.k==='x'||J.k==='a'),ov='';
+ if(J&&J.k!=='g'){var M=MUL[J.k],po=smooth(M.mv[1]-0.06,M.mv[1],u)*(1-smooth(M.dw[1]-0.02,M.dw[1]+0.03,u));
+  if(po>0)for(i=0;i<R;i++)for(j=0;j<C;j++)if((J.k==='y'&&i===J.i)||(J.k==='x'&&j===J.j)||(J.k==='a'&&i===J.i&&j===J.j))
+   ov+='<rect x="'+(j*CW+5)+'" y="'+(i*CH+1.5)+'" width="'+(CW-10)+'" height="'+(CH-3)+'" rx="8" fill="var(--surface)" stroke="'+(J.k==='y'?'var(--blue)':'var(--grad)')+'" stroke-width="1.2" opacity="'+po.toFixed(2)+'"/>';}
  if(bw){var j0=J.j;
   if(J.k==='x')place(els.nx,L2([Q.XX+CW*0.6,Q.xoff+j0*CH-CH*0.55],[j0*CW,-CH*1.05],ease(smooth(0.1,0.22,u))),lit*(1-smooth(0.3,0.4,u)));
   else place(els.nx,[j0*CW+CW*0.55,J.i*CH-CH*0.6],lit*(1-smooth(0.6,0.66,u)));
@@ -276,8 +322,9 @@ function layoutAlg(){
    els['dy'+i].textContent='Δy'+SUB[i]+' '+eps(d);
    place(els['dy'+i],[Q.YX+CW+6,i*CH+8],smooth(0.3,0.36,u)*(1-smooth(0.94,1,u))*(on?1:0.55));
    if(!on)continue;
-   var y0=i*CH+CH/2,x0=j0*CW+CW-4,x1=Q.YX+4;
-   ov+='<line x1="'+x0+'" y1="'+y0+'" x2="'+lerp(x0,x1,fw).toFixed(1)+'" y2="'+y0+'" stroke="var(--wig)" stroke-width="3" opacity="'+(0.45*lo).toFixed(2)+'" stroke-linecap="round"/>';
+   // along the bottom of the row, under the numbers it passes
+   var y0=i*CH+CH-4,x0=j0*CW+CW-4,x1=Q.YX+4;
+   ov+='<line x1="'+x0+'" y1="'+y0+'" x2="'+lerp(x0,x1,fw).toFixed(1)+'" y2="'+y0+'" stroke="var(--wig)" stroke-width="2" opacity="'+(0.4*lo).toFixed(2)+'" stroke-linecap="round"/>';
    if(fw>0&&fw<1)ov+='<circle cx="'+lerp(x0,x1,fw).toFixed(1)+'" cy="'+y0+'" r="5" fill="var(--wig)"/>';
    if(o2>0&&o2<1)ov+='<circle cx="'+lerp(x1+CW,Q.GX+CW+30,o2).toFixed(1)+'" cy="'+y0+'" r="5" fill="var(--wig)"/>';}}
  else{els.nx.style.opacity=0;for(i=0;i<R;i++)els['dy'+i].style.opacity=0;}
@@ -351,7 +398,7 @@ function explain(){
   for(j=0;j<C;j++){terms.push(par(A[i][j])+'·'+par(X[j]));}
   h='<b>Forward: y'+SUB[i]+'.</b> Row '+(i+1)+' of A dotted with x. ';
   if(at(0.1))h+='Each x<sub>j</sub> lands on its entry of the row, ';
-  if(at(0.34))h+='the pairs multiply, ';
+  if(at(0.36))h+='the pairs multiply, ';
   if(at(0.5))h+='and the products add up: y'+SUB[i]+' = '+terms.join(' + ')+' = <b>'+fmt(yv(i))+'</b>.';
   return h;}
  if(J.k==='g')return '<b>g = ∂L/∂y arrives</b> from whatever comes after y: the rest of the network and the loss. '+
@@ -363,14 +410,14 @@ function explain(){
   if(at(0.22))h+='so every output moves: <span class="wg">Δy = ε·('+cols.join(', ')+')</span>. ';
   if(at(0.46))h+='Each change reaches L scaled by its g<sub>i</sub>, ';
   if(at(0.62))h+='so ΔL = ('+prods.join(' + ')+')ε ';
-  if(at(FILL))h+='and <span class="gr">∂L/∂x'+SUB[j]+' = g·(column '+(j+1)+') = '+fmt(dxv(j))+'</span>. A row times each column of A, side by side, is gᵀA.';
+  if(at(FW[J.k][0]))h+='and <span class="gr">∂L/∂x'+SUB[j]+' = g·(column '+(j+1)+') = '+fmt(dxv(j))+'</span>. A row times each column of A, side by side, is gᵀA.';
   return h;}
  i=J.i;j=J.j;
  h='<b>Backward: ∂L/∂A'+SUB[i]+SUB[j]+'.</b> Nudge A'+SUB[i]+SUB[j]+' by ε. ';
  if(at(0.1))h+='It appears once, in the term A'+SUB[i]+SUB[j]+'·x'+SUB[j]+' of y'+SUB[i]+', so the nudge is multiplied by <span class="wg">the other factor, x'+SUB[j]+' = '+fmt(X[j])+'</span> (the product rule) ';
  if(at(0.22))h+='and only y'+SUB[i]+' moves: <span class="wg">Δy'+SUB[i]+' = '+eps(X[j])+'</span>. ';
  if(at(0.46))h+='L feels it through g'+SUB[i]+': ΔL = '+par(G[i])+'·'+par(X[j])+'ε, ';
- if(at(FILL))h+='so <span class="gr">∂L/∂A'+SUB[i]+SUB[j]+' = g'+SUB[i]+'x'+SUB[j]+' = '+fmt(G[i]*X[j])+'</span>: the gradient at the row’s output times the input at the column’s top. All of them together are the outer product g xᵀ.';
+ if(at(FW[J.k][0]))h+='so <span class="gr">∂L/∂A'+SUB[i]+SUB[j]+' = g'+SUB[i]+'x'+SUB[j]+' = '+fmt(G[i]*X[j])+'</span>: the gradient at the row’s output times the input at the column’s top. All of them together are the outer product g xᵀ.';
  return h;
 }
 function caption(){
@@ -399,20 +446,49 @@ function draw(){
  $('nxt').textContent=t>=N?'Start over':'Next →';
 }
 function dur(){return $('slow').checked?8:3.6;}
+var ALL=false;
 function step(now){
  var dt=Math.min(0.05,(now-last)/1000);last=now;
- if(playing){t+=dt/dur();if(t>=STOP){t=STOP;playing=false;}}
+ if(playing){t+=dt/dur();
+  if(t>=STOP){t=STOP;var n=cur().n;KEEP[n]=true;
+   if(ALL){var m=nextUndone();
+    if(m<0){t=JOBS.length;playing=false;}
+    else{if(phase(m)!==phase(n))KEEP={};t=m;STOP=m+END;}}
+   else playing=false;}}
  draw();
  raf=playing?requestAnimationFrame(step):null;
 }
 function go(to){STOP=to;playing=true;last=performance.now();if(!raf)raf=requestAnimationFrame(step);draw();}
-function pause(){playing=false;draw();}
-function setT(v){t=Math.max(0,Math.min(JOBS.length,v));pause();}
-function toggle(){if(playing){pause();return;}if(t>=JOBS.length)t=0;go(JOBS.length);}
+function pause(){playing=false;ALL=false;draw();}
+// The slider runs everything in order, so a position on it fills its phase in order too.
+function setT(v){t=Math.max(0,Math.min(JOBS.length,v));KEEP={};
+ if(t<JOBS.length){var c=cur().n;for(var n=0;n<c;n++)if(phase(n)===phase(c))KEEP[n]=true;}
+ pause();}
+// Finish the computation under way, or start the next one not yet done.
+function run(all){
+ ALL=all;
+ if(t>=JOBS.length){t=0;KEEP={};}
+ var c=cur();
+ if(c.u>0&&c.u<END&&!KEEP[c.n]){go(c.n+END);return;}
+ var m=nextUndone();
+ if(m<0){t=JOBS.length;ALL=false;draw();return;}
+ if(phase(m)!==phase(c.n))KEEP={};
+ t=m;go(m+END);
+}
+function toggle(){if(playing){pause();return;}run(true);}
 // Next plays one scalar's computation and stops with its answer in place.
-function nextStep(){if(t>=JOBS.length){t=0;pause();return;}go(Math.min(JOBS.length,Math.floor(t+1e-9)+1));}
-// Clicking an entry rewinds to the start of its computation and plays just that one.
-function ask(n){if(n<0)return;t=n;go(n+1);}
+function nextStep(){if(playing)pause();if(t>=JOBS.length){t=0;KEEP={};draw();return;}run(false);}
+// Clicking an entry plays just that one.  Inside the current phase the others keep their
+// state; asking for an entry of a later phase finishes everything before it, and asking
+// for one of an earlier phase replays it with the rest of that phase filled.
+function ask(n){
+ if(n<0)return;
+ var pn=phase(n),pc=t>=JOBS.length?4:phase(cur().n),keep={};
+ if(pn===pc){for(var k in KEEP)keep[k]=KEEP[k];if(cur().u>=FW[JOBS[cur().n].k][0])keep[cur().n]=true;}
+ else if(pn<pc){for(var m=0;m<JOBS.length;m++)if(phase(m)===pn)keep[m]=true;}
+ delete keep[n];
+ KEEP=keep;t=n;ALL=false;go(n+END);
+}
 function jump(n){setT(n);}
 function setdim(){
  var nr=+$('rows').value,nc=+$('cols').value,i,j,B=[];
