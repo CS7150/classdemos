@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DPO without sampling</title>
+<meta name="description" content="Direct Preference Optimization on a language model small enough to see whole. DPO trains on a fixed set of preference pairs, with no sampling and no reward model, toward the same KL-regularized optimum that GRPO reaches by sampling. Watch where the pairs pin the policy down, where they leave it free, and what happens when the data runs out.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 24px;max-width:1150px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+h2{font-size:15.5px;font-weight:600;margin:8px 0 0}
+.quiz{margin:0}
+.row{gap:7px}
+button{height:30px;font-size:13px;padding:0 10px}
+button.main{min-width:96px}
+.seg button{height:28px;font-size:12.5px;padding:0 9px}
+select{height:30px;font-size:13px;padding:0 6px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:34px}
+input[type=range]{flex:0 1 130px;min-width:80px}
+.rd{font-size:14px;line-height:1.55;min-height:3.1em}
+.cap{font-size:12.5px;line-height:1.6;padding-top:4px}
+.nav{display:flex;align-items:baseline;gap:10px}
+.status{font-size:13px;color:var(--text-muted);font-variant-numeric:tabular-nums}
+.lg{font-size:12.5px}
+svg text{font-family:inherit}
+.sw{display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:-1px;margin-right:3px}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Reinforcement learning for language models</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>DPO<span>: the same target, from a fixed set of preferences</span></h1>
+<p class="quiz">The same 64-completion model and the same objective, E[r] &minus; &beta;&middot;KL(&pi;&#8214;&pi;<sub>ref</sub>), as in <a href="policy-gradient.html">REINFORCE to GRPO</a>. This time no one hands the learner a reward. A labeler compares pairs of completions sampled from the pretrained model and says which is better, preferring the higher-reward one with probability &sigma;(r<sub>1</sub> &minus; r<sub>2</sub>). <b style="color:var(--violet-ink)">DPO</b> trains on that fixed set of pairs. <b style="color:var(--green-ink)">GRPO</b>, for comparison, samples fresh completions and sees their rewards at every step. Both aim at the same dashed target.</p>
+
+<div class="row">
+  <span class="klab">reward:</span>
+  <div class="seg" id="rwSeg"><button data-k="endsd" class="on">ends in d</button><button data-k="hasc">contains c</button><button data-k="norep">no repeats</button><button data-k="counta">more a&rsquo;s</button></div>
+  <span class="klab">&beta;</span><input type="range" id="beta" min="0.05" max="2" step="0.05" value="0.5"><span class="knum" id="betaV">0.50</span>
+  <span class="klab">reward scale</span><input type="range" id="scale" min="0.5" max="8" step="0.5" value="2"><span class="knum" id="scaleV">2</span>
+</div>
+<div class="row">
+  <span class="klab">preference pairs</span><select id="K"><option>16</option><option selected>64</option><option>256</option><option>1024</option></select>
+  <div class="seg" id="srcSeg"><button data-k="off" class="on">fixed, sampled from &pi;<sub>ref</sub></button><button data-k="on">resampled from &pi;<sub>&theta;</sub> every 50 steps</button></div>
+</div>
+<div class="row">
+  <button class="main" id="go">Train</button>
+  <button id="step">One step</button>
+  <button id="reset">New pairs, start over</button>
+  <span class="klab">speed</span><select id="speed"><option value="2">2 steps/s</option><option value="30" selected>30 steps/s</option><option value="0">fast</option></select>
+  <span class="klab">show:</span>
+  <div class="seg" id="viewSeg"><button data-v="0" class="on">DPO</button><button data-v="1">GRPO</button></div>
+  <span class="status" id="status"></span>
+</div>
+
+<h2>1. The policy, and the pairs DPO learns from</h2>
+<div class="lg" id="legend"></div>
+<svg id="tree" viewBox="0 0 1120 486" role="img"><title>The tiny language model as a tree</title><desc>The next-token distribution at each prefix, the 64 completions with their rewards and probabilities, and under each completion how often it won and lost in the preference pairs.</desc><g id="gt"></g></svg>
+<div class="rd" id="rd"></div>
+
+<h2>2. The reward hidden in the policy: &beta; log &pi;(y)/&pi;<sub>ref</sub>(y)</h2>
+<svg id="imp" viewBox="0 0 1120 196" role="img"><title>Implicit reward</title><desc>For each completion, the policy's implicit reward beta times log of pi over pi-ref, as a bar, against the reward it should equal at the optimum, as a dashed tick.</desc><g id="gi"></g></svg>
+
+<h2>3. DPO against GRPO</h2>
+<svg id="chart" viewBox="0 0 1120 232" role="img"><title>Training curves</title><desc>Expected reward and distance from the optimum for DPO and GRPO, and DPO's loss on its own pairs and on fresh pairs.</desc><g id="gc"></g></svg>
+
+<div class="cap">
+<div><b>Where DPO comes from.</b> The objective E[r] &minus; &beta;&middot;KL(&pi;&#8214;&pi;<sub>ref</sub>) is maximized by &pi;*(y) = &pi;<sub>ref</sub>(y)&nbsp;exp(r(y)/&beta;)&nbsp;/&nbsp;Z. Take logs and solve for the reward: r(y) = &beta;&nbsp;log&nbsp;&pi;*(y)/&pi;<sub>ref</sub>(y) + &beta;&nbsp;log&nbsp;Z. So a policy <i>is</i> a reward model, up to the constant &beta;&nbsp;log&nbsp;Z; panel 2 plots that reward for the current policy. Preferences follow Bradley&ndash;Terry, P(y<sub>w</sub> &#8827; y<sub>l</sub>) = &sigma;(r<sub>w</sub> &minus; r<sub>l</sub>), which uses only reward differences, so the unknown constant cancels. Maximizing the likelihood of the labels gives DPO&rsquo;s loss, &minus;log&nbsp;&sigma;(&beta;&nbsp;log&nbsp;&pi;(y<sub>w</sub>)/&pi;<sub>ref</sub>(y<sub>w</sub>) &minus; &beta;&nbsp;log&nbsp;&pi;(y<sub>l</sub>)/&pi;<sub>ref</sub>(y<sub>l</sub>)): a logistic regression on pairs, with the policy as the classifier. No sampling, no reward model, no advantages.</div>
+<div><b>What the pairs pin down.</b> Each pair pushes up the winner&rsquo;s log-probability and pushes down the loser&rsquo;s, by an amount that shrinks once the pair is classified confidently. Completions that appear in many pairs end up with the right implicit reward: their bars in panel 2 reach their ticks. Completions that never appear are pinned by nothing. They move only because they share prefixes with completions that do, and in a real model because they share weights. With 64 pairs drawn from &pi;<sub>ref</sub>, a third of the completions appear at all.</div>
+<div><b>What happens when the data runs out.</b> Keep training on 64 pairs and the loss on those pairs keeps falling while the loss on fresh pairs from the same labeler turns up: DPO is overfitting. Lowering a loser&rsquo;s probability is always another way to widen the margin, and the mass has to go somewhere, often to completions the data never mentions. The expected reward often peaks and then declines, and the distance from &pi;* grows. More pairs push the problem back: at 1024 DPO lands close to &pi;*. So does resampling the pairs from the current policy every 50 steps, which is &ldquo;online&rdquo; or iterative DPO: the data now covers whatever the policy has started to prefer, the way GRPO&rsquo;s samples always do. Raise <b>reward scale</b> to make the labeler more certain, and nearly deterministic labels drive the fitted reward differences, and the margins, without bound, which IPO (Azar et al. 2023) was designed to fix.</div>
+<div><b>The trade.</b> GRPO needs a reward it can query on any new completion, such as a checked math answer or a passing unit test, and pays for samples at every step. DPO needs only a dataset of judgments made once, which is why it became the usual way to preference-tune open models after 2023. That is also its limit: it never sees its own new mistakes. When the reward became checkable, as in reasoning models trained on math and code, on-policy methods like GRPO came back.</div>
+</div>
+
+<script src="treelm.js"></script>
+<script>
+var M=TreeLM,T=M.T,R=M.R,Ln=M.Ln;
+var REF=M.refLogits(),PREF=M.probs(REF),QREF=M.leafProbs(PREF);
+var PRESET='endsd',R01=M.rewardTable(PRESET,REF),RW,SCALE=2,BETA=0.5,K=64,ONLINE=false,VIEW=0,SEED=1,LR_DPO=3;
+var QSTAR,PSTAR,ESTAR,LOGZ;
+var DATA=[],HELD=[],WIN,LOSE,DR,AG;
+function sig(z){return 1/(1+Math.exp(-z));}
+function target(){RW=R01.map(function(v){return v*SCALE;});QSTAR=M.optimal(QREF,RW,BETA);PSTAR=M.condOf(QSTAR);ESTAR=M.expect(QSTAR,RW);
+ var mx=Math.max.apply(null,RW),z=0;for(var y=0;y<M.NL;y++)z+=QREF[y]*Math.exp((RW[y]-mx)/BETA);LOGZ=Math.log(z)+mx/BETA;}
+function pairs(p,n,r){var D=[];for(var i=0;i<n;i++){var a=M.sample(p,r),b=M.sample(p,r);D.push(r()<sig(RW[a]-RW[b])?[a,b]:[b,a]);}return D;}
+function count(){WIN=new Float64Array(M.NL);LOSE=new Float64Array(M.NL);DATA.forEach(function(d){if(d[0]!==d[1]){WIN[d[0]]++;LOSE[d[1]]++;}});}
+function newAgent(i){var a={th:Float64Array.from(REF),r:M.rng(SEED*53+i*11+3),cR:[],cD:[],cL:[],cH:[],steps:0,last:null};
+ var q=M.leafProbs(M.probs(a.th));a.cR.push(M.expect(q,RW));a.cD.push(M.kl(q,QSTAR));return a;}
+function dpoLoss(q,D){var s=0,n=0;D.forEach(function(d){if(d[0]===d[1])return;var m=BETA*(Math.log(q[d[0]]/QREF[d[0]])-Math.log(q[d[1]]/QREF[d[1]]));s+=Math.log(1+Math.exp(-m));n++;});return n?s/n:0;}
+function reset(){target();DR=M.rng(SEED*97+5);DATA=pairs(PREF,K,DR);HELD=pairs(PREF,2000,M.rng(SEED*97+6));count();AG=[newAgent(0),newAgent(1)];
+ var q=M.leafProbs(PREF);AG[0].cL.push(dpoLoss(q,DATA));AG[0].cH.push(dpoLoss(q,HELD));draw();}
+function stepDPO(a){
+ var p=M.probs(a.th),q=M.leafProbs(p);
+ if(ONLINE&&a.steps>0&&a.steps%50===0){DATA=pairs(p,K,DR);count();}
+ var g=new Float64Array(M.NN*M.V),lq=q.map(function(v,i){return Math.log(v/QREF[i]);});
+ DATA.forEach(function(d){if(d[0]===d[1])return;var m=BETA*(lq[d[0]]-lq[d[1]]),c=BETA*sig(-m)/DATA.length;M.addGrad(g,p,d[0],c);M.addGrad(g,p,d[1],-c);});
+ for(var j=0;j<g.length;j++)a.th[j]+=LR_DPO*g[j];
+ a.steps++;var q2=M.leafProbs(M.probs(a.th));a.cR.push(M.expect(q2,RW));a.cD.push(M.kl(q2,QSTAR));a.cL.push(dpoLoss(q2,DATA));a.cH.push(dpoLoss(q2,HELD));}
+function stepGRPO(a){
+ var p=M.probs(a.th),q=M.leafProbs(p),ys=[],rs=[],G=8;
+ for(var i=0;i<G;i++){var y=M.sample(p,a.r);ys.push(y);rs.push(RW[y]);}
+ var mean=rs.reduce(function(s,v){return s+v;},0)/G,g=new Float64Array(M.NN*M.V);
+ ys.forEach(function(y,i){M.addGrad(g,p,y,(rs[i]-mean)/G);});M.addKLGrad(g,p,q,QREF,BETA);
+ var lr=Math.min(0.5,1/SCALE);for(var j=0;j<g.length;j++)a.th[j]+=lr*g[j];
+ a.last={ys:ys,A:rs.map(function(v){return v-mean;})};
+ a.steps++;var q2=M.leafProbs(M.probs(a.th));a.cR.push(M.expect(q2,RW));a.cD.push(M.kl(q2,QSTAR));}
+function stepAll(){stepDPO(AG[0]);stepGRPO(AG[1]);}
+// ------------------------------------------------------------ drawing
+var MAXC=1;
+function leafExtra(y,x,w,bottom){
+ if(VIEW!==0)return '';
+ var h=24,s='',top=bottom+16;
+ var hw=WIN[y]?Math.max(1.5,Math.sqrt(WIN[y]/MAXC)*h):0,hl=LOSE[y]?Math.max(1.5,Math.sqrt(LOSE[y]/MAXC)*h):0;
+ s+=R(x+w/2-5,top+h-hw,4.5,hw,'var(--green)',' opacity="0.7"')+R(x+w/2+0.5,top+h-hl,4.5,hl,'var(--red)',' opacity="0.7"');
+ if(!WIN[y]&&!LOSE[y])s+=T(x+w/2,top+h-2,'&middot;','tn','middle');
+ return s;}
+function drawTree(){
+ var a=AG[VIEW],p=M.probs(a.th),q=M.leafProbs(p);MAXC=1;for(var y=0;y<M.NL;y++)MAXC=Math.max(MAXC,WIN[y],LOSE[y]);
+ var smp=VIEW===1&&a.last?a.last.ys.map(function(y,i){return {y:y,a:a.last.A[i]};}):null;
+ var s=M.drawTree({p:p,pref:PREF,pstar:PSTAR,q:q,qref:QREF,qstar:QSTAR,R:R01,samples:smp,leafExtra:leafExtra});
+ if(VIEW===0)s+=T(M.TX0-6,M.PY+M.PH+30,'pairs','tn','end')+T(M.TX0-6,M.PY+M.PH+44,'won, lost','tn','end',null,' style="font-size:11px"');
+ else s+=T(M.TX0,M.PY+M.PH+34,'GRPO learns from fresh samples each step; it has no fixed dataset.','tn','start');
+ document.getElementById('gt').innerHTML=s;
+ var cov=0;for(y=0;y<M.NL;y++)if(WIN[y]||LOSE[y])cov++;
+ var ER=M.expect(q,RW),D=M.kl(q,QSTAR),txt='';
+ if(VIEW===0)txt='<span style="color:var(--violet-ink)">DPO</span> after '+a.steps+' steps on '+DATA.length+' pairs'+(ONLINE?' (resampled from the policy every 50 steps)':' sampled once from &pi;<sub>ref</sub>')+', which mention <b>'+cov+'</b> of the 64 completions. ';
+ else txt='<span style="color:var(--green-ink)">GRPO</span> after '+a.steps+' steps of 8 fresh samples each, '+(a.steps*8)+' rewards queried in all. ';
+ txt+='Expected reward <b>'+ER.toFixed(2)+'</b> (target '+ESTAR.toFixed(2)+'); KL(&pi;&#8214;&pi;*) = <b>'+D.toFixed(3)+'</b>, which is 0 only at the target.';
+ document.getElementById('rd').innerHTML=txt;}
+function drawImp(){
+ var a=AG[VIEW],q=M.leafProbs(M.probs(a.th)),imp=[],tgt=[],y,s='',x0=M.TX0,cw=M.CW,top=14,H=150;
+ for(y=0;y<M.NL;y++){imp.push(BETA*Math.log(q[y]/QREF[y]));tgt.push(RW[y]-BETA*LOGZ);}
+ var lo=Math.min.apply(null,tgt)-1.5,hi=Math.max(Math.max.apply(null,tgt)+0.8,0.5);
+ function Y(v){return top+(hi-Math.max(lo,Math.min(hi,v)))/(hi-lo)*H;}
+ s+=Ln(x0,Y(0),1112,Y(0),'var(--border-strong)',1)+T(x0-6,Y(0)+4,'0','tn','end')+T(x0-6,Y(hi)+10,hi.toFixed(1),'tn','end')+T(x0-6,Y(lo),lo.toFixed(1),'tn','end');
+ for(y=0;y<M.NL;y++){var x=x0+y*cw,v=imp[y],y1=Y(Math.max(0,v)),y2=Y(Math.min(0,v));
+  s+=R(x+2,y1,cw-4,y2-y1,VIEW===0?'var(--violet)':'var(--green)',' opacity="0.75"');
+  if(v<lo)s+=T(x+cw/2,top+H+12,'&darr;','tn','middle');
+  var ty=Y(tgt[y]);s+=Ln(x+1,ty,x+cw-1,ty,'var(--text-primary)',1.6,' stroke-dasharray="3 2"');}
+ s+=T(x0,top+H+28,'bars: &beta; log &pi;(y)/&pi;<tspan dy="3" font-size="10">ref</tspan><tspan dy="-3">(y)</tspan> for the policy shown &nbsp;&middot;&nbsp; dashed: r(y) &minus; &beta; log Z, where &pi;* would put them &nbsp;&middot;&nbsp; same 64 completions as above','tn','start');
+ document.getElementById('gi').innerHTML=s;}
+function drawCharts(){
+ var s='',W=296,H=150,y0=34,xs=[56,430,804],cD='var(--violet)',cG='var(--green)';
+ s+=M.chart(xs[0],y0,W,H,[{d:AG[0].cR,c:cD,w:2.6},{d:AG[1].cR,c:cG,w:2}],{title:'expected reward',ymin:0,ymax:SCALE*1.05,hlines:[{v:ESTAR,c:'var(--text-secondary)',label:'&pi;*'}]});
+ var dm=0.1;AG.forEach(function(a){a.cD.forEach(function(v){if(v>dm)dm=v;});});
+ s+=M.chart(xs[1],y0,W,H,[{d:AG[0].cD,c:cD,w:2.6},{d:AG[1].cD,c:cG,w:2}],{title:'KL(&pi; &#8214; &pi;*): distance from the target',ymin:0,ymax:dm*1.05});
+ var lm=0.1;AG[0].cL.concat(AG[0].cH).forEach(function(v){if(v>lm)lm=v;});
+ s+=M.chart(xs[2],y0,W,H,[{d:AG[0].cL,c:cD,w:2.6},{d:AG[0].cH,c:cD,w:2,dash:'5 3'}],{title:'DPO loss: its pairs, and fresh pairs',ymin:0,ymax:lm*1.05});
+ s+=R(56,214,14,4,cD)+T(76,220,'DPO','tn','start','var(--violet-ink)')+R(130,214,14,4,cG)+T(150,220,'GRPO, sampling','tn','start','var(--green-ink)')+
+   R(804,214,14,4,cD)+T(824,220,'on its pairs','tn','start','var(--violet-ink)')+'<line x1="920" y1="216" x2="934" y2="216" stroke="var(--violet)" stroke-width="2" stroke-dasharray="5 3"/>'+T(940,220,'on 2000 fresh pairs','tn','start','var(--violet-ink)');
+ document.getElementById('gc').innerHTML=s;}
+function draw(){drawTree();drawImp();drawCharts();document.getElementById('status').textContent='step '+AG[0].steps;}
+// ------------------------------------------------------------ controls
+function segOn(id,val){Array.from(document.querySelectorAll('#'+id+' button')).forEach(function(b){b.classList.toggle('on',(b.dataset.k||b.dataset.v)===String(val));});}
+document.getElementById('legend').innerHTML=M.legendHTML().replace('last batch, pushed up or down','GRPO&rsquo;s last batch')+' &nbsp; <span class="sw" style="background:var(--green);opacity:.7"></span><span class="sw" style="background:var(--red);opacity:.7"></span>times a completion won or lost in DPO&rsquo;s pairs';
+Array.from(document.querySelectorAll('#rwSeg button')).forEach(function(b){b.addEventListener('click',function(){PRESET=b.dataset.k;R01=M.rewardTable(PRESET,REF);segOn('rwSeg',PRESET);reset();});});
+Array.from(document.querySelectorAll('#srcSeg button')).forEach(function(b){b.addEventListener('click',function(){ONLINE=b.dataset.k==='on';segOn('srcSeg',b.dataset.k);reset();});});
+Array.from(document.querySelectorAll('#viewSeg button')).forEach(function(b){b.addEventListener('click',function(){VIEW=+b.dataset.v;segOn('viewSeg',VIEW);draw();});});
+document.getElementById('beta').addEventListener('input',function(e){BETA=+e.target.value;document.getElementById('betaV').textContent=BETA.toFixed(2);reset();});
+document.getElementById('scale').addEventListener('input',function(e){SCALE=+e.target.value;document.getElementById('scaleV').textContent=SCALE;reset();});
+document.getElementById('K').addEventListener('change',function(e){K=+e.target.value;reset();});
+var RUN=false,SPEED=30,ACC=0,LAST=0;
+document.getElementById('speed').addEventListener('change',function(e){SPEED=+e.target.value;});
+document.getElementById('go').addEventListener('click',function(){RUN=!RUN;this.textContent=RUN?'Pause':'Train';});
+document.getElementById('step').addEventListener('click',function(){stepAll();draw();});
+document.getElementById('reset').addEventListener('click',function(){SEED++;reset();});
+function frame(now){var dt=Math.min(0.1,(now-(LAST||now))/1000);LAST=now;
+ if(RUN){var n;if(SPEED){ACC+=SPEED*dt;n=Math.floor(ACC);ACC-=n;}else n=1e9;
+  var t0=performance.now(),k=0;while(k<n&&performance.now()-t0<12){stepAll();k++;}
+  if(k)draw();}
+ requestAnimationFrame(frame);}
+reset();requestAnimationFrame(frame);
+</script>
+</body>
+</html>

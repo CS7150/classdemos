@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>REINFORCE to GRPO</title>
+<meta name="description" content="Reinforcement learning on a language model small enough to see whole: four tokens, three steps, 64 completions. REINFORCE, REINFORCE with a baseline, and GRPO train side by side, live in the browser, toward the KL-regularized optimum drawn as a dashed target.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 24px;max-width:1150px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+h2{font-size:15.5px;font-weight:600;margin:8px 0 0}
+.quiz{margin:0}
+.row{gap:7px}
+button{height:30px;font-size:13px;padding:0 10px}
+button.main{min-width:96px}
+.seg button{height:28px;font-size:12.5px;padding:0 9px}
+select{height:30px;font-size:13px;padding:0 6px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:34px}
+input[type=range]{flex:0 1 130px;min-width:80px}
+label.cb{font-size:12.5px}
+input[type=checkbox]{width:15px;height:15px}
+.rd{font-size:14px;line-height:1.55;min-height:3.1em}
+.cap{font-size:12.5px;line-height:1.6;padding-top:4px}
+.nav{display:flex;align-items:baseline;gap:10px}
+.status{font-size:13px;color:var(--text-muted);font-variant-numeric:tabular-nums}
+.lg{font-size:12.5px}
+svg text{font-family:inherit}
+.leaf{cursor:pointer}
+.sw{display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:-1px;margin-right:3px}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Reinforcement learning for language models</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>From REINFORCE to GRPO<span>: three estimates of one gradient</span></h1>
+<p class="quiz">This language model has four tokens, <b>a b c d</b>, and writes exactly three of them, so all 64 of its completions fit on the screen. It starts from a <b>pretrained</b> model &pi;<sub>ref</sub> and is rewarded for some completions. The goal is to maximize expected reward while staying close to &pi;<sub>ref</sub>: E[r] &minus; &beta;&middot;KL(&pi;&#8214;&pi;<sub>ref</sub>). Three learners train side by side on the same budget of samples, and differ only in how they weight each sample. Click a reward cell to change the reward.</p>
+
+<div class="row">
+  <span class="klab">reward:</span>
+  <div class="seg" id="rwSeg"><button data-k="endsd" class="on">ends in d</button><button data-k="hasc">contains c</button><button data-k="norep">no repeats</button><button data-k="counta">more a&rsquo;s</button><button data-k="needle">one rare completion</button><button data-k="custom" id="customB">your own</button></div>
+  <span class="klab">&beta;</span><input type="range" id="beta" min="0" max="1" step="0.01" value="0.25"><span class="knum" id="betaV">0.25</span>
+  <span class="klab">add to every reward</span><input type="range" id="shift" min="-1" max="4" step="0.5" value="0"><span class="knum" id="shiftV">0</span>
+</div>
+<div class="row">
+  <button class="main" id="go">Train</button>
+  <button id="step">One step</button>
+  <button id="reset">Start over</button>
+  <span class="klab">speed</span><select id="speed"><option value="2">2 steps/s</option><option value="30" selected>30 steps/s</option><option value="0">fast</option></select>
+  <span class="klab">samples per step</span><select id="G"><option>4</option><option selected>8</option><option>16</option></select>
+  <span class="klab">learning rate</span><select id="lr"><option>0.1</option><option>0.25</option><option selected>0.5</option><option>1</option><option>2</option></select>
+  <label class="cb"><input type="checkbox" id="std" checked>GRPO divides by the group&rsquo;s std</label>
+</div>
+<div class="row">
+  <span class="klab">show:</span>
+  <div class="seg" id="viewSeg"><button data-v="0">REINFORCE</button><button data-v="1">REINFORCE with baseline</button><button data-v="2" class="on">GRPO</button></div>
+  <span class="status" id="status"></span>
+</div>
+
+<h2>1. The policy: a next-token distribution at every prefix</h2>
+<div class="lg" id="legend"></div>
+<svg id="tree" viewBox="0 0 1120 444" role="img"><title>The tiny language model as a tree</title><desc>The root holds the distribution over the first token, the next row the distributions over the second token after each first token, and the third row the distributions over the third token. Below, the 64 completions with their rewards and their probabilities under the policy, the pretrained model, and the KL-regularized optimum.</desc><g id="gt"></g></svg>
+<div class="rd" id="rd"></div>
+
+<h2>2. The last batch: each completion&rsquo;s reward and the weight it gets</h2>
+<svg id="batch" viewBox="0 0 1120 142" role="img"><title>The last batch of samples</title><desc>Each sampled completion with its reward and its advantage, the weight on the gradient of its log-probability.</desc><g id="gb"></g></svg>
+
+<h2>3. All three, trained side by side</h2>
+<svg id="chart" viewBox="0 0 1120 232" role="img"><title>Training curves</title><desc>Expected reward, KL divergence from the pretrained model, and how well each step's gradient estimate points along the true gradient, for the three learners.</desc><g id="gc"></g></svg>
+
+<div class="cap">
+<div><b>The model.</b> A language model is a policy: at each prefix it gives a distribution over the next token, and a completion is a path through this tree. Here every prefix has its own softmax over four logits, 21 prefixes in all; a real model computes the same softmaxes with one shared network, which is what lets it generalize. Its log-probability of a completion is the sum along the path, log &pi;(y) = log &pi;(y<sub>1</sub>) + log &pi;(y<sub>2</sub>|y<sub>1</sub>) + log &pi;(y<sub>3</sub>|y<sub>1</sub>y<sub>2</sub>). The reward arrives only at the end, so each completion is treated as one action. The lower plot uses a square-root scale so that rare completions stay visible.</div>
+<div><b>REINFORCE.</b> You cannot backpropagate through sampling, but &nabla;E<sub>y~&pi;</sub>[r(y)] = E<sub>y~&pi;</sub>[r(y)&nbsp;&nabla;log&nbsp;&pi;(y)], so sampling a batch and stepping along &Sigma;<sub>i</sub> r<sub>i</sub>&nbsp;&nabla;log&nbsp;&pi;(y<sub>i</sub>) climbs the expected reward. That is supervised fine-tuning on the model&rsquo;s own samples, each weighted by its reward. With rewards of 0 and 1 it is exactly &ldquo;keep the samples that worked and fine-tune on them.&rdquo; Every sampled token is pushed up at its prefix, by the log-softmax gradient, one-hot minus probabilities.</div>
+<div><b>Why a baseline.</b> Subtracting any b that does not depend on the sample leaves the gradient unbiased, because E[&nabla;log&nbsp;&pi;] = 0. It changes the noise. Raise <b>add to every reward</b>: the objective&rsquo;s gradient is unchanged, but REINFORCE now pushes every sample up and relies on small differences between big pushes, and the right-hand chart shows its steps pointing in nearly random directions. The baseline learner subtracts a running average of past rewards and does not notice the shift. Weight r &minus; b is the <b>advantage</b>: better than usual goes up, worse goes down.</div>
+<div><b>GRPO.</b> DeepSeek&rsquo;s GRPO uses the batch itself as the baseline: sample a group of completions for the same prompt and give each the advantage (r<sub>i</sub> &minus; mean)/std. Two consequences are visible here. A group whose rewards are all equal teaches nothing; the status line counts those steps. And dividing by the std rescales the reward by 1/std, which amplifies rare successes (try <b>one rare completion</b>) but changes the objective: with <b>more a&rsquo;s</b>, GRPO overshoots the dashed target, and unchecking the box brings it back. Real GRPO also takes several steps per batch with PPO&rsquo;s clipped probability ratio; with one step per batch, as here, the ratio is 1 and the clipping does nothing. The KL term&rsquo;s gradient is computed exactly in this demo; real implementations estimate it from the samples. PPO, the original RLHF algorithm, replaces the group baseline with a learned value network, a second model as big as the first.</div>
+<div><b>The dashed target.</b> The objective E[r] &minus; &beta;&middot;KL(&pi;&#8214;&pi;<sub>ref</sub>) has a closed-form maximizer, &pi;*(y) &prop; &pi;<sub>ref</sub>(y)&nbsp;exp(r(y)/&beta;): the pretrained model, reweighted toward reward. Every learner here is a noisy way to climb to it. Lower &beta; and &pi;* piles onto the rewarded completions, in the proportions &pi;<sub>ref</sub> already gave them; raise it and &pi;* stays near &pi;<sub>ref</sub>. At &beta; = 0 nothing holds the policy back, and it collapses onto whichever rewarded completion it happens to find. Inverting this formula is how <a href="dpo.html">DPO</a> gets rid of the sampling.</div>
+</div>
+
+<script src="treelm.js"></script>
+<script>
+var M=TreeLM,T=M.T,R=M.R,Ln=M.Ln;
+var REF=M.refLogits(),PREF=M.probs(REF),QREF=M.leafProbs(PREF);
+var PRESET='endsd',RW=M.rewardTable(PRESET,REF),BETA=0.25,SHIFT=0,LR=0.5,G=8,STD=true,VIEW=2,SEED=1;
+var QSTAR,PSTAR,ESTAR,KLSTAR;
+var METH=[{name:'REINFORCE',col:'var(--orange)',ink:'var(--orange-ink)'},{name:'with baseline',col:'var(--blue)',ink:'var(--blue-ink)'},{name:'GRPO',col:'var(--green)',ink:'var(--green-ink)'}];
+var AG=[];
+function target(){QSTAR=M.optimal(QREF,RW,BETA);PSTAR=M.condOf(QSTAR);ESTAR=M.expect(QSTAR,RW);KLSTAR=M.kl(QSTAR,QREF);}
+function newAgent(i){var a={th:Float64Array.from(REF),r:M.rng(SEED*31+i*7+1),b:null,last:null,cR:[],cKL:[],cCos:[],cosE:null,zero:0,steps:0};
+ var q=M.leafProbs(M.probs(a.th));a.cR.push(M.expect(q,RW));a.cKL.push(0);return a;}
+function reset(){AG=[0,1,2].map(newAgent);target();draw();}
+function stepAgent(a,m){
+ var p=M.probs(a.th),q=M.leafProbs(p),ys=[],rs=[],i;
+ for(i=0;i<G;i++){var y=M.sample(p,a.r);ys.push(y);rs.push(RW[y]+SHIFT);}
+ var mean=rs.reduce(function(s,v){return s+v;},0)/G,sd=Math.sqrt(rs.reduce(function(s,v){return s+(v-mean)*(v-mean);},0)/G);
+ if(a.b===null)a.b=mean;
+ var bUsed=a.b,A=rs.map(function(v){return m===0?v:m===1?v-bUsed:(STD?(sd>0?(v-mean)/(sd+1e-4):0):v-mean);});
+ if(m===1)a.b=0.9*a.b+0.1*mean;
+ if(sd===0)a.zero++;
+ var g=new Float64Array(M.NN*M.V);ys.forEach(function(y,i){M.addGrad(g,p,y,A[i]/G);});
+ // how well the sampled reward gradient lines up with the exact one
+ var tg=new Float64Array(M.NN*M.V);for(var y2=0;y2<M.NL;y2++)if(RW[y2])M.addGrad(tg,p,y2,q[y2]*RW[y2]);
+ var d=0,n1=0,n2=0;for(var j=0;j<g.length;j++){d+=g[j]*tg[j];n1+=g[j]*g[j];n2+=tg[j]*tg[j];}
+ var cos=n1>1e-20&&n2>1e-20?d/Math.sqrt(n1*n2):0;a.cosE=a.cosE===null?cos:0.95*a.cosE+0.05*cos;
+ M.addKLGrad(g,p,q,QREF,BETA);
+ for(j=0;j<g.length;j++)a.th[j]+=LR*g[j];
+ a.last={ys:ys,rs:rs,A:A,mean:mean,sd:sd,b:bUsed};a.steps++;
+ var q2=M.leafProbs(M.probs(a.th));a.cR.push(M.expect(q2,RW));a.cKL.push(M.kl(q2,QREF));a.cCos.push(a.cosE);}
+function stepAll(){for(var m=0;m<3;m++)stepAgent(AG[m],m);}
+// ------------------------------------------------------------ drawing
+function seqHTML(y,sz){var s='';for(var d=0;d<3;d++){var k=M.tokOf(y,d);s+='<tspan style="fill:'+M.TINK[k]+';font-weight:600">'+M.TOK[k]+'</tspan>';}return s;}
+function fmt(v){return (v>=0?'+':'&minus;')+Math.abs(v).toFixed(2);}
+function drawBatch(){
+ var a=AG[VIEW],s='';
+ if(!a.last){document.getElementById('gb').innerHTML=T(560,64,'Press One step or Train to sample a batch.','tn','middle');return;}
+ var L=a.last,n=L.ys.length,x0=150,w=(1120-x0-8)/n,amax=Math.max(1,Math.max.apply(null,L.A.map(Math.abs))),z=94,hh=30;
+ s+=T(x0-10,24,'completion','tn','end')+T(x0-10,46,'reward','tn','end')+T(x0-10,z+4,'advantage','tn','end');
+ s+=Ln(x0,z,1112,z,'var(--border-strong)',1);
+ for(var i=0;i<n;i++){var cx=x0+(i+0.5)*w,A=L.A[i],h=Math.abs(A)/amax*hh;
+  s+=T(cx,24,seqHTML(L.ys[i]),'ts','middle');
+  s+=T(cx,46,(L.rs[i]%1?L.rs[i].toFixed(2):L.rs[i].toFixed(0)),'tn','middle',L.rs[i]-SHIFT>0?'var(--green-ink)':null);
+  s+=R(cx-w*0.28,A>=0?z-h:z,w*0.56,h,A>0?'var(--green)':'var(--red)',' opacity="0.65" rx="2"');
+  s+=T(cx,A>=0?z+15:z-6,A===0?'0':fmt(A),'tn','middle',null,' style="font-size:'+(n>8?11:13)+'px"');}
+ var note=VIEW===0?'weight = the reward itself':VIEW===1?'weight = reward &minus; running average b = '+L.b.toFixed(2):
+   (STD?'weight = (reward &minus; group mean '+L.mean.toFixed(2)+') / group std '+L.sd.toFixed(2):'weight = reward &minus; group mean '+L.mean.toFixed(2))+(L.sd===0?': every reward equal, so no update':'');
+ s+=T(x0,138,note,'tn','start',METH[VIEW].ink);
+ document.getElementById('gb').innerHTML=s;}
+function drawTree(){
+ var a=AG[VIEW],p=M.probs(a.th),q=M.leafProbs(p),smp=a.last?a.last.ys.map(function(y,i){return {y:y,a:a.last.A[i]};}):null;
+ document.getElementById('gt').innerHTML=M.drawTree({p:p,pref:PREF,pstar:PSTAR,q:q,qref:QREF,qstar:QSTAR,R:RW,samples:smp});
+ Array.from(document.querySelectorAll('#gt .leaf')).forEach(function(c){c.addEventListener('click',function(){var y=+c.dataset.y;
+  RW=Float64Array.from(RW);RW[y]=RW[y]>0?0:1;PRESET='custom';segOn('rwSeg','custom');target();draw();});});
+ var ER=M.expect(q,RW),KL=M.kl(q,QREF),H=M.entropy(q),top=0;for(var y=1;y<M.NL;y++)if(q[y]>q[top])top=y;
+ var s='<span style="color:'+METH[VIEW].ink+'">'+(VIEW===1?'REINFORCE with baseline':METH[VIEW].name)+'</span> after '+a.steps+' steps: expected reward <b>'+ER.toFixed(3)+'</b> (target '+ESTAR.toFixed(3)+'), '+
+  'KL from the pretrained model <b>'+KL.toFixed(2)+'</b> nats (target '+KLSTAR.toFixed(2)+'), entropy '+H.toFixed(2)+' of a possible '+Math.log(64).toFixed(2)+'. ';
+ s+='Its most likely completion is <b>'+M.leafStr(top)+'</b> at '+(q[top]*100).toFixed(0)+'%. ';
+ if(BETA===0)s+='With &beta; = 0 nothing ties it to &pi;<sub>ref</sub>; the target shown is only one of many maximizers.';
+ else if(a.steps===0)s+='It starts as the pretrained model; the dashed outlines show where the KL-regularized objective wants it to end up.';
+ document.getElementById('rd').innerHTML=s;}
+function drawCharts(){
+ var s='',W=296,H=150,y0=34,xs=[56,430,804];
+ var ser=function(key){return AG.map(function(a,m){return {d:a[key],c:METH[m].col,w:m===VIEW?2.8:1.8};});};
+ s+=M.chart(xs[0],y0,W,H,ser('cR'),{title:'expected reward',ymin:0,ymax:1.05*Math.max(1e-3,Math.max.apply(null,RW)),hlines:[{v:ESTAR,c:'var(--text-secondary)',label:'&pi;*'}]});
+ var kmax=Math.max(0.2,KLSTAR*1.6);AG.forEach(function(a){a.cKL.forEach(function(v){if(v>kmax)kmax=v;});});
+ s+=M.chart(xs[1],y0,W,H,ser('cKL'),{title:'KL(&pi; &#8214; &pi;<tspan dy="3" font-size="10">ref</tspan><tspan dy="-3">)</tspan>, nats',ymin:0,ymax:kmax*1.05,hlines:[{v:KLSTAR,c:'var(--text-secondary)',label:'&pi;*'}]});
+ s+=M.chart(xs[2],y0,W,H,ser('cCos'),{title:'cosine of each step with the true gradient',ymin:-0.2,ymax:1,fmt:function(v){return v.toFixed(1);},hlines:[{v:0,c:'var(--border-strong)'}]});
+ var lx=60;METH.forEach(function(m,i){var lab=i===0?'REINFORCE':i===1?'REINFORCE with baseline':'GRPO'+(STD?'':' (no std)');
+  s+=R(lx,214,14,4,m.col)+T(lx+20,220,lab+(AG[i].steps?': '+AG[i].cR[AG[i].cR.length-1].toFixed(2):''),'tn','start',m.ink);lx+=lab.length*7.4+90;});
+ document.getElementById('gc').innerHTML=s;}
+function draw(){drawTree();drawBatch();drawCharts();
+ var a=AG[2];document.getElementById('status').textContent='step '+a.steps+(a.steps?' · GRPO groups with every reward equal: '+a.zero+' of '+a.steps+' ('+Math.round(100*a.zero/a.steps)+'%)':'');}
+// ------------------------------------------------------------ controls
+function segOn(id,val){Array.from(document.querySelectorAll('#'+id+' button')).forEach(function(b){b.classList.toggle('on',(b.dataset.k||b.dataset.v)===String(val));});}
+document.getElementById('legend').innerHTML=M.legendHTML();
+Array.from(document.querySelectorAll('#rwSeg button')).forEach(function(b){b.addEventListener('click',function(){
+ if(b.dataset.k==='custom'){RW=new Float64Array(M.NL);}else{RW=M.rewardTable(b.dataset.k,REF);}
+ PRESET=b.dataset.k;segOn('rwSeg',PRESET);reset();});});
+Array.from(document.querySelectorAll('#viewSeg button')).forEach(function(b){b.addEventListener('click',function(){VIEW=+b.dataset.v;segOn('viewSeg',VIEW);draw();});});
+document.getElementById('beta').addEventListener('input',function(e){BETA=+e.target.value;document.getElementById('betaV').textContent=BETA.toFixed(2);target();draw();});
+document.getElementById('shift').addEventListener('input',function(e){SHIFT=+e.target.value;document.getElementById('shiftV').textContent=(SHIFT>0?'+':'')+SHIFT;draw();});
+document.getElementById('G').addEventListener('change',function(e){G=+e.target.value;});
+document.getElementById('lr').addEventListener('change',function(e){LR=+e.target.value;});
+document.getElementById('std').addEventListener('change',function(e){STD=e.target.checked;draw();});
+var RUN=false,SPEED=30,ACC=0,LAST=0;
+document.getElementById('speed').addEventListener('change',function(e){SPEED=+e.target.value;});
+document.getElementById('go').addEventListener('click',function(){RUN=!RUN;this.textContent=RUN?'Pause':'Train';});
+document.getElementById('step').addEventListener('click',function(){stepAll();draw();});
+document.getElementById('reset').addEventListener('click',function(){SEED++;reset();});
+function frame(now){var dt=Math.min(0.1,(now-(LAST||now))/1000);LAST=now;
+ if(RUN){var n;if(SPEED){ACC+=SPEED*dt;n=Math.floor(ACC);ACC-=n;}else n=1e9;
+  var t0=performance.now(),k=0;while(k<n&&performance.now()-t0<12){stepAll();k++;}
+  if(k)draw();}
+ requestAnimationFrame(frame);}
+reset();requestAnimationFrame(frame);
+</script>
+</body>
+</html>
