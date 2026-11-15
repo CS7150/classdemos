@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RL as guidance for language models</title>
+<meta name="description" content="A generator that takes one step per token and is rewarded only for how it ends: a story that must end happy, a poem line with ten syllables, code whose brackets balance. The KL-regularized RL optimum bends every step toward the goal by adding the log of a soft value function to each next-token logit: classifier guidance for a language model. Computed exactly, and compared with naive classifier guidance.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 20px;max-width:1150px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+.quiz{margin:0}
+svg#fig{max-height:70vh;touch-action:none;cursor:crosshair}
+.row{gap:7px}
+button{height:30px;font-size:13px;padding:0 10px}
+.seg button{height:28px;font-size:12.5px;padding:0 9px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:44px}
+input[type=range]{flex:0 1 200px;min-width:100px}
+label.cb{font-size:12.5px}
+.rd{font-size:14px;line-height:1.65;min-height:6.6em}
+.rd b{font-weight:600}
+.cap{font-size:12.5px;line-height:1.65;padding-top:4px}
+.cap div+div{margin-top:5px}
+.nav{display:flex;align-items:baseline;gap:10px}
+svg text{font-family:inherit}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Reinforcement learning for language models</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>RL is guidance for language models<span>: bending every token toward how the output must end</span></h1>
+<p class="quiz" id="intro"></p>
+
+<div class="row">
+  <span class="klab">example:</span><div class="seg" id="scSeg"><button data-k="mood" class="on">a story that ends happy</button><button data-k="poem">a ten-syllable line</button><button data-k="code">code with balanced brackets</button></div>
+</div>
+<div class="row">
+  <span class="klab">guidance strength w = 1/&beta;</span><input type="range" id="w" min="0" max="80" step="1" value="30"><span class="knum" id="wV"></span>
+  <span class="klab">guide with:</span><div class="seg" id="modeSeg"><button data-k="exact" class="on">RL optimum (soft value)</button><button data-k="naive">naive classifier guidance</button></div>
+  <button onclick="resample()">New samples</button>
+  <label class="cb"><input type="checkbox" id="arrows" checked> drift arrows</label>
+</div>
+
+<svg id="fig" viewBox="0 0 1000 480" role="img">
+<title>A generator, its value field, and the guided generator</title>
+<desc>Three panels with the token number across and a one-dimensional state up. Left: samples from the base model, fanning out. Middle: the soft value of every (token, state) as a heat map, with arrows for the guided model's expected change of state. Right: samples from the guided model using the same random numbers, bending toward the goal. Beside each panel, the distribution of the final state.</desc>
+<g id="stage"></g>
+</svg>
+
+<div class="rd" id="readout"></div>
+<div class="cap" id="caption"></div>
+
+<script>
+/* ---------- the model, exactly ----------
+   A state x (an integer) starts at 0 and changes by a random step at each of N tokens: the base model p.
+   The reward is r(x_N) = log q(x_N), where q is a classifier of the finished output ("is it happy / ten syllables / valid").
+   Objective: max_pi E[r] - beta KL(pi || p) over whole outputs.  With w = 1/beta, e^{r/beta} = q^w. */
+var DEAD=-1e4;
+var SC={
+ mood:{N:24,steps:[[1,.5,'up'],[-1,.5,'down']],ylo:-14,yhi:14,cell:2,line:2,
+  q:function(x){return -Math.log1p(Math.exp(-(x-2)/1.5));},dead:function(){return false;},
+  unit:'sentence',state:'mood',lineLab:'classifier says 50% happy',
+  intro:'A story has 24 sentences. Each moves its mood up or down by one, with probability &frac12; each: that is the base language model. Only the last sentence is scored, by a classifier that says how likely a story ending at that mood is to be happy. Guidance bends <em>every</em> sentence toward a happy ending, though the reward arrives only at the end.',
+  setup:'The state is the mood x; q(x) = sigmoid((x &minus; 2)/1.5) is the classifier&rsquo;s probability that a story ending at mood x is happy. This reward is soft, so w matters: it is how strictly the ending is enforced.'},
+ poem:{N:8,steps:[[1,.5,'1 syllable'],[2,.35,'2 syllables'],[3,.15,'3 syllables']],ylo:0,yhi:26,cell:1,line:10,
+  q:function(x){return -.5*(x-10)*(x-10);},dead:function(){return false;},
+  unit:'word',state:'syllables so far',lineLab:'target: 10 syllables',
+  intro:'A line of verse has 8 words, and each word has 1, 2 or 3 syllables (probabilities .5, .35, .15): that is the base language model. Only the finished line is scored, by how close its syllable count is to ten. Guidance steers the running count from the first word so that the line lands on ten.',
+  setup:'The state is the syllable count so far; q(x) = exp(&minus;(x &minus; 10)<sup>2</sup>/2) scores the finished line. Because q<sup>w</sup> is a Gaussian that narrows as w grows, w is the strictness of the meter.'},
+ code:{N:16,steps:[[1,.35,'&ldquo;(&rdquo;'],[-1,.35,'&ldquo;)&rdquo;'],[0,.30,'other token']],ylo:-3,yhi:9,cell:1,line:0,
+  q:function(x){return x===0?0:DEAD;},dead:function(x){return x<0;},
+  unit:'token',state:'open brackets',lineLab:'brackets balanced',
+  intro:'A program has 16 tokens: &ldquo;(&rdquo; (probability .35), &ldquo;)&rdquo; (.35) or some other token (.30): that is the base code model. It only counts as valid if the brackets balance: never close one that is not open, and end with none open. Guidance steers every token so that the program can still be completed validly.',
+  setup:'The state is the number of open brackets. A program is dead the moment the count goes below zero, and valid only if it ends at zero. The reward is hard: q is 0 or 1, so q<sup>w</sup> = q for every w &gt; 0 and the RL optimum does not depend on w at all. It is exactly the base model <em>conditioned on being valid</em>, which is what constrained decoding computes. Naive guidance with w &ne; 1 is then simply wrong.'}
+};
+var SK='mood',S=SC[SK],N,MS,OFF,W,WV=3,LH,LP,MODE='exact',PR={t:8,x:2},UU=[],NP=40,REACH,SEED=5;
+function $(id){return document.getElementById(id);}
+function lse(a,b){var m=Math.max(a,b);return m+Math.log(Math.exp(a-m)+Math.exp(b-m));}
+function I(x){return x+OFF;}
+function init(){S=SC[SK];N=S.N;MS=Math.max.apply(null,S.steps.map(function(s){return Math.abs(s[0]);}));OFF=MS*(N+2);W=2*OFF+1;
+ REACH=[];var cur={0:1};REACH.push(Object.keys(cur).map(Number));for(var t=0;t<N;t++){var nx={};Object.keys(cur).forEach(function(x){S.steps.forEach(function(s){nx[+x+s[0]]=1;});});cur=nx;REACH.push(Object.keys(cur).map(Number));}
+ var tmid=Math.min(N-2,8);PR=SK==='mood'?{t:8,x:2}:SK==='poem'?{t:3,x:5}:{t:6,x:2};}
+// L[t][i] = log E_p[ q(x_N)^k | x_t = i-OFF ]  by  h_t(x) = sum_s p_s h_{t+1}(x+s),  h_N = q^k;  a dead state has h = 0
+function backward(k){var L=[],last=[],i;for(i=0;i<W;i++){var x=i-OFF;last[i]=S.dead(x)?DEAD:k*S.q(x);}L[N]=last;
+ for(var t=N-1;t>=0;t--){var row=[],nx=L[t+1];for(i=0;i<W;i++){var x=i-OFF;if(S.dead(x)){row[i]=DEAD;continue;}var acc=null;S.steps.forEach(function(s){var v=Math.log(s[1])+nx[Math.max(0,Math.min(W-1,i+s[0]))];acc=acc===null?v:lse(acc,v);});row[i]=acc;}L[t]=row;}return L;}
+function recompute(){WV=+$('w').value/10;LH=backward(WV);LP=backward(1);}
+// step probabilities.  Both rules add a log-value to the logit of each candidate next state:
+//   exact:  log E[q^w | next state]          naive:  w * log E[q | next state]
+function stepP(t,x,mode){var Lx=mode==='naive'?LP:LH,k=mode==='naive'?WV:1,lg=S.steps.map(function(s){return Math.log(s[1])+k*Lx[t+1][I(x+s[0])];}),m=Math.max.apply(null,lg),e=lg.map(function(v){return Math.exp(v-m);}),z=e.reduce(function(a,b){return a+b;},0);return e.map(function(v){return v/z;});}
+function baseP(){return S.steps.map(function(s){return s[1];});}
+function terminal(fn){var d=new Array(W).fill(0);d[I(0)]=1;for(var t=0;t<N;t++){var nd=new Array(W).fill(0);REACH[t].forEach(function(x){var m=d[I(x)];if(!m)return;var p=fn(t,x);S.steps.forEach(function(s,j){nd[I(x+s[0])]+=m*p[j];});});d=nd;}return d;}
+function pathKL(mode){var d=new Array(W).fill(0),kl=0;d[I(0)]=1;for(var t=0;t<N;t++){var nd=new Array(W).fill(0);REACH[t].forEach(function(x){var m=d[I(x)];if(m<1e-300)return;var a=stepP(t,x,mode),b=stepP(t,x,'exact');S.steps.forEach(function(st,j){if(a[j]>0)kl+=m*a[j]*Math.log(a[j]/Math.max(b[j],1e-300));nd[I(x+st[0])]+=m*a[j];});});d=nd;}return kl;}
+function qv(x){return S.dead(x)?0:Math.exp(S.q(x));}
+function targetDist(base){var d=base.map(function(p,i){return p*Math.pow(qv(i-OFF),WV);}),Z=d.reduce(function(a,b){return a+b;},0);return {d:d.map(function(v){return v/Z;}),Z:Z};}
+function tv(a,b){var s=0;for(var i=0;i<a.length;i++)s+=Math.abs(a[i]-b[i]);return s/2;}
+function mean(d,f){var s=0;for(var i=0;i<d.length;i++)s+=d[i]*f(i-OFF);return s;}
+function rngFn(s){return function(){s|=0;s=s+0x6D2B79F5|0;var t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function resample(){SEED+=1;var r=rngFn(SEED);UU=[];for(var k=0;k<NP;k++){var u=[];for(var t=0;t<N;t++)u.push(r());UU.push(u);}draw();}
+// the same random numbers drive both panels, so a guided output is a base output that has been bent
+function path(k,fn){var x=0,p=[0];for(var t=0;t<N;t++){var pr=fn(t,x),u=UU[k][t],j=0;while(j<pr.length-1&&u>=pr[j]){u-=pr[j];j++;}x+=S.steps[j][0];p.push(x);}return p;}
+function ok(x){return !S.dead(x)&&qv(x)>.5;}
+
+/* ---------- drawing ---------- */
+var PW=250,PX=[34,352,670],PT=84,PB=404;
+function tx(i,t){return PX[i]+t/N*PW;}
+function my(x){return PT+(S.yhi-Math.max(S.ylo,Math.min(S.yhi,x)))/(S.yhi-S.ylo)*(PB-PT);}
+function T(x,y,s,cls,anc,fill){return '<text x="'+x+'" y="'+y+'" class="'+(cls||'ts')+'"'+(anc?' text-anchor="'+anc+'"':'')+(fill?' fill="'+fill+'"':'')+'>'+s+'</text>';}
+var COLP='var(--pink)',COLB='var(--text-muted)',INK='var(--text-primary)';
+function frame(i,title,sub){var s='<rect x="'+PX[i]+'" y="'+PT+'" width="'+PW+'" height="'+(PB-PT)+'" fill="var(--surface)" stroke="var(--border)"/>';
+ s+=T(PX[i],PT-32,title,'ts')+T(PX[i],PT-14,sub,'tn');
+ s+='<line x1="'+PX[i]+'" y1="'+my(S.line)+'" x2="'+(PX[i]+PW)+'" y2="'+my(S.line)+'" stroke="var(--green)" stroke-dasharray="4 3" opacity=".8"/>';
+ s+=T(PX[i]+PW/2,PB+18,S.unit+' number  0 → '+N,'tn','middle');return s;}
+function hist(i,dists,maxp){var s='',x0=PX[i]+PW+4,h=S.cell/2;
+ dists.forEach(function(D){var d=D.d;if(D.fill){for(var x=Math.ceil(S.ylo);x<=S.yhi;x++){var p=d[I(x)];if(p>1e-12)s+='<rect x="'+x0+'" y="'+my(x+h).toFixed(1)+'" width="'+(p/maxp*36).toFixed(1)+'" height="'+(my(x-h)-my(x+h)).toFixed(1)+'" fill="'+D.fill+'" opacity="'+(D.op||.8)+'"/>';}}
+  else{var pts='';for(var x=Math.ceil(S.ylo);x<=S.yhi;x++){var p=d[I(x)];if(p>1e-12||pts)pts+=(pts?'L':'M')+(x0+p/maxp*36).toFixed(1)+' '+my(x).toFixed(1);}s+='<path d="'+pts+'" fill="none" stroke="'+D.stroke+'" stroke-width="1.6" stroke-dasharray="3 2"/>';}});
+ return s;}
+function pathsSvg(i,fn){var s='';for(var k=0;k<NP;k++){var p=path(k,fn),d='';p.forEach(function(x,t){d+=(t?'L':'M')+tx(i,t).toFixed(1)+' '+my(x).toFixed(1);});
+ var g=ok(p[N])&&!p.some(function(x){return S.dead(x);});
+ s+='<path d="'+d+'" fill="none" stroke="'+(g?COLP:COLB)+'" stroke-width="1.3" opacity="'+(g?.75:.4)+'"/>';}return s;}
+function arrowSvg(x0,y0,x1,y1,col){var dx=x1-x0,dy=y1-y0,L=Math.hypot(dx,dy);if(L<2)return '';var ux=dx/L,uy=dy/L,hl=Math.min(6,L*.5),hw=hl*.5;
+ return '<line x1="'+x0.toFixed(1)+'" y1="'+y0.toFixed(1)+'" x2="'+(x1-ux*hl*.6).toFixed(1)+'" y2="'+(y1-uy*hl*.6).toFixed(1)+'" stroke="'+col+'" stroke-width="1"/><polygon points="'+x1.toFixed(1)+','+y1.toFixed(1)+' '+(x1-ux*hl+uy*hw).toFixed(1)+','+(y1-uy*hl-ux*hw).toFixed(1)+' '+(x1-ux*hl-uy*hw).toFixed(1)+','+(y1-uy*hl+ux*hw).toFixed(1)+'" fill="'+col+'"/>';}
+function fv(v){return v<-500?'&minus;&infin;':v.toFixed(2).replace('-','&minus;');}
+
+function draw(){
+ var s='',guided=function(t,x){return stepP(t,x,MODE);},w=WV,h=S.cell/2;
+ $('wV').textContent='w = '+w.toFixed(1)+(w>0?'  (β = '+(1/w).toFixed(2)+')':'  (β = ∞)');
+ var base=terminal(baseP),tgt=targetDist(base),gd=terminal(guided);
+ var mx=Math.max(Math.max.apply(null,base),Math.max.apply(null,tgt.d),Math.max.apply(null,gd));
+ s+=frame(0,'the base model','samples from p')+pathsSvg(0,baseP)+hist(0,[{d:base,fill:COLB,op:.7}],mx)+T(PX[0]+PW+22,PB+18,'final','tn','middle');
+ // middle: the soft value V_t(x) = (1/w) log E[q^w | x_t = x]
+ var cells=[],lo=1e9,hi=-1e9;
+ for(var t=0;t<=N;t++)REACH[t].forEach(function(x){if(S.dead(x))return;var V=MODE==='naive'?LP[t][I(x)]:(w>0.01?LH[t][I(x)]/w:LP[t][I(x)]);if(V<-500)return;cells.push([t,x,V]);if(V<lo)lo=V;if(V>hi)hi=V;});
+ s+=frame(1,MODE==='naive'?'the classifier on partial output':'the soft value','log-value of each state, per unit w');
+ cells.forEach(function(c){var o=(c[2]-lo)/Math.max(1e-9,hi-lo);s+='<rect x="'+(tx(1,c[0])-PW/N/2).toFixed(1)+'" y="'+my(c[1]+h).toFixed(1)+'" width="'+(PW/N+.6).toFixed(2)+'" height="'+(my(c[1]-h)-my(c[1]+h)+.6).toFixed(2)+'" fill="'+COLP+'" opacity="'+(.05+.8*Math.pow(o,1.2)).toFixed(3)+'"/>';});
+ s+='<line x1="'+PX[1]+'" y1="'+my(S.line)+'" x2="'+(PX[1]+PW)+'" y2="'+my(S.line)+'" stroke="var(--green)" stroke-dasharray="4 3" opacity=".8"/>';
+ if($('arrows').checked){var yst=Math.max(1,Math.round((S.yhi-S.ylo)/9));for(var t2=1;t2<N;t2+=Math.max(2,Math.round(N/8)))for(var x2=Math.ceil(S.ylo);x2<=S.yhi;x2+=yst){if(REACH[t2].indexOf(x2)<0||S.dead(x2)||LH[t2][I(x2)]<-500)continue;var pr=stepP(t2,x2,MODE),dr=0;S.steps.forEach(function(st,j){dr+=pr[j]*st[0];});var L=Math.max(1,N/10);s+=arrowSvg(tx(1,t2),my(x2),tx(1,t2+L),my(x2+dr*L),'var(--text-primary)');}}
+ var pt=PR;[0,1,2].forEach(function(i){s+='<circle cx="'+tx(i,pt.t).toFixed(1)+'" cy="'+my(pt.x).toFixed(1)+'" r="5" fill="'+INK+'" stroke="var(--bg)" stroke-width="1.5"/>';});
+ s+=frame(2,MODE==='naive'?'naive guidance':'the RL-tuned model','same random numbers, guided')+pathsSvg(2,guided);
+ s+=hist(2,[{d:base,fill:COLB,op:.35},{d:gd,fill:COLP,op:.8},{d:tgt.d,stroke:INK}],mx)+T(PX[2]+PW+22,PB+18,'final','tn','middle');
+ s+=T(PX[0],PB+44,'vertical: '+S.state+'.  green dashed line: '+S.lineLab+'.  click any panel to place the probe (black dot).','tn');
+ s+=T(PX[0],PB+62,'final-state bars:  gray = base,  pink = this rule,  dashed = exact target  p(xₙ)·q(xₙ)ᵂ / Z.','tn');
+ $('stage').innerHTML=s;
+
+ // ---- readout: the arithmetic of the probe ----
+ var t0=pt.t,x0=pt.x,hC=LH[t0][I(x0)],pe=stepP(t0,x0,'exact'),pn=stepP(t0,x0,'naive'),rd='';
+ rd+='<b>Probe: '+S.unit+' '+t0+', '+S.state+' = '+x0+'.</b> Each candidate next token:<br>';
+ rd+='<table class="bt"><tr><th style="text-align:left">next token</th><th>base p</th><th>log E[q<sup>w</sup>]</th><th>factor h<sub>t+1</sub>/h<sub>t</sub></th><th>RL optimum</th><th>w&middot;log E[q]</th><th>naive</th></tr>';
+ S.steps.forEach(function(st,j){var lh=LH[t0+1][I(x0+st[0])],f=Math.exp(lh-hC);
+  rd+='<tr><td style="text-align:left">'+st[2]+'</td><td>'+st[1].toFixed(2)+'</td><td>'+fv(lh)+'</td><td>&times;'+(lh<-500?'0':f.toFixed(3))+'</td><td><b>'+(100*pe[j]).toFixed(1)+'%</b></td><td>'+fv(WV*LP[t0+1][I(x0+st[0])])+'</td><td><b>'+(100*pn[j]).toFixed(1)+'%</b></td></tr>';});
+ rd+='</table>';
+ var eb=mean(base,qv),eg=mean(gd,qv),et=mean(tgt.d,qv);
+ rd+='<b>Whole outputs.</b> E[q(final)], the chance the output is good: base <b class="num">'+(100*eb).toFixed(1)+'%</b>, this rule <b class="num">'+(100*eg).toFixed(1)+'%</b>, exact target <b class="num">'+(100*et).toFixed(1)+'%</b>. Distance from this rule to the exact target: total variation of the final state <b class="num">'+tv(gd,tgt.d).toExponential(1)+'</b>, and KL over whole outputs <b class="num">'+pathKL(MODE).toExponential(1)+'</b>'+(MODE==='exact'?' (both zero up to rounding: the soft-value policy <em>is</em> the target)':'')+'. Z = E<sub>p</sub>[q<sup>w</sup>] = <b class="num">'+tgt.Z.toExponential(2)+'</b>. Factors &times; base p sum to 1 in each state, since h<sub>t</sub> = &Sigma; p<sub>s</sub>h<sub>t+1</sub>.';
+ $('readout').innerHTML=rd;
+}
+function caption(){$('caption').innerHTML=
+ '<div><b>The setup.</b> '+S.setup+' Maximize E[r] &minus; &beta;&middot;KL(&pi;&#8214;p) over whole outputs, with r(x<sub>N</sub>) = log q(x<sub>N</sub>) and w = 1/&beta;, so e<sup>r/&beta;</sup> = q<sup>w</sup>. The optimum is the base model times a preference factor: &pi;*(output) = p(output)&middot;q(x<sub>N</sub>)<sup>w</sup> / Z with Z = E<sub>p</sub>[q<sup>w</sup>]. This is classifier guidance, p(x)&middot;p(c|x)<sup>w</sup>, with q in the role of p(c|x).</div>'+
+ '<div><b>One token at a time.</b> The model can only choose the next token. Define h<sub>t</sub>(x) = E<sub>p</sub>[q(x<sub>N</sub>)<sup>w</sup> | x<sub>t</sub> = x], computed backward from h<sub>N</sub> = q<sup>w</sup> by h<sub>t</sub>(x) = &Sigma;<sub>s</sub> p<sub>s</sub>&middot;h<sub>t+1</sub>(x+s). Then &pi;*(s | x, t) = p<sub>s</sub>&middot;h<sub>t+1</sub>(x+s)/h<sub>t</sub>(x). In logits: each candidate gets + log h<sub>t+1</sub>(next), the <em>soft value</em> V = (1/w) log h, the log of the expected reward-to-go. That is the middle panel. It is why guidance acts at every token though only the end is scored: V summarizes the future.</div>'+
+ '<div><b>Classifier guidance is a different, approximate value.</b> A classifier for partial outputs, P<sub>t</sub>(x) = E<sub>p</sub>[q(x<sub>N</sub>) | x<sub>t</sub> = x], answers &ldquo;how likely is this to end well&rdquo;. Naive guidance adds w&middot;log P<sub>t+1</sub>(next): the exponent applied <em>after</em> averaging. The exact optimum adds log E[q<sup>w</sup>]: the exponent applied <em>before</em>. They agree at w = 1 and at the last token, and differ otherwise (Jensen gives log E[q<sup>w</sup>] &ge; w&middot;log E[q] for w &ge; 1, but the guidance depends on the <em>difference between candidates</em>, so naive guidance can tilt too strongly or too weakly; the table shows which). Switch to &ldquo;naive&rdquo; and compare the pink bars with the dashed target. In diffusion this is the mismatch between noising and tilting.</div>'+
+ '<div><b>RL learns this.</b> With the KL penalty, REINFORCE has the exact policy as its fixed point, but it never sees h: it estimates the soft value from sampled outputs. Guidance needs the value at inference time; the RL-tuned model has absorbed it into its weights. A real language model has no one-dimensional state: its state is the text so far, and h is a learned function of the prefix.</div>';}
+
+/* ---------- interaction ---------- */
+function svgPt(e){var svg=$('fig'),pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;return pt.matrixTransform(svg.getScreenCTM().inverse());}
+function setProbe(q){var i=-1;for(var k=0;k<3;k++)if(q.x>=PX[k]-3&&q.x<=PX[k]+PW+3)i=k;if(i<0)return false;
+ var t=Math.max(0,Math.min(N-1,Math.round((q.x-PX[i])/PW*N))),x=Math.round(S.yhi-(q.y-PT)/(PB-PT)*(S.yhi-S.ylo)),rs=REACH[t];
+ var best=rs[0];rs.forEach(function(r){if(Math.abs(r-x)<Math.abs(best-x))best=r;});if(S.dead(best)){var al=rs.filter(function(r){return !S.dead(r);});best=al.reduce(function(a,b){return Math.abs(b-x)<Math.abs(a-x)?b:a;},al[0]);}
+ PR={t:t,x:best};return true;}
+var DR=false;
+$('fig').addEventListener('pointerdown',function(e){if(setProbe(svgPt(e))){DR=true;this.setPointerCapture(e.pointerId);draw();}});
+$('fig').addEventListener('pointermove',function(e){if(DR&&setProbe(svgPt(e)))draw();});
+['pointerup','pointercancel'].forEach(function(n){$('fig').addEventListener(n,function(){DR=false;});});
+$('w').addEventListener('input',function(){recompute();draw();});
+$('arrows').addEventListener('change',draw);
+function seg(id,fn){Array.prototype.forEach.call(document.querySelectorAll('#'+id+' button'),function(b){b.addEventListener('click',function(){Array.prototype.forEach.call(document.querySelectorAll('#'+id+' button'),function(x){x.classList.toggle('on',x===b);});fn(b.dataset.k);});});}
+seg('modeSeg',function(k){MODE=k;draw();});
+seg('scSeg',function(k){SK=k;init();$('intro').innerHTML=SC[k].intro;recompute();caption();resample();});
+init();$('intro').innerHTML=S.intro;recompute();caption();resample();
+</script>
+</body>
+</html>

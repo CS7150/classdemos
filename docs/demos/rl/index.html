@@ -53,12 +53,11 @@ footer a{color:var(--text-secondary)}
   <p>How a language model is trained on a reward instead of on text to imitate. The first piece uses a three-token model you can watch roll its dice; the REINFORCE-to-GRPO and DPO pieces use one model small
      enough to see whole: four tokens, three steps, 64 possible completions, with every next-token distribution on
      screen. Everything trains live in the browser, and because the model is so small, the quantities a real run can
-     only estimate (expected reward, KL, the optimal policy itself) are computed exactly and drawn alongside. Two shorter pieces, on a line of responses and a line of scores, explain the
-     optimum they aim at and the model of human preferences behind DPO.</p>
+     only estimate (expected reward, KL, the optimal policy itself) are computed exactly and drawn alongside. Shorter pieces on a line of responses, a line of scores and a walk through a sentence explain
+     the optimum they aim at, why it acts on every token, and the model of human preferences behind DPO.</p>
 </header>
 
 <ol class="qs">
-
 <li class="done">
   <div class="qtag">Start here</div>
   <h2><a href="lm-to-reinforce.html">From a language model to REINFORCE</a></h2>
@@ -70,16 +69,6 @@ footer a{color:var(--text-secondary)}
   <a class="go" href="lm-to-reinforce.html">Open the explainer &rarr;</a>
 </li>
 <li class="done">
-  <div class="qtag">Policy gradients</div>
-  <h2><a href="policy-gradient.html">From REINFORCE to GRPO</a></h2>
-  <p class="what">REINFORCE as fine-tuning on the model&rsquo;s own samples, weighted by reward; a baseline that
-     leaves the gradient unbiased and cuts its noise; and GRPO, which uses the group of samples as its own baseline.
-     All three train side by side toward the KL-regularized optimum, drawn as a dashed target. Add a constant to
-     every reward to see plain REINFORCE lose its way, and find the groups that teach GRPO nothing.</p>
-  <a class="go" href="policy-gradient.html">Open the explainer &rarr;</a>
-</li>
-
-<li class="done">
   <div class="qtag">The optimum</div>
   <h2><a href="tilt.html">The tilted distribution</a></h2>
   <p class="what">Maximizing reward minus &beta; times a KL penalty has a closed form: the reference model multiplied by
@@ -88,6 +77,24 @@ footer a{color:var(--text-secondary)}
      with the normalizer cancelling, view it in log scale where reward is simply added, and watch reward hacking
      appear as the KL budget grows.</p>
   <a class="go" href="tilt.html">Open the explainer &rarr;</a>
+</li>
+<li class="done">
+  <div class="qtag">The same idea, token by token</div>
+  <h2><a href="rl-is-guidance.html">RL is guidance for language models</a></h2>
+  <p class="what">Reward only the ending, and the optimum still bends every token: each candidate&rsquo;s logit gets the log of a
+     soft value, the expected reward-to-go. Computed exactly on three tiny generators: a story that must end happy, a line of
+     verse with ten syllables, and code whose brackets must balance. Compare the RL optimum with naive classifier guidance,
+     which applies the exponent after averaging instead of before, and see exactly where they differ.</p>
+  <a class="go" href="rl-is-guidance.html">Open the explainer &rarr;</a>
+</li>
+<li class="done">
+  <div class="qtag">Policy gradients</div>
+  <h2><a href="policy-gradient.html">From REINFORCE to GRPO</a></h2>
+  <p class="what">REINFORCE as fine-tuning on the model&rsquo;s own samples, weighted by reward; a baseline that
+     leaves the gradient unbiased and cuts its noise; and GRPO, which uses the group of samples as its own baseline.
+     All three train side by side toward the KL-regularized optimum, drawn as a dashed target. Add a constant to
+     every reward to see plain REINFORCE lose its way, and find the groups that teach GRPO nothing.</p>
+  <a class="go" href="policy-gradient.html">Open the explainer &rarr;</a>
 </li>
 <li class="done">
   <div class="qtag">Preferences as probabilities</div>
@@ -106,7 +113,6 @@ footer a{color:var(--text-secondary)}
      rescues it.</p>
   <a class="go" href="dpo.html">Open the explainer &rarr;</a>
 </li>
-
 </ol>
 
 
