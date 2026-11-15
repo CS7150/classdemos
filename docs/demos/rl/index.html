@@ -50,7 +50,7 @@ footer a{color:var(--text-secondary)}
   <div class="nav"><a href="../../">&larr; CS7150 class demos</a></div>
   <p class="eyebrow">Northeastern University &middot; CS 7150 &middot; Fall 2026</p>
   <h1>Reinforcement learning for language models</h1>
-  <p>How a language model is trained on a reward instead of on text to imitate. The REINFORCE and DPO pieces use one model small
+  <p>How a language model is trained on a reward instead of on text to imitate. The first piece uses a three-token model you can watch roll its dice; the REINFORCE-to-GRPO and DPO pieces use one model small
      enough to see whole: four tokens, three steps, 64 possible completions, with every next-token distribution on
      screen. Everything trains live in the browser, and because the model is so small, the quantities a real run can
      only estimate (expected reward, KL, the optimal policy itself) are computed exactly and drawn alongside. Two shorter pieces, on a line of responses and a line of scores, explain the
@@ -59,6 +59,15 @@ footer a{color:var(--text-secondary)}
 
 <ol class="qs">
 
+<li class="done">
+  <div class="qtag">Start here</div>
+  <h2><a href="lm-to-reinforce.html">From a language model to REINFORCE</a></h2>
+  <p class="what">A bare language model, three tokens long, that you can watch roll its dice, with its probabilities shown
+     at each step. Train it on text, then take the text away and keep only a score: the same update, applied to
+     the model&rsquo;s own samples, each weighted by its reward. That weight is everything a reward adds. Twelve runs of
+     each show that weighting by 1 wanders with no direction while weighting by reward climbs.</p>
+  <a class="go" href="lm-to-reinforce.html">Open the explainer &rarr;</a>
+</li>
 <li class="done">
   <div class="qtag">Policy gradients</div>
   <h2><a href="policy-gradient.html">From REINFORCE to GRPO</a></h2>

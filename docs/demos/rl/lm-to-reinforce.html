@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>From a language model to REINFORCE</title>
+<meta name="description" content="Start with a bare language model, three tokens long, that you can watch roll its dice. Train it on text, then take the text away and keep only a score: train it on its own samples, weighted by reward. That is REINFORCE.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 20px;max-width:1150px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+.quiz{margin:0}
+svg#fig{max-height:68vh}
+.row{gap:7px}
+button,select{height:30px;font-size:13px;padding:0 10px}
+.seg button{height:28px;font-size:12.5px;padding:0 9px}
+.klab{font-size:12.5px}
+.rd{font-size:14px;line-height:1.65;min-height:3.4em}
+.rd b{font-weight:600}
+.cap{font-size:12.5px;line-height:1.6;padding-top:4px}
+.nav{display:flex;align-items:baseline;gap:10px}
+.ctl{display:none}.ctl.on{display:flex}
+svg text{font-family:inherit}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Reinforcement learning for language models</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>From a language model to REINFORCE<span>: what a reward adds</span></h1>
+<p class="quiz">One tiny language model, three steps. First, just watch it work. Then train it the ordinary way, on text. Then take the text away, keep only a score, and see that the only change is a weight on each of the model&rsquo;s own samples.</p>
+
+<div class="row"><div class="seg" id="tabSeg">
+<button data-p="0" class="on">1. a bare language model</button><button data-p="1">2. train it on text</button><button data-p="2">3. no text, only a score</button>
+</div></div>
+
+<svg id="fig" viewBox="0 0 1000 520" role="img">
+<title>A tiny language model, trained on text and on reward</title>
+<desc>A language model that writes three tokens a, b or c, one at a time. For the latest completion, the probability the model gave each possible next token at each position, with the chosen token highlighted. Step 1: sampling. Step 2: one training update on a written example raises the probability of its tokens. Step 3: the model's own samples, each weighted by a reward, drive the same update; a chart compares training on weights of one against training on reward.</desc>
+<g id="stage"></g>
+</svg>
+
+<div class="row ctl on" id="c0">
+<button class="main" onclick="sample1(1)">Sample one</button><button onclick="sample1(10)">Sample 10</button><button onclick="newModel()">A different model</button>
+</div>
+<div class="row ctl" id="c1">
+<button class="main" onclick="train2(1)">Train on the next example</button><button onclick="train2(20)">20 examples</button><button onclick="reset2()">Start over</button>
+</div>
+<div class="row ctl" id="c2">
+<span class="klab">reward:</span><div class="seg" id="rewSeg"><button data-k="end" class="on">ends in c</button><button data-k="cnt">number of c&rsquo;s</button></div>
+<button class="main" onclick="step3()">One step (8 samples)</button><button id="runB" onclick="toggleRun()">Run</button><button onclick="reset3()">Start over</button>
+<span class="klab">watch:</span><div class="seg" id="watchSeg"><button data-k="1" class="on">weight = reward</button><button data-k="0">weight = 1</button></div>
+</div>
+<div class="rd" id="readout"></div>
+<div class="cap" id="caption"></div>
+
+<script>
+var TOK=['a','b','c'],TC=['var(--blue)','var(--warm)','var(--green)'],PINK='var(--pink)',INK='var(--text-primary)',MUTED='var(--text-muted)',BORDER='var(--border-strong)',GRAY='var(--text-muted)';
+function $(id){return document.getElementById(id);}
+function T(x,y,s,cls,anc,fill,extra){return '<text x="'+x+'" y="'+y+'" class="'+(cls||'ts')+'"'+(anc?' text-anchor="'+anc+'"':'')+(fill?' fill="'+fill+'"':'')+(extra||'')+'>'+s+'</text>';}
+function rng(s){return function(){s|=0;s=s+0x6D2B79F5|0;var t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function gauss(r){var u=0,v=0;while(!u)u=r();while(!v)v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+function str(y){return TOK[y[0]]+TOK[y[1]]+TOK[y[2]];}
+
+/* ---------- the language model: the next token depends on the position and on the previous token ---------- */
+// L[t][ctx] is a row of three logits; ctx is 0 at the first position, else the previous token
+function initModel(seed){var r=rng(seed),L=[];for(var t=0;t<3;t++){L[t]=[];for(var c=0;c<(t?3:1);c++){var row=[];for(var k=0;k<3;k++)row.push(.55*gauss(r));if(t===2)row[2]-=.9;L[t].push(row);}}return L;}
+function clone(L){return L.map(function(a){return a.map(function(r){return r.slice();});});}
+function softmax(row){var m=Math.max.apply(null,row),e=row.map(function(v){return Math.exp(v-m);}),s=e[0]+e[1]+e[2];return e.map(function(v){return v/s;});}
+function probsAt(L,t,prev){return softmax(L[t][t?prev:0]);}
+function sampleFrom(L,r){var y=[];for(var t=0;t<3;t++){var p=probsAt(L,t,y[t-1]),u=r(),k=0;while(k<2&&u>p[k]){u-=p[k];k++;}y.push(k);}return y;}
+function probOf(L,y){var p=1;for(var t=0;t<3;t++)p*=probsAt(L,t,y[t-1])[y[t]];return p;}
+// the gradient of log P(y) with respect to the logits is, at each position, (one-hot of the chosen token) - (the probabilities)
+function nudge(L,y,w){for(var t=0;t<3;t++){var row=L[t][t?y[t-1]:0],p=softmax(row);for(var k=0;k<3;k++)row[k]+=w*((k===y[t]?1:0)-p[k]);}}
+function all27(f){for(var i=0;i<3;i++)for(var j=0;j<3;j++)for(var k=0;k<3;k++)f([i,j,k]);}
+function expR(L,rew){var e=0;all27(function(y){e+=probOf(L,y)*rew(y);});return e;}
+var REW={end:function(y){return y[2]===2?1:0;},cnt:function(y){return (y[0]===2)/3+(y[1]===2)/3+(y[2]===2)/3;}};
+
+/* ---------- drawing helpers ---------- */
+var PART=0;
+function chip(x,y,k,sz){return '<rect x="'+x+'" y="'+y+'" width="'+sz+'" height="'+sz+'" rx="6" fill="'+TC[k]+'"/><text x="'+(x+sz/2)+'" y="'+(y+sz*.7)+'" text-anchor="middle" font-size="'+(sz*.6)+'" font-weight="600" fill="#fff" class="mono">'+TOK[k]+'</text>';}
+function stack(L,y,before,title){var s='',BW=130;
+ s+=T(30,28,title,'ts');
+ for(var t=0;t<3;t++){var x0=30+t*212,p=probsAt(L,t,y[t-1]),pb=before?probsAt(before,t,y[t-1]):null;
+  s+=chip(x0,48,y[t],34);
+  s+=T(x0+44,62,t?'after “'+TOK[y[t-1]]+'”':'first token','tn')+T(x0+44,80,'position '+(t+1),'tn');
+  if(t)s+='<text x="'+(x0-14)+'" y="72" font-size="18" fill="'+MUTED+'" text-anchor="middle">→</text>';
+  s+='<line x1="'+(x0+17)+'" y1="84" x2="'+(x0+17)+'" y2="'+(112+y[t]*30)+'" stroke="'+TC[y[t]]+'" stroke-width="1.5" stroke-dasharray="3 3" opacity=".7"/>';
+  for(var k=0;k<3;k++){var by=112+k*30,on=k===y[t];
+   s+=chip(x0+4,by,k,20);
+   s+='<rect x="'+(x0+30)+'" y="'+(by+2)+'" width="'+(p[k]*BW).toFixed(1)+'" height="16" fill="'+TC[k]+'" opacity="'+(on?1:.35)+'"/>';
+   if(on)s+='<rect x="'+(x0+30)+'" y="'+(by+2)+'" width="'+(p[k]*BW).toFixed(1)+'" height="16" fill="none" stroke="'+INK+'" stroke-width="1.6"/>';
+   if(pb)s+='<line x1="'+(x0+30+pb[k]*BW).toFixed(1)+'" y1="'+(by-1)+'" x2="'+(x0+30+pb[k]*BW).toFixed(1)+'" y2="'+(by+21)+'" stroke="'+INK+'" stroke-width="2" stroke-dasharray="2 2"/>';
+   s+=T(x0+30+BW+10,by+15,Math.round(100*p[k])+'%','tn','start');}}
+ var pr=[0,1,2].map(function(t){return probsAt(L,t,y[t-1])[y[t]];});
+ s+=T(30,222,'probability of this completion = '+pr.map(function(v){return v.toFixed(2);}).join(' × ')+' = <tspan font-weight="600" fill="'+INK+'">'+(pr[0]*pr[1]*pr[2]).toFixed(3)+'</tspan>','ts');
+ if(before)s+=T(30,242,'dashed ticks: where each bar was before the update','tn');
+ return s;}
+function chart(x,y,w,h,series,ymax,xmax,ylab){var s='<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" fill="var(--surface)" stroke="var(--border)"/>';
+ [0,.5,1].forEach(function(f){var yy=y+h-f*h*(1/ymax)*ymax/1;s+='<line x1="'+x+'" y1="'+(y+h-f/ymax*h*ymax)+'" x2="'+(x+w)+'" y2="'+(y+h-f/ymax*h*ymax)+'" stroke="var(--border)" stroke-dasharray="2 4"/>'+T(x-5,y+h-f*h+4,Math.round(f*100)+'%','tn','end');});
+ s+=T(x,y-8,ylab,'tn');
+ series.forEach(function(se){var d='';se.pts.forEach(function(v,i){d+=(i?'L':'M')+(x+i/xmax*w).toFixed(1)+' '+(y+h-v/ymax*h).toFixed(1);});if(d)s+='<path d="'+d+'" fill="none" stroke="'+se.col+'" stroke-width="'+(se.w||2.2)+'"'+(se.op?' opacity="'+se.op+'"':'')+(se.dash?' stroke-dasharray="'+se.dash+'"':'')+'/>';});
+ return s;}
+function rewardBadge(r){return r>=.999?'r = 1':r<=.001?'r = 0':'r = '+r.toFixed(2);}
+
+/* ---------- 1. the bare model ---------- */
+var M1=initModel(4),R1=rng(9),S1=[];
+function newModel(){M1=initModel(Math.floor(Math.random()*1e6));S1=[];sample1(1);}
+function sample1(n){for(var i=0;i<n;i++)S1.push(sampleFrom(M1,R1));if(S1.length>14)S1=S1.slice(-14);draw();}
+function part1(){var y=S1[S1.length-1]||sampleFrom(M1,R1),s=stack(M1,y,null,'A language model writes one token at a time, rolling a weighted die at each step.');
+ s+=T(700,28,'the last samples','ts');
+ S1.slice().reverse().forEach(function(z,i){var yy=52+i*26;s+=chip(700,yy-14,z[0],20)+chip(724,yy-14,z[1],20)+chip(748,yy-14,z[2],20)+T(782,yy+1,'P = '+probOf(M1,z).toFixed(3),'tn','start',null,i===0?' font-weight="600"':'');});
+ s+=T(30,266,'The model is nothing but these weights: a table of logits for each position and previous token.','tn')+T(30,284,'Sampling uses them as dice; training changes them.','tn');
+ s+=T(30,330,'Every completion has some probability, whether or not the model ever writes it:','tn');
+ var rows=[];all27(function(z){rows.push([z,probOf(M1,z)]);});rows.sort(function(a,b){return b[1]-a[1];});
+ s+=T(30,356,'most likely','tn');rows.slice(0,4).forEach(function(r,i){s+=chip(120+i*120,338,r[0][0],20)+chip(144+i*120,338,r[0][1],20)+chip(168+i*120,338,r[0][2],20)+T(192+i*120,353,r[1].toFixed(3),'tn');});
+ s+=T(30,398,'least likely','tn');rows.slice(-4).reverse().forEach(function(r,i){s+=chip(120+i*120,380,r[0][0],20)+chip(144+i*120,380,r[0][1],20)+chip(168+i*120,380,r[0][2],20)+T(192+i*120,395,r[1].toFixed(3),'tn');});
+ s+=T(30,440,'There are 27 possible completions, and their probabilities add to 1.','tn');
+ $('readout').innerHTML='Press <b>Sample</b>. Each completion is three dice rolls, and its probability is the <b>product</b> of the three chosen bars. The bar heights are the model&rsquo;s next-token probabilities, and they change with what came before: compare the middle and right columns after different tokens. A real language model is the same picture with a transformer producing the probabilities instead of a table.';
+ return s;}
+
+/* ---------- 2. train on text ---------- */
+var DATA=[[0,1,2],[1,0,2],[2,1,2],[0,2,2],[1,1,2],[2,0,2],[2,2,2],[1,2,2]],M2,D2i,B2,LAST2,HIST2;
+function reset2(){M2=initModel(4);D2i=0;LAST2=DATA[0];B2=null;HIST2=[expR(M2,REW.end)];draw();}
+function train2(n){for(var i=0;i<n;i++){B2=clone(M2);LAST2=DATA[D2i%DATA.length];nudge(M2,LAST2,.5);D2i++;HIST2.push(expR(M2,REW.end));}draw();}
+function part2(){var s=stack(M2,LAST2,B2,B2?'Trained on the highlighted example: its tokens’ bars rise, the others fall.':'The same model. Press the button to train on the next piece of text.');
+ s+=T(700,28,'the training text','ts');
+ DATA.forEach(function(z,i){var yy=52+i*26,cur=z===LAST2;if(cur&&B2)s+='<rect x="692" y="'+(yy-19)+'" width="150" height="26" rx="5" fill="none" stroke="'+INK+'" stroke-width="1.5"/>';s+=chip(700,yy-14,z[0],20)+chip(724,yy-14,z[1],20)+chip(748,yy-14,z[2],20)+T(782,yy+1,'P = '+probOf(M2,z).toFixed(3),'tn');});
+ s+=T(700,268,'written by someone; all end in c','tn');
+ s+=T(30,270,'The update, at each position: turn the written token’s logit up,','tn')+T(30,288,'and turn all three down in proportion to their probability.','tn');
+ s+=T(30,312,'logit  ←  logit  +  step × ( 1 if it was the written token, else 0  −  its probability )','tn');
+ s+=T(30,336,'This is the gradient of log P(text). Training on text just means making the text more probable.','ts');
+ s+=chart(120,376,560,110,[{pts:HIST2,col:PINK}],1,Math.max(20,HIST2.length-1),'chance the model writes a completion ending in c');
+ s+=T(400,502,'training examples seen','tn','middle');
+ var z=LAST2;$('readout').innerHTML='After <b class="num">'+D2i+'</b> examples, the model writes a completion ending in c with probability <b class="num">'+(100*HIST2[HIST2.length-1]).toFixed(0)+'%</b> (it started at '+(100*HIST2[0]).toFixed(0)+'%). Nobody told it to end in c; the training text happened to, and it copies whatever habits the text has. '+(B2?'The last example, <b class="mono">'+str(z)+'</b>, now has probability <b class="num">'+probOf(M2,z).toFixed(3)+'</b>, up from <b class="num">'+probOf(B2,z).toFixed(3)+'</b>.':'');
+ return s;}
+
+/* ---------- 3. no text, only a score ---------- */
+var M3,RUN=false,TIMER=null,REWK='end',WATCH=1,HA,HB,LASTB,N3=0,R3,NR=12;
+function mean(H){var n=H[0].length,m=[];for(var i=0;i<n;i++){var t=0;H.forEach(function(h){t+=h[i];});m.push(t/H.length);}return m;}
+function reset3(){M3={A:[],B:[]};HA=[];HB=[];for(var r=0;r<NR;r++){M3.A.push(initModel(4));M3.B.push(initModel(4));HA.push([expR(M3.A[r],REW[REWK])]);HB.push([expR(M3.B[r],REW[REWK])]);}N3=0;LASTB={A:null,B:null};R3=rng(31);draw();}
+function batch(L,mode){var rew=REW[REWK],out=[];for(var i=0;i<8;i++){var y=sampleFrom(L,R3),r=rew(y);out.push({y:y,r:r,w:mode?r:1});}return out;}
+function step3(){['A','B'].forEach(function(k){for(var r=0;r<NR;r++){var b=batch(M3[k][r],k==='B');if(r===0)LASTB[k]=b;b.forEach(function(e){nudge(M3[k][r],e.y,.25*e.w);});(k==='A'?HA:HB)[r].push(expR(M3[k][r],REW[REWK]));}});N3++;draw();}
+function toggleRun(){RUN=!RUN;$('runB').textContent=RUN?'Pause':'Run';if(RUN){TIMER=setInterval(function(){if(PART!==2){return;}step3();if(N3>=150)toggleRun();},160);}else clearInterval(TIMER);}
+function part3(){var key=WATCH?'B':'A',L=M3[key][0],b=LASTB[key],y=b?b[0].y:[0,0,2],name=WATCH?'REINFORCE: weight each sample by its reward':'plain self-training: weight every sample 1';
+ var s=stack(L,y,null,'The model writes its own text, and a function scores it.')+T(30,242,'watching: '+name,'tn');
+ s+=T(700,28,'expected reward: 12 runs (bold = mean)','tn');
+ var xm=Math.max(60,N3),mA=mean(HA),mB=mean(HB),ser=[];
+ HA.forEach(function(h){ser.push({pts:h,col:GRAY,w:.8,op:.28});});HB.forEach(function(h){ser.push({pts:h,col:PINK,w:.8,op:.28});});
+ ser.push({pts:mA,col:INK,dash:'5 4'});ser.push({pts:mB,col:PINK});
+ s+=chart(710,52,250,170,ser,1,xm,'');
+ s+=T(710,244,'training steps','tn')+'<line x1="715" y1="262" x2="745" y2="262" stroke="'+PINK+'" stroke-width="2.2"/>'+T(752,266,'weight = reward','tn')+'<line x1="715" y1="282" x2="745" y2="282" stroke="'+INK+'" stroke-width="2.2" stroke-dasharray="5 4"/>'+T(752,286,'weight = 1','tn');
+ s+=T(30,286,'The last batch of 8 samples, and how hard each is pushed up (its weight in the update):','ts');
+ if(b)b.forEach(function(e,i){var x=30+i*118;
+   s+='<rect x="'+x+'" y="302" width="108" height="76" rx="8" fill="'+(e.w>0?PINK:'var(--surface-1)')+'" opacity="'+(e.w>0?.18+.5*Math.min(1,e.w):1)+'" stroke="var(--border)"/>';
+   s+=chip(x+9,310,e.y[0],26)+chip(x+41,310,e.y[1],26)+chip(x+73,310,e.y[2],26);
+   s+=T(x+54,356,rewardBadge(e.r),'tn','middle')+T(x+54,372,'pushed up × '+(e.w>0?(e.w>=.999?'1':e.w.toFixed(2)):'0'),'tn','middle');});
+ else s+=T(30,340,'press One step','tn');
+ s+=T(30,412,'update, per sample, at each position:   logit ← logit + step × (weight) × ( 1 if it was the chosen token, else 0  −  its probability )','ts');
+ s+=T(30,436,'tab 2 (text):   weight = 1, on text that someone wrote','tn')+T(30,456,'plain self-training:   weight = 1, on the model’s own samples  →  no direction: runs wander','tn')+T(30,476,'REINFORCE:   weight = r(y), on the model’s own samples  →  samples that score well are imitated','ts',null,' font-weight="600"');
+ var eA=mA[mA.length-1],eB=mB[mB.length-1];
+ $('readout').innerHTML='After <b class="num">'+N3+'</b> steps, averaged over '+NR+' runs: weight = reward has taken the expected reward from <b class="num">'+(100*mB[0]).toFixed(0)+'%</b> to <b class="num">'+(100*eB).toFixed(0)+'%</b> ('+(REWK==='end'?'the chance a completion ends in c':'the average share of c’s')+'); weight = 1 is at <b class="num">'+(100*eA).toFixed(0)+'%</b>. Each weight-1 run wanders at random, becoming more sure of whatever it happened to say, but nothing pulls the runs the same way, so their average stays near where it started. Weight 0 means <em>do not learn from this sample</em>, so a sample the scorer likes is the only kind the model learns to write more of.';
+ return s;}
+
+function draw(){$('stage').innerHTML=PART===0?part1():PART===1?part2():part3();caption();}
+function caption(){var h;
+ if(PART===0)h='<b>A language model is a distribution over text, built one token at a time.</b> The chance of a whole completion is the product of the chances of its tokens, each given the ones before it. Sampling means rolling those dice in order. The model has no idea what is &ldquo;good&rdquo;; it only has probabilities.';
+ else if(PART===1)h='<b>Ordinary training pulls the model toward text.</b> Given a written example, the update raises the probability of each token that was actually written, given the tokens before it. All of the model&rsquo;s knowledge of what to write comes from the text. If the text always ends in c, so does the model, whether or not that was the point.';
+ else h='<b>What an RL objective adds.</b> We want to maximize the expected reward E[r(y)] over the model&rsquo;s own samples y. Its gradient has a form you can compute from samples alone: &nabla;E[r] = E[ r(y) &middot; &nabla; log P(y) ]. That is the tab-2 update, on the model&rsquo;s own text, with each sample weighted by its reward. So REINFORCE is &ldquo;supervised learning on your own samples, weighted by how well they scored,&rdquo; and the reward need not be differentiable or even a formula: only a number per sample. <em>Next:</em> what goes wrong when rewards are all positive or very noisy (baselines), and the full distribution on the <a href="policy-gradient.html">REINFORCE to GRPO</a> page.';
+ $('caption').innerHTML=h;}
+
+Array.prototype.forEach.call(document.querySelectorAll('#tabSeg button'),function(b){b.addEventListener('click',function(){PART=+b.dataset.p;Array.prototype.forEach.call(document.querySelectorAll('#tabSeg button'),function(x){x.classList.toggle('on',x===b);});
+ ['c0','c1','c2'].forEach(function(id,i){$(id).classList.toggle('on',i===PART);});if(PART!==2&&RUN)toggleRun();draw();});});
+Array.prototype.forEach.call(document.querySelectorAll('#rewSeg button'),function(b){b.addEventListener('click',function(){REWK=b.dataset.k;Array.prototype.forEach.call(document.querySelectorAll('#rewSeg button'),function(x){x.classList.toggle('on',x===b);});reset3();});});
+Array.prototype.forEach.call(document.querySelectorAll('#watchSeg button'),function(b){b.addEventListener('click',function(){WATCH=+b.dataset.k;Array.prototype.forEach.call(document.querySelectorAll('#watchSeg button'),function(x){x.classList.toggle('on',x===b);});draw();});});
+reset2();reset3();sample1(3);
+</script>
+</body>
+</html>
