@@ -182,11 +182,20 @@ footer a{color:var(--text-secondary)}
        adversarial change, crafted vs. random noise, transfer across networks and data, and units vs. random directions.</p>
     <span class="go">Open the set &rarr;</span>
   </a>
+  <a class="card" href="demos/flow/">
+    <span class="tag">One explainer</span>
+    <h3>Flow matching</h3>
+    <p>In one dimension: drag a few Dirac targets and weight them. Each has its own conditional flow, and the lines all
+       cross; their weighted average is the single smooth marginal field a network learns, whose trajectories never cross.</p>
+    <span class="go">Open the set &rarr;</span>
+  </a>
   <a class="card" href="demos/rl/">
-    <span class="tag">Two explainers</span>
+    <span class="tag">Four explainers</span>
     <h3>Reinforcement learning for language models</h3>
     <p>REINFORCE, baselines, GRPO and DPO, live on a language model small enough to see whole: 64 completions,
-       every next-token distribution on screen, and the KL-regularized optimum drawn as the target they all aim at.</p>
+       every next-token distribution on screen, and the KL-regularized optimum drawn as the target they all aim at.
+       Plus the optimum itself on a line (the reference tilted by e<sup>reward/&beta;</sup>) and Bradley-Terry, the model that
+       turns preferences into probabilities.</p>
     <span class="go">Open the set &rarr;</span>
   </a>
 </div>

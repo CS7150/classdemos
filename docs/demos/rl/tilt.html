@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The tilted distribution</title>
+<meta name="description" content="The optimal policy for reward minus a KL penalty is the reference model multiplied by exp(reward/beta), then renormalized. On a one-dimensional space of responses: slide beta, drag two responses to compare, see why the normalizer cancels, and see reward hacking appear as the KL budget grows.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 20px;max-width:1150px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+.quiz{margin:0}
+svg#fig{max-height:68vh;touch-action:none;cursor:ew-resize}
+.row{gap:7px}
+button,select{height:30px;font-size:13px;padding:0 9px}
+.seg button{height:28px;font-size:12.5px;padding:0 9px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:40px}
+input[type=range]{flex:0 1 220px;min-width:100px}
+label.cb{font-size:12.5px}
+.rd{font-size:14px;line-height:1.6;min-height:4.8em}
+.rd b{font-weight:600}
+.cap{font-size:12.5px;line-height:1.6;padding-top:4px}
+.nav{display:flex;align-items:baseline;gap:10px}
+svg text{font-family:inherit}
+.ca{color:var(--warm-ink)}.cb2{color:var(--violet-ink)}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Reinforcement learning for language models</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>The tilted distribution<span>: the optimum of reward minus a KL penalty</span></h1>
+<p class="quiz">Fine-tune a model to earn reward without wandering far from where it started: maximize E[r] &minus; &beta;&middot;KL(&pi;&#8214;&pi;<sub>ref</sub>). The answer has a closed form, and it is the reference model multiplied, response by response, by e<sup>r/&beta;</sup>. Here the &ldquo;responses&rdquo; are the points of a single line, so the whole distribution fits in one picture.</p>
+
+<div class="row">
+  <span class="klab">reward:</span>
+  <div class="seg" id="preSeg"><button data-k="good" class="on">one good answer</button><button data-k="length">longer is better</button><button data-k="hack">a spurious spike</button></div>
+  <span class="klab">&beta;</span><input type="range" id="beta" min="0" max="100" step="1" value="65"><span class="knum" id="betaV"></span>
+  <label class="cb"><input type="checkbox" id="logv"> log scale</label>
+</div>
+
+<svg id="fig" viewBox="0 0 1000 560" role="img">
+<title>The KL-regularized optimum on a line of responses</title>
+<desc>Three stacked plots over one axis of responses. Top: the reference model's probability density. Middle: the reward. Bottom: the tuned model, which is the reference multiplied by e to the reward over beta and renormalized. Two draggable markers A and B compare two responses. At right, the expected reward against the KL divergence from the reference as beta varies.</desc>
+<g id="stage"></g>
+</svg>
+
+<div class="rd" id="readout"></div>
+<div class="cap" id="caption"></div>
+
+<script>
+var N=300,Y=[],REF=[],W0=0.62;
+var BLUE='var(--blue)',WARM='var(--warm)',PINK='var(--pink)',GREEN='var(--green)',VIOLET='var(--violet)',INK='var(--text-primary)',MUTED='var(--text-muted)',BORDER='var(--border-strong)';
+function gp(y,m,s){var z=(y-m)/s;return Math.exp(-.5*z*z)/(s*2.5066283);}
+function bump(y,m,s){var z=(y-m)/s;return Math.exp(-.5*z*z);}
+for(var i=0;i<N;i++){Y[i]=(i+.5)/N;REF[i]=W0*gp(Y[i],.30,.10)+(1-W0)*gp(Y[i],.72,.09);}
+(function(){var z=0;REF.forEach(function(v){z+=v/N;});REF=REF.map(function(v){return v/z;});})();
+var PRE={
+ good:{r:function(y){return 4*bump(y,.72,.12);}},
+ length:{r:function(y){return 4*y;}},
+ hack:{r:function(y){return 3*bump(y,.72,.12)+7*bump(y,.96,.012);},g:function(y){return 3*bump(y,.72,.12);}}
+};
+var KEY='good',TB=65,LOGV=false,MA=.30,MB=.72,RW=[],GD=[],FRONT=[];
+function beta(){return 0.05*Math.pow(100,TB/100);}
+function sig(z){return 1/(1+Math.exp(-z));}
+function fmt(x){if(!isFinite(x))return '&infin;';var a=Math.abs(x);if(a>=1e4||(a<.01&&a>0))return x.toExponential(1).replace('e+','&times;10<sup>').replace('e-','&times;10<sup>&minus;')+'</sup>';return a>=100?x.toFixed(0):a>=10?x.toFixed(1):x.toFixed(2);}
+function setPreset(k){KEY=k;var P=PRE[k];RW=Y.map(P.r);GD=P.g?Y.map(P.g):RW;
+ FRONT=[];for(var j=0;j<=70;j++){var b=0.05*Math.pow(100,j/70),s=solve(b);FRONT.push({b:b,kl:s.kl,er:s.er,eg:s.eg});}}
+function solve(b){var lw=[],m=-1e9,i;for(i=0;i<N;i++){lw[i]=Math.log(REF[i])+RW[i]/b;if(lw[i]>m)m=lw[i];}
+ var w=[],S=0;for(i=0;i<N;i++){w[i]=Math.exp(lw[i]-m);S+=w[i]/N;}
+ var p=[],er=0,eg=0,kl=0;for(i=0;i<N;i++){p[i]=w[i]/S;er+=p[i]*RW[i]/N;eg+=p[i]*GD[i]/N;if(p[i]>0)kl+=p[i]*(Math.log(p[i])-Math.log(REF[i]))/N;}
+ return {p:p,logZ:m+Math.log(S),er:er,eg:eg,kl:kl};}
+function at(arr,y){return arr[Math.max(0,Math.min(N-1,Math.floor(y*N)))];}
+
+/* ---------- layout ---------- */
+var X0=70,X1=640,P=[[48,150],[208,308],[366,476]];
+function px(y){return X0+y*(X1-X0);}
+function T(x,y,s,cls,anc,fill){return '<text x="'+x+'" y="'+y+'" class="'+(cls||'ts')+'"'+(anc?' text-anchor="'+anc+'"':'')+(fill?' fill="'+fill+'"':'')+'>'+s+'</text>';}
+function path(vals,f){var d='';for(var i=0;i<N;i++)d+=(i?'L':'M')+px(Y[i]).toFixed(1)+' '+f(vals[i]).toFixed(1);return d;}
+function curve(vals,f,bot,stroke,fill,dash,w){var d=path(vals,f),s='';
+ if(fill)s+='<path d="'+d+'L'+px(Y[N-1]).toFixed(1)+' '+bot+'L'+px(Y[0]).toFixed(1)+' '+bot+'Z" fill="'+fill+'" opacity="0.22"/>';
+ return s+'<path d="'+d+'" fill="none" stroke="'+stroke+'" stroke-width="'+(w||2)+'"'+(dash?' stroke-dasharray="'+dash+'"':'')+'/>';}
+function axisBase(top,bot){return '<line x1="'+X0+'" y1="'+bot+'" x2="'+X1+'" y2="'+bot+'" stroke="'+BORDER+'"/><line x1="'+X0+'" y1="'+top+'" x2="'+X0+'" y2="'+bot+'" stroke="'+BORDER+'"/>';}
+
+function draw(){
+ var b=beta(),S=solve(b),s='',i;
+ document.getElementById('betaV').textContent=b.toFixed(2);
+ var rmin=Math.min(0,Math.min.apply(null,RW)),rmax=Math.max.apply(null,RW)*1.12;
+ var pm=Math.max.apply(null,S.p),rm=Math.max.apply(null,REF);
+ // vertical scale of a density panel: linear, or natural log clipped at a floor
+ var LO=-8,HI=Math.log(Math.max(pm,rm))+.4;
+ function fD(top,bot,vmax){return function(v){return LOGV?bot-(Math.max(LO,Math.min(HI,Math.log(Math.max(v,1e-300))))-LO)/(HI-LO)*(bot-top):bot-v/vmax*(bot-top);};}
+ var f1=fD(P[0][0],P[0][1],rm*1.1),f3=fD(P[2][0],P[2][1],Math.max(pm,rm)*1.1);
+ var fR=function(v){return P[1][1]-(v-rmin)/(rmax-rmin)*(P[1][1]-P[1][0]);};
+ // panel 1: the reference
+ s+=axisBase(P[0][0],P[0][1])+T(X0,P[0][0]-10,'π<tspan baseline-shift="sub" font-size="11">ref</tspan>(y)  — the base model'+(LOGV?'  (log scale)':''),'ts')+
+  curve(REF,f1,P[0][1],BLUE,LOGV?null:BLUE);
+ // panel 2: the reward
+ s+=axisBase(P[1][0],P[1][1])+T(X0,P[1][0]-10,'r(y)  — the reward'+(KEY==='hack'?'  (pink: what we optimize, dashed green: what we actually want)':''),'ts');
+ s+='<line x1="'+X0+'" y1="'+fR(0).toFixed(1)+'" x2="'+X1+'" y2="'+fR(0).toFixed(1)+'" stroke="'+BORDER+'" stroke-dasharray="2 4"/>';
+ if(KEY==='hack')s+=curve(GD,fR,P[1][1],GREEN,null,'5 4',1.8);
+ s+=curve(RW,fR,P[1][1],PINK,null,null,2.2);
+ // panel 3: the tuned model
+ s+=axisBase(P[2][0],P[2][1])+T(X0,P[2][0]-10,'π*(y) = π<tspan baseline-shift="sub" font-size="11">ref</tspan>(y)·e<tspan baseline-shift="super" font-size="11">r(y)/β</tspan> / Z'+(LOGV?'  (log scale)':''),'ts')+
+  curve(REF,f3,P[2][1],MUTED,null,'4 4',1.5)+curve(S.p,f3,P[2][1],WARM,LOGV?null:WARM,null,2.4);
+ s+=T(X1,P[2][0]-10,'dashed: π<tspan baseline-shift="sub" font-size="11">ref</tspan>','tn','end');
+ s+=T((X0+X1)/2,P[2][1]+48,'response y  (a one-dimensional stand-in for the space of all responses)','tn','middle');
+ // markers A and B
+ [[MA,'A',WARM],[MB,'B',VIOLET]].forEach(function(m){var x=px(m[0]).toFixed(1);
+  s+='<line x1="'+x+'" y1="'+(P[0][0]-6)+'" x2="'+x+'" y2="'+(P[2][1]+5)+'" stroke="'+m[2]+'" stroke-width="1.6" stroke-dasharray="5 4"/>';
+  s+='<circle cx="'+x+'" cy="'+(P[2][1]+16)+'" r="11" fill="'+m[2]+'"/><text x="'+x+'" y="'+(P[2][1]+20.5)+'" text-anchor="middle" font-size="13" font-weight="600" fill="#fff">'+m[1]+'</text>';
+  s+='<circle cx="'+x+'" cy="'+f1(at(REF,m[0])).toFixed(1)+'" r="4.5" fill="'+m[2]+'"/><circle cx="'+x+'" cy="'+fR(at(RW,m[0])).toFixed(1)+'" r="4.5" fill="'+m[2]+'"/><circle cx="'+x+'" cy="'+f3(at(S.p,m[0])).toFixed(1)+'" r="4.5" fill="'+m[2]+'"/>';});
+ // frontier: expected reward against KL as beta sweeps
+ var FX=712,FY=[72,300],FW=250,klmax=Math.max.apply(null,FRONT.map(function(q){return q.kl;}))*1.05;
+ var ermax=Math.max.apply(null,FRONT.map(function(q){return q.er;}))*1.08,ermin=Math.min(0,Math.min.apply(null,FRONT.map(function(q){return Math.min(q.er,q.eg);})));
+ function gx(k){return FX+k/klmax*FW;}function gy(r){return FY[1]-(r-ermin)/(ermax-ermin)*(FY[1]-FY[0]);}
+ s+=T(FX,FY[0]-22,'what β buys','ts')+T(FX,FY[0]-6,'expected reward vs. distance from π<tspan baseline-shift="sub" font-size="10">ref</tspan>','tn');
+ s+='<line x1="'+FX+'" y1="'+FY[1]+'" x2="'+(FX+FW)+'" y2="'+FY[1]+'" stroke="'+BORDER+'"/><line x1="'+FX+'" y1="'+FY[0]+'" x2="'+FX+'" y2="'+FY[1]+'" stroke="'+BORDER+'"/>';
+ s+=T(FX+FW/2,FY[1]+26,'KL(π*‖πref)  in nats','tn','middle');
+ var dr='',dg='';FRONT.forEach(function(q,j){dr+=(j?'L':'M')+gx(q.kl).toFixed(1)+' '+gy(q.er).toFixed(1);dg+=(j?'L':'M')+gx(q.kl).toFixed(1)+' '+gy(q.eg).toFixed(1);});
+ if(KEY==='hack')s+='<path d="'+dg+'" fill="none" stroke="'+GREEN+'" stroke-width="2" stroke-dasharray="5 4"/>';
+ s+='<path d="'+dr+'" fill="none" stroke="'+PINK+'" stroke-width="2.2"/>';
+ s+='<circle cx="'+gx(S.kl).toFixed(1)+'" cy="'+gy(S.er).toFixed(1)+'" r="6" fill="'+WARM+'" stroke="var(--bg)" stroke-width="2"/>';
+ if(KEY==='hack')s+='<circle cx="'+gx(S.kl).toFixed(1)+'" cy="'+gy(S.eg).toFixed(1)+'" r="5" fill="'+WARM+'" stroke="var(--bg)" stroke-width="2"/>'+T(FX+FW,gy(FRONT[FRONT.length-1].er)-8,'optimized reward','tn','end',PINK)+T(FX+FW,gy(FRONT[FRONT.length-1].eg)+16,'true quality','tn','end',GREEN);
+ else s+=T(FX+FW,gy(FRONT[FRONT.length-1].er)+16,'E[r]','tn','end',PINK);
+ s+=T(FX+6,FY[0]+14,'small β → right, large β → origin','tn');
+ document.getElementById('stage').innerHTML=s;
+
+ // readout for the pair A, B
+ var rA=at(RW,MA),rB=at(RW,MB),qA=at(REF,MA),qB=at(REF,MB),pA=at(S.p,MA),pB=at(S.p,MB),dRw=rA-rB;
+ var refOdds=qA/qB,polOdds=refOdds*Math.exp(dRw/b);
+ document.getElementById('readout').innerHTML=
+  '<span class="ca"><b>A</b></span> = '+MA.toFixed(2)+' and <span class="cb2"><b>B</b></span> = '+MB.toFixed(2)+' (drag them). '+
+  'Reference odds A : B = <b class="num">'+fmt(refOdds)+'</b>. Reward gap r(A)&minus;r(B) = <b class="num">'+dRw.toFixed(2)+'</b>, so the policy multiplies the odds by e<sup>gap/&beta;</sup> = <b class="num">'+fmt(Math.exp(dRw/b))+'</b>, giving odds <b class="num">'+fmt(polOdds)+'</b>. '+
+  'Read off the bottom plot, &pi;*(A)/&pi;*(B) = <b class="num">'+fmt(pA/pB)+'</b>: the same, because both were divided by the same Z (log Z = <span class="num">'+S.logZ.toFixed(2)+'</span>), and a common divisor drops out of a ratio. '+
+  'A human with these rewards would pick A with probability &sigma;(gap) = <b class="num">'+(100*sig(dRw)).toFixed(0)+'%</b>, '+(Math.abs(refOdds*Math.exp(dRw/b)-Math.exp(dRw))<1e-9*Math.exp(dRw)?'which is also the policy&rsquo;s odds, since here &beta; = 1 and the reference is even.':'which matches the policy&rsquo;s odds only when &beta; = 1 and the reference is even.')+
+  '<br>This policy earns E[r] = <b class="num">'+S.er.toFixed(2)+'</b> at a cost of KL = <b class="num">'+S.kl.toFixed(2)+'</b> nats'+(KEY==='hack'?'; its true quality is <b class="num">'+S.eg.toFixed(2)+'</b>.':'.');
+}
+
+function caption(){document.getElementById('caption').innerHTML=
+ '<div><b>Why this shape.</b> Write &pi;* = &pi;<sub>ref</sub>e<sup>r/&beta;</sup>/Z. A few lines of algebra turn the objective into E<sub>&pi;</sub>[r] &minus; &beta;KL(&pi;&#8214;&pi;<sub>ref</sub>) = &minus;&beta;KL(&pi;&#8214;&pi;*) + &beta;log Z. KL is never negative and is zero only when the two distributions are equal, so the best you can do is &pi; = &pi;*, and the shape is forced. '+
+ 'The exponential is there because the penalty is measured in log-probability: log &pi;* = log &pi;<sub>ref</sub> + r/&beta; &minus; log Z, so in log scale reward is simply <em>added</em> to the log of the reference. Tick &ldquo;log scale&rdquo; to see the two curves become shifted copies of one another, each point raised by r/&beta;.</div>'+
+ '<div><b>&beta; is a temperature.</b> Large &beta;: the exponent is small, the tilt is gentle, &pi;* stays at the reference. Small &beta;: the tilt is enormous and &pi;* collapses onto the reward&rsquo;s peak, wherever the reference put little mass. Each +1 of reward multiplies a response&rsquo;s odds by e<sup>1/&beta;</sup>.</div>'+
+ '<div><b>Z only rescales.</b> Z = &int; &pi;<sub>ref</sub>(y)e<sup>r(y)/&beta;</sup> dy adds up over every response, so y has been integrated away and Z depends on nothing but the prompt (here, nothing at all). It exists only to make the area equal 1, and it multiplies every point equally, so the ratio of any two points is untouched. That is why preference data, which only compare two responses to the same prompt, can pin down r only up to a constant.</div>'+
+ '<div><b>Reward hacking.</b> Choose &ldquo;a spurious spike&rdquo;: the reward model has a narrow, mistaken peak where the reference almost never goes. At large &beta; nothing happens. As &beta; falls, &pi;* spends more of its KL budget there, the optimized reward keeps rising along the pink curve, and the true quality (dashed) peaks and then falls. This is the over-optimization curve of Gao et al. 2023, and the reason the KL penalty is there.</div>';}
+
+/* ---------- interaction ---------- */
+function svgX(e){var svg=document.getElementById('fig'),pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;var q=pt.matrixTransform(svg.getScreenCTM().inverse());return q;}
+var DRAG=null;
+document.getElementById('fig').addEventListener('pointerdown',function(e){var q=svgX(e);if(q.x<X0-14||q.x>X1+14||q.y>P[2][1]+6)return;
+ var y=Math.max(.005,Math.min(.995,(q.x-X0)/(X1-X0)));DRAG=Math.abs(y-MA)<=Math.abs(y-MB)?'A':'B';
+ if(DRAG==='A')MA=y;else MB=y;this.setPointerCapture(e.pointerId);draw();});
+document.getElementById('fig').addEventListener('pointermove',function(e){if(!DRAG)return;var q=svgX(e),y=Math.max(.005,Math.min(.995,(q.x-X0)/(X1-X0)));if(DRAG==='A')MA=y;else MB=y;draw();});
+['pointerup','pointercancel'].forEach(function(n){document.getElementById('fig').addEventListener(n,function(){DRAG=null;});});
+document.getElementById('beta').addEventListener('input',function(){TB=+this.value;draw();});
+document.getElementById('logv').addEventListener('change',function(){LOGV=this.checked;draw();});
+Array.prototype.forEach.call(document.querySelectorAll('#preSeg button'),function(b){b.addEventListener('click',function(){
+ Array.prototype.forEach.call(document.querySelectorAll('#preSeg button'),function(x){x.classList.toggle('on',x===b);});
+ setPreset(b.dataset.k);if(b.dataset.k==='hack'){MA=.72;MB=.96;}else{MA=.30;MB=.72;}draw();});});
+setPreset('good');caption();draw();
+</script>
+</body>
+</html>

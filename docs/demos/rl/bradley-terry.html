@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bradley-Terry: preferences from scores</title>
+<meta name="description" content="The Bradley-Terry model behind reward models and DPO: a hidden score per response, and a human who prefers A with probability sigmoid(score gap). Why only gaps matter, where the sigmoid comes from (noisy judgments), and recovering scores from votes by logistic regression.">
+<link rel="stylesheet" href="../demo.css">
+<style>
+body{gap:6px;padding:11px 16px 20px;max-width:1100px;margin:0 auto}
+h1{font-size:19px;margin-top:2px}
+.quiz{margin:0}
+svg#fig{max-height:60vh;touch-action:none}
+.row{gap:7px}
+button,select{height:30px;font-size:13px;padding:0 9px}
+.seg button{height:28px;font-size:12.5px;padding:0 9px}
+.klab{font-size:12.5px}
+.knum{font-size:12.5px;min-width:40px}
+input[type=range]{flex:0 1 200px;min-width:100px}
+.rd{font-size:14px;line-height:1.6;min-height:3.4em}
+.rd b{font-weight:600}
+.cap{font-size:12.5px;line-height:1.6;padding-top:4px}
+.nav{display:flex;align-items:baseline;gap:10px}
+.ctl{display:none}.ctl.on{display:flex}
+svg text{font-family:inherit}
+</style>
+</head>
+<body>
+<div class="nav"><a href="./">&larr; Reinforcement learning for language models</a> &middot; <a href="../../">CS7150 class demos</a></div>
+<h1>Bradley-Terry<span>: from a hidden score to a preference</span></h1>
+<p class="quiz">A reward model, and DPO behind it, assume each response has a hidden quality score r, and that a person shown two responses prefers A with probability &sigma;(r<sub>A</sub>&minus;r<sub>B</sub>). It is Elo&rsquo;s chess rating, and it goes back to Zermelo (1929) and Bradley and Terry (1952). Three questions about it.</p>
+
+<div class="row"><div class="seg" id="partSeg">
+<button data-p="0" class="on">1. gap &rarr; probability</button><button data-p="1">2. why a sigmoid?</button><button data-p="2">3. scores from votes</button>
+</div></div>
+
+<svg id="fig" viewBox="0 0 1000 400" role="img">
+<title>Bradley-Terry preference model</title>
+<desc>Part 1: two responses placed on a score line, and the sigmoid giving the probability the first is preferred as a function of the score gap. Part 2: the distribution of the difference between two noisy judgments, with the area on the positive side equal to the preference probability. Part 3: hidden true scores of five responses beside the scores recovered from simulated votes.</desc>
+<g id="stage"></g>
+</svg>
+
+<div class="row ctl on" id="c0">
+<span class="klab">add the same amount to both:</span><input type="range" id="shift" min="-3" max="3" step="0.05" value="0"><span class="knum" id="shiftV"></span>
+<span class="klab">or drag A and B along the line</span>
+</div>
+<div class="row ctl" id="c1">
+<span class="klab">true gap &Delta;</span><input type="range" id="gap" min="-4" max="4" step="0.1" value="1.5"><span class="knum" id="gapV"></span>
+<span class="klab">judgment noise:</span><div class="seg" id="noiseSeg"><button data-k="gumbel" class="on">Gumbel</button><button data-k="gauss">Gaussian</button></div>
+</div>
+<div class="row ctl" id="c2">
+<span class="klab">number of votes</span><input type="range" id="nv" min="0" max="40" step="1" value="16"><span class="knum" id="nvV"></span>
+<button class="main" onclick="newVotes()">New votes</button><button onclick="newItems()">New items</button>
+</div>
+<div class="rd" id="readout"></div>
+<div class="cap" id="caption"></div>
+
+<script>
+var PART=0,BLUE='var(--blue)',WARM='var(--warm)',PINK='var(--pink)',GREEN='var(--green)',VIOLET='var(--violet)',MUTED='var(--text-muted)',BORDER='var(--border-strong)',INK='var(--text-primary)';
+function sig(z){return 1/(1+Math.exp(-z));}
+function rng(s){return function(){s|=0;s=s+0x6D2B79F5|0;var t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function T(x,y,s,cls,anc,fill){return '<text x="'+x+'" y="'+y+'" class="'+(cls||'ts')+'"'+(anc?' text-anchor="'+anc+'"':'')+(fill?' fill="'+fill+'"':'')+'>'+s+'</text>';}
+function erf(x){var t=1/(1+.3275911*Math.abs(x)),y=1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-.284496736)*t+.254829592)*t*Math.exp(-x*x);return x>=0?y:-y;}
+function Phi(x){return .5*(1+erf(x/Math.SQRT2));}
+function $(id){return document.getElementById(id);}
+
+/* ---------- part 1 ---------- */
+var A0=1.0,B0=-1.0,SH=0,DR=null;
+var L0=60,L1=520;function sx(v){return L0+(v+7)/14*(L1-L0);}
+function part1(){var a=A0+SH,b=B0+SH,gap=a-b,p=sig(gap),s='';
+ s+=T(L0,40,'the score line: each response has a hidden quality score','ts');
+ s+='<line x1="'+L0+'" y1="220" x2="'+L1+'" y2="220" stroke="'+BORDER+'" stroke-width="2"/>';
+ for(var v=-6;v<=6;v+=2)s+='<line x1="'+sx(v)+'" y1="214" x2="'+sx(v)+'" y2="226" stroke="'+BORDER+'"/>'+T(sx(v),246,v,'tn','middle');
+ s+='<line x1="'+sx(0)+'" y1="120" x2="'+sx(0)+'" y2="214" stroke="'+BORDER+'" stroke-dasharray="3 4"/>'+T(sx(0),112,'score 0 is arbitrary','tn','middle');
+ // the gap
+ var xa=sx(Math.max(-7,Math.min(7,a))),xb=sx(Math.max(-7,Math.min(7,b)));
+ s+='<line x1="'+xb+'" y1="180" x2="'+xa+'" y2="180" stroke="'+PINK+'" stroke-width="3"/>'+T((xa+xb)/2,168,'gap = '+gap.toFixed(2),'ts','middle',PINK);
+ [[xa,'A',WARM],[xb,'B',VIOLET]].forEach(function(m){s+='<circle cx="'+m[0]+'" cy="220" r="14" fill="'+m[2]+'"/>'+'<text x="'+m[0]+'" y="225" text-anchor="middle" font-size="14" font-weight="600" fill="#fff">'+m[1]+'</text>';});
+ s+=T(L0,300,'r(A) = '+a.toFixed(2)+'     r(B) = '+b.toFixed(2),'ts');
+ // sigmoid
+ var X0=640,X1=950,Y0=70,Y1=300;function gx(g){return X0+(g+8)/16*(X1-X0);}function gy(q){return Y1-q*(Y1-Y0);}
+ s+=T(X0,40,'P(A preferred) = σ(gap)','ts');
+ s+='<line x1="'+X0+'" y1="'+Y1+'" x2="'+X1+'" y2="'+Y1+'" stroke="'+BORDER+'"/><line x1="'+X0+'" y1="'+Y0+'" x2="'+X0+'" y2="'+Y1+'" stroke="'+BORDER+'"/>';
+ s+='<line x1="'+X0+'" y1="'+gy(.5)+'" x2="'+X1+'" y2="'+gy(.5)+'" stroke="'+BORDER+'" stroke-dasharray="3 4"/>'+T(X0-6,gy(.5)+4,'50%','tn','end')+T(X0-6,gy(1)+4,'100%','tn','end')+T(X0-6,gy(0)+4,'0%','tn','end');
+ var d='';for(var g=-8;g<=8.001;g+=.2)d+=(d?'L':'M')+gx(g).toFixed(1)+' '+gy(sig(g)).toFixed(1);
+ s+='<path d="'+d+'" fill="none" stroke="'+PINK+'" stroke-width="2.4"/>';
+ [-4,-2,0,2,4].forEach(function(g){s+=T(gx(g),Y1+18,g,'tn','middle');});
+ s+=T((X0+X1)/2,Y1+40,'gap r(A) − r(B)','tn','middle');
+ var gg=Math.max(-8,Math.min(8,gap));
+ s+='<line x1="'+gx(gg)+'" y1="'+Y1+'" x2="'+gx(gg)+'" y2="'+gy(p)+'" stroke="'+PINK+'" stroke-dasharray="4 3"/><circle cx="'+gx(gg)+'" cy="'+gy(p)+'" r="7" fill="'+PINK+'"/>'+T(gx(gg)+(gg>3?-12:12),gy(p)+(gg>3?20:-10),(100*p).toFixed(0)+'%','ts',gg>3?'end':'start');
+ $('readout').innerHTML='A is <b class="num">'+gap.toFixed(2)+'</b> above B, so a person prefers A <b class="num">'+(100*p).toFixed(1)+'%</b> of the time. Gap 0 is a coin flip; gap 2 is about 88%; gap 4 is about 98%. '+
+  'Slide &ldquo;add the same amount to both&rdquo;: the scores move but the gap, and so the probability, do not. A preference only ever tells you how far apart two responses are, never where the zero is.';return s;}
+
+/* ---------- part 2 ---------- */
+var NOISE='gumbel',D2=[],GAP=1.5;
+function resample2(){var r=rng(5),n=4000,sg=Math.PI/Math.sqrt(6);D2=[];
+ // the difference of two independent noises: draw each separately
+ function e(){var u=r(),v=r(),w=r();return NOISE==='gumbel'?-Math.log(-Math.log(Math.max(u,1e-12))):sg*Math.sqrt(-2*Math.log(Math.max(v,1e-12)))*Math.cos(2*Math.PI*w);}
+ for(var i=0;i<n;i++)D2.push(e()-e());}
+function part2(){var s='',X0=70,X1=930,Y0=70,Y1=310,lo=-10,hi=10;function gx(v){return X0+(v-lo)/(hi-lo)*(X1-X0);}
+ var n=D2.length,bw=.5,nb=(hi-lo)/bw,h=new Array(nb).fill(0),pos=0;
+ D2.forEach(function(d){var x=d+GAP;if(x>0)pos++;var b=Math.floor((x-lo)/bw);if(b>=0&&b<nb)h[b]++;});
+ var sd=Math.PI/Math.sqrt(6)*Math.SQRT2;
+ function logi(x){var z=Math.exp(-(x-GAP));return z/((1+z)*(1+z));}
+ function gau(x){var z=(x-GAP)/sd;return Math.exp(-.5*z*z)/(sd*2.5066283);}
+ var ym=.3;function gy(q){return Y1-q/ym*(Y1-Y0);}
+ s+=T(X0,40,'distribution of  (r(A)+noise)  −  (r(B)+noise)  over '+n+' simulated judgments','ts');
+ s+='<line x1="'+X0+'" y1="'+Y1+'" x2="'+X1+'" y2="'+Y1+'" stroke="'+BORDER+'"/>';
+ for(var v=-8;v<=8;v+=2)s+=T(gx(v),Y1+18,v,'tn','middle');
+ // shade the winning side
+ for(var b=0;b<nb;b++){var x0=lo+b*bw,q=h[b]/n/bw;s+='<rect x="'+gx(x0).toFixed(1)+'" y="'+gy(q).toFixed(1)+'" width="'+((X1-X0)/nb-1).toFixed(1)+'" height="'+(Y1-gy(q)).toFixed(1)+'" fill="'+(x0+bw/2>0?PINK:BLUE)+'" opacity="'+(x0+bw/2>0?.55:.3)+'"/>';}
+ var d1='',d2='';for(var x=lo;x<=hi+.001;x+=.1){d1+=(d1?'L':'M')+gx(x).toFixed(1)+' '+gy(logi(x)).toFixed(1);d2+=(d2?'L':'M')+gx(x).toFixed(1)+' '+gy(gau(x)).toFixed(1);}
+ s+='<path d="'+d1+'" fill="none" stroke="'+INK+'" stroke-width="2"/><path d="'+d2+'" fill="none" stroke="'+GREEN+'" stroke-width="2" stroke-dasharray="5 4"/>';
+ s+='<line x1="'+gx(0)+'" y1="'+(Y0-6)+'" x2="'+gx(0)+'" y2="'+Y1+'" stroke="'+INK+'" stroke-width="1.5"/>'+T(gx(0)+8,Y0+4,'A wins here →','ts','start',PINK)+T(gx(0)-8,Y0+4,'← B wins here','ts','end',BLUE);
+ s+=T(X1,Y0+30,'black: logistic curve (exact for Gumbel noise)','tn','end')+T(X1,Y0+48,'green dashed: Gaussian with the same spread','tn','end',GREEN);
+ var pl=sig(GAP),pg=Phi(GAP/sd);
+ $('readout').innerHTML='With a gap of <b class="num">'+GAP.toFixed(1)+'</b> and '+(NOISE==='gumbel'?'Gumbel':'Gaussian')+' noise on each judgment, A wins <b class="num">'+(100*pos/n).toFixed(1)+'%</b> of the '+n+' simulated trials. '+
+  'The area to the right of 0 is the win probability: the logistic curve gives <b class="num">'+(100*pl).toFixed(1)+'%</b> and the Gaussian <b class="num">'+(100*pg).toFixed(1)+'%</b>. '+(NOISE==='gumbel'?'The simulation matches σ(gap) exactly.':'The simulation matches the Gaussian (Thurstone 1927) and only roughly the sigmoid.');return s;}
+
+/* ---------- part 3 ---------- */
+var NI=5,TRUE=[],VOTES=[],EST=[],SEED=11;
+function newItems(){SEED+=7;var r=rng(SEED);TRUE=[];for(var i=0;i<NI;i++)TRUE.push((r()-.5)*7);newVotes();}
+function nvotes(){return Math.round(10*Math.pow(2,+$('nv').value/5));}
+function newVotes(){SEED+=3;var r=rng(SEED),M=nvotes();VOTES=[];for(var k=0;k<M;k++){var i=Math.floor(r()*NI),j=Math.floor(r()*(NI-1));if(j>=i)j++;VOTES.push(r()<sig(TRUE[i]-TRUE[j])?[i,j]:[j,i]);}fit();draw();}
+function fit(){var th=new Array(NI).fill(0),M=VOTES.length;for(var it=0;it<600;it++){var g=new Array(NI).fill(0);VOTES.forEach(function(v){var q=sig(th[v[1]]-th[v[0]]);g[v[0]]+=q;g[v[1]]-=q;});for(var i=0;i<NI;i++)th[i]+=3*(g[i]/M-.005*th[i]);}
+ var m=th.reduce(function(a,b){return a+b;},0)/NI;EST=th.map(function(v){return v-m;});}
+function part3(){var s='',X0=70,X1=930,mid=190,sc=22,mt=TRUE.reduce(function(a,b){return a+b;},0)/NI,bw=(X1-X0)/NI;
+ s+=T(X0,40,'hidden true scores (outline) and the scores fitted from the votes alone (filled), each centered to mean 0','ts');
+ s+='<line x1="'+X0+'" y1="'+mid+'" x2="'+X1+'" y2="'+mid+'" stroke="'+BORDER+'"/>';
+ var err=0;
+ for(var i=0;i<NI;i++){var x=X0+i*bw+bw*.2,w=bw*.6,t=TRUE[i]-mt,e=EST[i];err+=Math.abs(t-e);
+  s+='<rect x="'+(x).toFixed(1)+'" y="'+(e>=0?mid-e*sc:mid).toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+(Math.abs(e)*sc).toFixed(1)+'" fill="'+PINK+'" opacity="0.6"/>';
+  s+='<rect x="'+(x).toFixed(1)+'" y="'+(t>=0?mid-t*sc:mid).toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+(Math.abs(t)*sc).toFixed(1)+'" fill="none" stroke="'+INK+'" stroke-width="2"/>';
+  s+=T(x+w/2,mid+(t>=0?-t*sc-8:-t*sc+20)*(t>=0?1:1),'response '+'ABCDE'[i],'tn','middle');}
+ // vote tally
+ var W=new Array(NI).fill(0),C=new Array(NI).fill(0);VOTES.forEach(function(v){W[v[0]]++;C[v[0]]++;C[v[1]]++;});
+ for(i=0;i<NI;i++){s+=T(X0+i*bw+bw/2,355,'won '+W[i]+' of '+C[i]+(C[i]?' ('+Math.round(100*W[i]/C[i])+'%)':''),'tn','middle');}
+ $('nvV').textContent=VOTES.length;
+ $('readout').innerHTML='<b class="num">'+VOTES.length+'</b> votes, each a random pair and a winner drawn from the true Bradley-Terry probability. The fit never sees the true scores: it maximizes &Sigma; log &sigma;(r<sub>winner</sub>&minus;r<sub>loser</sub>), which is logistic regression on score differences. Mean error <b class="num">'+(err/NI).toFixed(2)+'</b>. '+
+  'With a few dozen votes the ranking is mostly right and the spacing is rough; with thousands the scores line up. Both are centered because the votes cannot tell where zero is.';return s;}
+
+function draw(){$('stage').innerHTML=PART===0?part1():PART===1?part2():part3();$('shiftV').textContent=SH.toFixed(2);$('gapV').textContent=GAP.toFixed(1);caption();}
+function caption(){var h;
+ if(PART===0)h='<b>The model.</b> Every response has one number, its score; a comparison is decided by the gap. The sigmoid is just the way to turn a gap on the whole real line into a probability between 0 and 1: it is 50% at zero, and each extra point of gap multiplies the odds by e (odds = e<sup>gap</sup>). Because only the gap enters, adding a constant to every score changes nothing, which is why DPO&rsquo;s intractable log Z(x) can be dropped: it is that constant.';
+ else if(PART===1)h='<b>One story for the sigmoid.</b> Suppose a person judges each response as its true score plus a bit of random noise, then picks whichever looks better. Each judgment is the score plus noise; A wins when the difference is positive. If the noise is Gumbel, the difference of two noisy scores follows a logistic distribution, whose cumulative curve is exactly the sigmoid. With Gaussian noise you get Thurstone&rsquo;s 1927 model instead, whose curve is the normal CDF and looks almost the same. The logistic form won because its gradients are clean and the log-odds are linear in the scores.';
+ else h='<b>Fitting a reward model.</b> Treat each vote as a training example: the winner&rsquo;s score minus the loser&rsquo;s goes through a sigmoid, and the loss is &minus;log of that probability. That is exactly how a reward model is trained, with a neural network producing the scores. More votes tighten the estimate; and scores can only be recovered up to a shift, so the demo centers them.';
+ $('caption').innerHTML=h;}
+
+/* ---------- interaction ---------- */
+function svgPt(e){var svg=$('fig'),pt=svg.createSVGPoint();pt.x=e.clientX;pt.y=e.clientY;return pt.matrixTransform(svg.getScreenCTM().inverse());}
+function lineVal(x){return Math.max(-6.9,Math.min(6.9,(x-L0)/(L1-L0)*14-7));}
+$('fig').addEventListener('pointerdown',function(e){if(PART!==0)return;var q=svgPt(e);if(q.x>L1+20||q.y<120||q.y>260)return;var v=lineVal(q.x)-SH;DR=Math.abs(v-A0)<=Math.abs(v-B0)?'A':'B';if(DR==='A')A0=v;else B0=v;this.setPointerCapture(e.pointerId);draw();});
+$('fig').addEventListener('pointermove',function(e){if(!DR)return;var v=lineVal(svgPt(e).x)-SH;if(DR==='A')A0=v;else B0=v;draw();});
+['pointerup','pointercancel'].forEach(function(n){$('fig').addEventListener(n,function(){DR=null;});});
+$('shift').addEventListener('input',function(){SH=+this.value;draw();});
+$('gap').addEventListener('input',function(){GAP=+this.value;draw();});
+$('nv').addEventListener('input',function(){newVotes();});
+Array.prototype.forEach.call(document.querySelectorAll('#noiseSeg button'),function(b){b.addEventListener('click',function(){NOISE=b.dataset.k;Array.prototype.forEach.call(document.querySelectorAll('#noiseSeg button'),function(x){x.classList.toggle('on',x===b);});resample2();draw();});});
+Array.prototype.forEach.call(document.querySelectorAll('#partSeg button'),function(b){b.addEventListener('click',function(){PART=+b.dataset.p;Array.prototype.forEach.call(document.querySelectorAll('#partSeg button'),function(x){x.classList.toggle('on',x===b);});
+ ['c0','c1','c2'].forEach(function(id,i){$(id).classList.toggle('on',i===PART);});draw();});});
+resample2();newItems();
+</script>
+</body>
+</html>
