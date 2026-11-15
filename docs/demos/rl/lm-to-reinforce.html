@@ -30,12 +30,12 @@ svg text{font-family:inherit}
 <p class="quiz">One tiny language model, three steps. First, just watch it work. Then train it the ordinary way, on text. Then take the text away, keep only a score, and see that the only change is a weight on each of the model&rsquo;s own samples.</p>
 
 <div class="row"><div class="seg" id="tabSeg">
-<button data-p="0" class="on">1. a bare language model</button><button data-p="1">2. train it on text</button><button data-p="2">3. no text, only a score</button>
+<button data-p="0" class="on">1. a bare language model</button><button data-p="1">2. train it on text</button><button data-p="2">3. no text, only a score</button><button data-p="3">4. what it is aiming at</button>
 </div></div>
 
 <svg id="fig" viewBox="0 0 1000 520" role="img">
 <title>A tiny language model, trained on text and on reward</title>
-<desc>A language model that writes three tokens a, b or c, one at a time. For the latest completion, the probability the model gave each possible next token at each position, with the chosen token highlighted. Step 1: sampling. Step 2: one training update on a written example raises the probability of its tokens. Step 3: the model's own samples, each weighted by a reward, drive the same update; a chart compares training on weights of one against training on reward.</desc>
+<desc>Step 4: the 27 completions as columns, with the base model probability, the preference factor, and their normalized product. A language model that writes three tokens a, b or c, one at a time. For the latest completion, the probability the model gave each possible next token at each position, with the chosen token highlighted. Step 1: sampling. Step 2: one training update on a written example raises the probability of its tokens. Step 3: the model's own samples, each weighted by a reward, drive the same update; a chart compares training on weights of one against training on reward.</desc>
 <g id="stage"></g>
 </svg>
 
@@ -49,6 +49,11 @@ svg text{font-family:inherit}
 <span class="klab">reward:</span><div class="seg" id="rewSeg"><button data-k="end" class="on">ends in c</button><button data-k="cnt">number of c&rsquo;s</button></div>
 <button class="main" onclick="step3()">One step (8 samples)</button><button id="runB" onclick="toggleRun()">Run</button><button onclick="reset3()">Start over</button>
 <span class="klab">watch:</span><div class="seg" id="watchSeg"><button data-k="1" class="on">weight = reward</button><button data-k="0">weight = 1</button></div>
+</div>
+<div class="row ctl" id="c3">
+<span class="klab">reward:</span><div class="seg" id="rewSeg4"><button data-k="end" class="on">ends in c</button><button data-k="cnt">number of c&rsquo;s</button></div>
+<span class="klab">&beta;</span><input type="range" id="beta4" min="0" max="100" step="1" value="55" style="flex:0 1 220px"><span class="knum" id="beta4V"></span>
+<label class="cb"><input type="checkbox" id="ovl"> overlay the model trained in step 3</label>
 </div>
 <div class="rd" id="readout"></div>
 <div class="cap" id="caption"></div>
@@ -161,16 +166,54 @@ function part3(){var key=WATCH?'B':'A',L=M3[key][0],b=LASTB[key],y=b?b[0].y:[0,0
  $('readout').innerHTML='After <b class="num">'+N3+'</b> steps, averaged over '+NR+' runs: weight = reward has taken the expected reward from <b class="num">'+(100*mB[0]).toFixed(0)+'%</b> to <b class="num">'+(100*eB).toFixed(0)+'%</b> ('+(REWK==='end'?'the chance a completion ends in c':'the average share of c’s')+'); weight = 1 is at <b class="num">'+(100*eA).toFixed(0)+'%</b>. Each weight-1 run wanders at random, becoming more sure of whatever it happened to say, but nothing pulls the runs the same way, so their average stays near where it started. Weight 0 means <em>do not learn from this sample</em>, so a sample the scorer likes is the only kind the model learns to write more of.';
  return s;}
 
-function draw(){$('stage').innerHTML=PART===0?part1():PART===1?part2():part3();caption();}
+
+/* ---------- 4. what it is aiming at ---------- */
+function part4(){var b=0.05*Math.pow(100,+$('beta4').value/100),rew=REW[REWK],base=initModel(4),rows=[],Z=0;
+ $('beta4V').textContent=b.toFixed(2);
+ all27(function(y){var p=probOf(base,y),r=rew(y),f=Math.exp(r/b);Z+=p*f;rows.push({y:y,p:p,r:r,f:f});});
+ rows.forEach(function(w){w.t=w.p*w.f/Z;});
+ rows.sort(function(a,c){return c.p-a.p;});
+ var X0=60,CW=33,BW=CW-7,pm=Math.max(Math.max.apply(null,rows.map(function(w){return w.p;})),Math.max.apply(null,rows.map(function(w){return w.t;})))*1.12,fm=Math.max.apply(null,rows.map(function(w){return w.f;}))*1.1;
+ var P1=[56,146],P2=[190,252],P3=[314,396],s='';
+ function cx(i){return X0+i*CW;}
+ s+=T(X0,40,'base LM:  P(y)','ts');
+ s+=T(X0,178,'\u00d7  preference factor:  e^( r(y) / \u03b2 )','ts');
+ s+=T(X0,288,'\u00f7 Z   =   target:  P(y) \u00b7 e^( r(y) / \u03b2 ) / Z','ts');
+ [P1,P2,P3].forEach(function(P){s+='<line x1="'+X0+'" y1="'+P[1]+'" x2="'+(X0+27*CW)+'" y2="'+P[1]+'" stroke="'+BORDER+'"/>';});
+ rows.forEach(function(w,i){var x=cx(i)+3,good=w.r>0;
+  var h1=w.p/pm*(P1[1]-P1[0]),h3=w.t/pm*(P3[1]-P3[0]),h2=w.f/fm*(P2[1]-P2[0]);
+  s+='<rect x="'+x+'" y="'+(P1[1]-h1).toFixed(1)+'" width="'+BW+'" height="'+h1.toFixed(1)+'" fill="'+TC[0]+'" opacity=".75"/>';
+  s+='<rect x="'+x+'" y="'+(P2[1]-h2).toFixed(1)+'" width="'+BW+'" height="'+h2.toFixed(1)+'" fill="'+(good?PINK:GRAY)+'" opacity="'+(good?.85:.4)+'"/>';
+  s+='<rect x="'+x+'" y="'+(P3[1]-h3).toFixed(1)+'" width="'+BW+'" height="'+h3.toFixed(1)+'" fill="'+(good?PINK:TC[0])+'" opacity=".85"/>';
+  s+='<rect x="'+x+'" y="'+(P3[1]-w.p/pm*(P3[1]-P3[0])).toFixed(1)+'" width="'+BW+'" height="'+(w.p/pm*(P3[1]-P3[0])).toFixed(1)+'" fill="none" stroke="'+INK+'" stroke-width="1" stroke-dasharray="2 2"/>';
+  s+='<rect x="'+x+'" y="404" width="'+BW+'" height="5" fill="'+(good?PINK:'var(--border)')+'"/>';
+  s+='<text transform="translate('+(x+BW/2+4)+',416) rotate(90)" font-size="12" class="mono" fill="'+MUTED+'">'+str(w.y)+'</text>';});
+ s+=T(X0+27*CW,40,'dashed outlines in the bottom row: the base model','tn','end');
+ s+=T(X0+27*CW,178,'pink = completions the reward likes','tn','end');
+ // overlay: the model trained in step 3, which had no KL leash
+ var ovl=$('ovl').checked&&N3>0;
+ if(ovl){var Lb=M3.B[0],mp={};all27(function(y){mp[str(y)]=probOf(Lb,y);});
+  rows.forEach(function(w,i){var q=mp[str(w.y)],yy=P3[1]-q/pm*(P3[1]-P3[0]),x=cx(i)+3+BW/2;
+   if(yy<P3[0]-4){s+='<polygon points="'+x.toFixed(1)+','+(P3[0]-12)+' '+(x-6).toFixed(1)+','+(P3[0]-2)+' '+(x+6).toFixed(1)+','+(P3[0]-2)+'" fill="'+INK+'"/>'+T((x+10).toFixed(1),P3[0]-3,Math.round(100*q)+'%','tn','start');}
+   else s+='<circle cx="'+x.toFixed(1)+'" cy="'+yy.toFixed(1)+'" r="4" fill="'+INK+'"/>';});
+  s+=T(X0+27*CW,288,'dots: the model after '+N3+' steps of step 3 (no KL leash)','tn','end');}
+ var er=0,kl=0,eb=0;rows.forEach(function(w){er+=w.t*w.r;eb+=w.p*w.r;if(w.t>0)kl+=w.t*Math.log(w.t/w.p);});
+ s+=T(X0,500,'target(y) = base(y) \u00d7 factor(y) \u00f7 Z,   where  Z = \u03a3 base \u00d7 factor  (the base-weighted average factor)','tn');
+ $('readout').innerHTML='The base model writes a '+(REWK==='end'?'completion that ends in c':'c')+' with an expected reward of <b class="num">'+(100*eb).toFixed(0)+'%</b>. Multiplying each completion by its factor (up to <b class="num">'+fm.toFixed(1)+'\u00d7</b> at \u03b2 = '+b.toFixed(2)+') and renormalizing by Z = <b class="num">'+Z.toFixed(2)+'</b> gives a target with <b class="num">'+(100*er).toFixed(0)+'%</b> expected reward, at a KL of <b class="num">'+kl.toFixed(2)+'</b> from the base. Among completions with the same reward, the relative probabilities are still the base model&rsquo;s: the preference only decides how much total weight each reward level gets.';
+ return s;}
+
+function draw(){$('stage').innerHTML=PART===0?part1():PART===1?part2():PART===2?part3():part4();caption();}
 function caption(){var h;
  if(PART===0)h='<b>A language model is a distribution over text, built one token at a time.</b> The chance of a whole completion is the product of the chances of its tokens, each given the ones before it. Sampling means rolling those dice in order. The model has no idea what is &ldquo;good&rdquo;; it only has probabilities.';
  else if(PART===1)h='<b>Ordinary training pulls the model toward text.</b> Given a written example, the update raises the probability of each token that was actually written, given the tokens before it. All of the model&rsquo;s knowledge of what to write comes from the text. If the text always ends in c, so does the model, whether or not that was the point.';
+ else if(PART===3)h='<b>What the KL-regularized objective aims at.</b> Not &ldquo;the best completion&rdquo;, but the base model&rsquo;s own distribution multiplied by how much each completion is liked: P(y)&middot;e<sup>r(y)/&beta;</sup>/Z. That is a composition of two things: a prior (what the language model would write) and a likelihood (how much a judge likes it). The top row is what the model says, the middle row is what we want, and the bottom row is their normalized product. Large &beta;: the factor is nearly 1 and nothing changes. Small &beta;: for a 0/1 reward the target is simply the base model <em>conditioned on</em> being liked. Tick the overlay to see that step 3, which had no KL leash, does something different: it keeps going, piling onto a few completions, because nothing told it to stay close to the base model. The same picture on a line is in <a href="tilt.html">the tilted distribution</a>.';
  else h='<b>What an RL objective adds.</b> We want to maximize the expected reward E[r(y)] over the model&rsquo;s own samples y. Its gradient has a form you can compute from samples alone: &nabla;E[r] = E[ r(y) &middot; &nabla; log P(y) ]. That is the tab-2 update, on the model&rsquo;s own text, with each sample weighted by its reward. So REINFORCE is &ldquo;supervised learning on your own samples, weighted by how well they scored,&rdquo; and the reward need not be differentiable or even a formula: only a number per sample. <em>Next:</em> what goes wrong when rewards are all positive or very noisy (baselines), and the full distribution on the <a href="policy-gradient.html">REINFORCE to GRPO</a> page.';
  $('caption').innerHTML=h;}
 
 Array.prototype.forEach.call(document.querySelectorAll('#tabSeg button'),function(b){b.addEventListener('click',function(){PART=+b.dataset.p;Array.prototype.forEach.call(document.querySelectorAll('#tabSeg button'),function(x){x.classList.toggle('on',x===b);});
- ['c0','c1','c2'].forEach(function(id,i){$(id).classList.toggle('on',i===PART);});if(PART!==2&&RUN)toggleRun();draw();});});
-Array.prototype.forEach.call(document.querySelectorAll('#rewSeg button'),function(b){b.addEventListener('click',function(){REWK=b.dataset.k;Array.prototype.forEach.call(document.querySelectorAll('#rewSeg button'),function(x){x.classList.toggle('on',x===b);});reset3();});});
+ ['c0','c1','c2','c3'].forEach(function(id,i){$(id).classList.toggle('on',i===PART);});if(PART!==2&&RUN)toggleRun();draw();});});
+Array.prototype.forEach.call(document.querySelectorAll('#rewSeg button,#rewSeg4 button'),function(b){b.addEventListener('click',function(){REWK=b.dataset.k;Array.prototype.forEach.call(document.querySelectorAll('#rewSeg button,#rewSeg4 button'),function(x){x.classList.toggle('on',x.dataset.k===REWK);});reset3();});});
+$('beta4').addEventListener('input',draw);$('ovl').addEventListener('change',draw);
 Array.prototype.forEach.call(document.querySelectorAll('#watchSeg button'),function(b){b.addEventListener('click',function(){WATCH=+b.dataset.k;Array.prototype.forEach.call(document.querySelectorAll('#watchSeg button'),function(x){x.classList.toggle('on',x===b);});draw();});});
 reset2();reset3();sample1(3);
 </script>

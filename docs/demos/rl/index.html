@@ -65,7 +65,8 @@ footer a{color:var(--text-secondary)}
   <p class="what">A bare language model, three tokens long, that you can watch roll its dice, with its probabilities shown
      at each step. Train it on text, then take the text away and keep only a score: the same update, applied to
      the model&rsquo;s own samples, each weighted by its reward. That weight is everything a reward adds. Twelve runs of
-     each show that weighting by 1 wanders with no direction while weighting by reward climbs.</p>
+     each show that weighting by 1 wanders with no direction while weighting by reward climbs. A fourth step shows what a
+     KL-regularized objective actually aims at: the base model multiplied by a preference factor, over all 27 completions.</p>
   <a class="go" href="lm-to-reinforce.html">Open the explainer &rarr;</a>
 </li>
 <li class="done">
