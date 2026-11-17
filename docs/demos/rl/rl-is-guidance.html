@@ -24,6 +24,17 @@ label.cb{font-size:12.5px}
 .cap div+div{margin-top:5px}
 .nav{display:flex;align-items:baseline;gap:10px}
 svg text{font-family:inherit}
+.txt{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:6px 9px;margin:3px 0 7px;line-height:1.65;font-size:13px}
+.txt.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px}
+.txt .cur{color:var(--text-muted)}
+.tk{border-bottom:2px solid currentColor;margin-right:1px}
+.ro{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.6;table-layout:fixed}
+.ro th{text-align:left;font-weight:600;padding:2px 8px;color:var(--text-muted)}
+.ro td{vertical-align:top;padding:5px 8px;border-top:1px solid var(--border)}
+.ro th:first-child,.ro td.n{width:2em}
+.ro td.n{font-weight:700}
+.ro .fin{display:block;color:var(--text-muted);margin-top:2px}
+.ro .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
 </style>
 </head>
 <body>
@@ -48,6 +59,7 @@ svg text{font-family:inherit}
 </svg>
 
 <div class="rd" id="readout"></div>
+<div class="rd" id="rollouts"></div>
 <div class="cap" id="caption"></div>
 
 <script>
@@ -73,13 +85,37 @@ var SC={
   intro:'A program has 16 tokens: &ldquo;(&rdquo; (probability .35), &ldquo;)&rdquo; (.35) or some other token (.30): that is the base code model. It only counts as valid if the brackets balance: never close one that is not open, and end with none open. Guidance steers every token so that the program can still be completed validly.',
   setup:'The state is the number of open brackets. A program is dead the moment the count goes below zero, and valid only if it ends at zero. The reward is hard: q is 0 or 1, so q<sup>w</sup> = q for every w &gt; 0 and the RL optimum does not depend on w at all. It is exactly the base model <em>conditioned on being valid</em>, which is what constrained decoding computes. Naive guidance with w &ne; 1 is then simply wrong.'}
 };
-var SK='mood',S=SC[SK],N,MS,OFF,W,WV=3,LH,LP,MODE='exact',PR={t:8,x:2},UU=[],NP=40,REACH,SEED=5;
+/* ---------- concrete text for each token: one pool of phrases per kind of step ---------- */
+var WORDS={
+ mood:[['The sun came out.','She got the job.','They laughed together.','The test came back clear.','A letter arrived with good news.','He found his keys.','The garden finally bloomed.','Her friend called to say hello.','The bread came out perfect.','They won by a point.'],
+       ['The car wouldn\u2019t start.','It began to rain.','She lost the file.','The train was late.','Nobody called.','He missed the bus.','The roof started to leak.','The meeting ran long.','The coffee went cold.','They lost by a point.']],
+ poem:[['sky','moon','green','slow','night','cold','bright','soft'],
+       ['water','silent','morning','river','golden','shadow','window','winter'],
+       ['memory','tomorrow','forever','wandering','beautiful','remember','delicate','melody']],
+ code:[['('],[')'],['x','+','foo','1','y','*','len','2']]};
+var TCOL={mood:['var(--green-ink)','var(--warm-ink)'],poem:['var(--blue-ink)','var(--warm-ink)','var(--green-ink)'],code:['var(--pink-ink)','var(--pink-ink)','var(--text-secondary)']};
+var LEG={mood:'green: a sentence that raises the mood; brown: one that lowers it',poem:'blue: 1-syllable word; brown: 2 syllables; green: 3 syllables',code:'pink: a bracket; gray: any other token'};
+function phr(j,t,salt){var pool=WORDS[SK][j];return pool[(t*7+j*3+salt*5)%pool.length];}
+function toks(idx,salt){return idx.map(function(j,t){return '<span class="tk" style="color:'+TCOL[SK][j]+'">'+phr(j,t,salt)+'</span>';}).join(' ');}
+function finalText(x,dead){
+ if(SK==='mood')return 'ends at mood '+x+': the classifier says '+Math.round(100*qv(x))+'% happy';
+ if(SK==='poem')return x+' syllables'+(x===10?' \u2713 exactly ten':' (target 10)');
+ return dead||x!==0?'not balanced \u2717':'balanced \u2713';}
+function stepIdx(p){var o=[];for(var t=0;t<p.length-1;t++){var dx=p[t+1]-p[t],j=0;for(var k=0;k<S.steps.length;k++)if(S.steps[k][0]===dx){j=k;break;}o.push(j);}return o;}
+var FW=[];
+function buildFW(){FW=[{0:1}];for(var t=0;t<N;t++){var nx={};Object.keys(FW[t]).forEach(function(xs){var x=+xs,m=FW[t][xs];if(S.dead(x))return;S.steps.forEach(function(s){nx[x+s[0]]=(nx[x+s[0]]||0)+m*s[1];});});FW.push(nx);}}
+// a typical valid text that arrives at the probe: sample the path backward from (t, x) under the base model
+function prefixSteps(t,x){var r=rngFn(9001+t*131+(x+60)*17),idx=[],cx=x;
+ for(var tt=t;tt>0;tt--){var opts=[],tot=0;S.steps.forEach(function(s,j){var px=cx-s[0],f=(FW[tt-1][px]||0);if(f>0&&!S.dead(px)){var w=s[1]*f;opts.push([j,w]);tot+=w;}});
+  if(!tot)break;var u=r()*tot,j2=opts[0][0];for(var k=0;k<opts.length;k++){if(u<opts[k][1]){j2=opts[k][0];break;}u-=opts[k][1];}idx.unshift(j2);cx-=S.steps[j2][0];}
+ return idx;}
+var SK='mood',S=SC[SK],N,MS,OFF,W,WV=3,LH,LP,MODE='exact',PR={t:8,x:2},UU=[],NP=40,NSHOW=3,REACH,SEED=5;
 function $(id){return document.getElementById(id);}
 function lse(a,b){var m=Math.max(a,b);return m+Math.log(Math.exp(a-m)+Math.exp(b-m));}
 function I(x){return x+OFF;}
 function init(){S=SC[SK];N=S.N;MS=Math.max.apply(null,S.steps.map(function(s){return Math.abs(s[0]);}));OFF=MS*(N+2);W=2*OFF+1;
  REACH=[];var cur={0:1};REACH.push(Object.keys(cur).map(Number));for(var t=0;t<N;t++){var nx={};Object.keys(cur).forEach(function(x){S.steps.forEach(function(s){nx[+x+s[0]]=1;});});cur=nx;REACH.push(Object.keys(cur).map(Number));}
- var tmid=Math.min(N-2,8);PR=SK==='mood'?{t:8,x:2}:SK==='poem'?{t:3,x:5}:{t:6,x:2};}
+ var tmid=Math.min(N-2,8);PR=SK==='mood'?{t:8,x:2}:SK==='poem'?{t:3,x:5}:{t:6,x:2};buildFW();}
 // L[t][i] = log E_p[ q(x_N)^k | x_t = i-OFF ]  by  h_t(x) = sum_s p_s h_{t+1}(x+s),  h_N = q^k;  a dead state has h = 0
 function backward(k){var L=[],last=[],i;for(i=0;i<W;i++){var x=i-OFF;last[i]=S.dead(x)?DEAD:k*S.q(x);}L[N]=last;
  for(var t=N-1;t>=0;t--){var row=[],nx=L[t+1];for(i=0;i<W;i++){var x=i-OFF;if(S.dead(x)){row[i]=DEAD;continue;}var acc=null;S.steps.forEach(function(s){var v=Math.log(s[1])+nx[Math.max(0,Math.min(W-1,i+s[0]))];acc=acc===null?v:lse(acc,v);});row[i]=acc;}L[t]=row;}return L;}
@@ -114,9 +150,11 @@ function hist(i,dists,maxp){var s='',x0=PX[i]+PW+4,h=S.cell/2;
  dists.forEach(function(D){var d=D.d;if(D.fill){for(var x=Math.ceil(S.ylo);x<=S.yhi;x++){var p=d[I(x)];if(p>1e-12)s+='<rect x="'+x0+'" y="'+my(x+h).toFixed(1)+'" width="'+(p/maxp*36).toFixed(1)+'" height="'+(my(x-h)-my(x+h)).toFixed(1)+'" fill="'+D.fill+'" opacity="'+(D.op||.8)+'"/>';}}
   else{var pts='';for(var x=Math.ceil(S.ylo);x<=S.yhi;x++){var p=d[I(x)];if(p>1e-12||pts)pts+=(pts?'L':'M')+(x0+p/maxp*36).toFixed(1)+' '+my(x).toFixed(1);}s+='<path d="'+pts+'" fill="none" stroke="'+D.stroke+'" stroke-width="1.6" stroke-dasharray="3 2"/>';}});
  return s;}
-function pathsSvg(i,fn){var s='';for(var k=0;k<NP;k++){var p=path(k,fn),d='';p.forEach(function(x,t){d+=(t?'L':'M')+tx(i,t).toFixed(1)+' '+my(x).toFixed(1);});
- var g=ok(p[N])&&!p.some(function(x){return S.dead(x);});
- s+='<path d="'+d+'" fill="none" stroke="'+(g?COLP:COLB)+'" stroke-width="1.3" opacity="'+(g?.75:.4)+'"/>';}return s;}
+function pathsSvg(i,fn){var s='',lab='';for(var k=0;k<NP;k++){var p=path(k,fn),d='';p.forEach(function(x,t){d+=(t?'L':'M')+tx(i,t).toFixed(1)+' '+my(x).toFixed(1);});
+ var g=ok(p[N])&&!p.some(function(x){return S.dead(x);}),hl=k<NSHOW;
+ s+='<path d="'+d+'" fill="none" stroke="'+(g?COLP:COLB)+'" stroke-width="'+(hl?2.6:1.3)+'" opacity="'+(hl?1:(g?.75:.4))+'"/>';
+ if(hl){var ex=tx(i,N)+7,ey=my(p[N]);lab+='<circle cx="'+ex.toFixed(1)+'" cy="'+ey.toFixed(1)+'" r="7.5" fill="var(--surface)" stroke="'+(g?COLP:COLB)+'" stroke-width="1.6"/><text x="'+ex.toFixed(1)+'" y="'+(ey+4).toFixed(1)+'" text-anchor="middle" font-size="10.5" font-weight="700" fill="'+INK+'">'+(k+1)+'</text>';}}
+ return s+lab;}
 function arrowSvg(x0,y0,x1,y1,col){var dx=x1-x0,dy=y1-y0,L=Math.hypot(dx,dy);if(L<2)return '';var ux=dx/L,uy=dy/L,hl=Math.min(6,L*.5),hw=hl*.5;
  return '<line x1="'+x0.toFixed(1)+'" y1="'+y0.toFixed(1)+'" x2="'+(x1-ux*hl*.6).toFixed(1)+'" y2="'+(y1-uy*hl*.6).toFixed(1)+'" stroke="'+col+'" stroke-width="1"/><polygon points="'+x1.toFixed(1)+','+y1.toFixed(1)+' '+(x1-ux*hl+uy*hw).toFixed(1)+','+(y1-uy*hl-ux*hw).toFixed(1)+' '+(x1-ux*hl-uy*hw).toFixed(1)+','+(y1-uy*hl+ux*hw).toFixed(1)+'" fill="'+col+'"/>';}
 function fv(v){return v<-500?'&minus;&infin;':v.toFixed(2).replace('-','&minus;');}
@@ -143,15 +181,19 @@ function draw(){
 
  // ---- readout: the arithmetic of the probe ----
  var t0=pt.t,x0=pt.x,hC=LH[t0][I(x0)],pe=stepP(t0,x0,'exact'),pn=stepP(t0,x0,'naive'),rd='';
- rd+='<b>Probe: '+S.unit+' '+t0+', '+S.state+' = '+x0+'.</b> Each candidate next token:<br>';
+ rd+='<b>Probe: '+S.unit+' '+t0+', '+S.state+' = '+x0+'.</b> A typical text that gets here (sampled from the base model, ending at the black dot; '+LEG[SK]+'):<div class="txt'+(SK==='code'?' mono':'')+'">'+(t0>0?toks(prefixSteps(t0,x0),0)+' ':'<span class="cur">(empty so far)</span> ')+'<span class="cur">\u258d</span></div>Each candidate next token:<br>';
  rd+='<table class="bt"><tr><th style="text-align:left">next token</th><th>base p</th><th>log E[q<sup>w</sup>]</th><th>factor h<sub>t+1</sub>/h<sub>t</sub></th><th>RL optimum</th><th>w&middot;log E[q]</th><th>naive</th></tr>';
  S.steps.forEach(function(st,j){var lh=LH[t0+1][I(x0+st[0])],f=Math.exp(lh-hC);
-  rd+='<tr><td style="text-align:left">'+st[2]+'</td><td>'+st[1].toFixed(2)+'</td><td>'+fv(lh)+'</td><td>&times;'+(lh<-500?'0':f.toFixed(3))+'</td><td><b>'+(100*pe[j]).toFixed(1)+'%</b></td><td>'+fv(WV*LP[t0+1][I(x0+st[0])])+'</td><td><b>'+(100*pn[j]).toFixed(1)+'%</b></td></tr>';});
+  rd+='<tr><td style="text-align:left">'+st[2]+' <span class="tk" style="color:'+TCOL[SK][j]+'">'+phr(j,t0,0)+'</span></td><td>'+st[1].toFixed(2)+'</td><td>'+fv(lh)+'</td><td>&times;'+(lh<-500?'0':f.toFixed(3))+'</td><td><b>'+(100*pe[j]).toFixed(1)+'%</b></td><td>'+fv(WV*LP[t0+1][I(x0+st[0])])+'</td><td><b>'+(100*pn[j]).toFixed(1)+'%</b></td></tr>';});
  rd+='</table>';
  var eb=mean(base,qv),eg=mean(gd,qv),et=mean(tgt.d,qv);
  rd+='<b>Whole outputs.</b> E[q(final)], the chance the output is good: base <b class="num">'+(100*eb).toFixed(1)+'%</b>, this rule <b class="num">'+(100*eg).toFixed(1)+'%</b>, exact target <b class="num">'+(100*et).toFixed(1)+'%</b>. Distance from this rule to the exact target: total variation of the final state <b class="num">'+tv(gd,tgt.d).toExponential(1)+'</b>, and KL over whole outputs <b class="num">'+pathKL(MODE).toExponential(1)+'</b>'+(MODE==='exact'?' (both zero up to rounding: the soft-value policy <em>is</em> the target)':'')+'. Z = E<sub>p</sub>[q<sup>w</sup>] = <b class="num">'+tgt.Z.toExponential(2)+'</b>. Factors &times; base p sum to 1 in each state, since h<sub>t</sub> = &Sigma; p<sub>s</sub>h<sub>t+1</sub>.';
  $('readout').innerHTML=rd;
+ renderRollouts(guided);
 }
+function renderRollouts(guided){var h='<b>Three of the samples as text</b> (the numbered lines above). The guided model uses the same random numbers as the base model, so each row is one base output next to the output it was bent into. <span style="color:var(--text-muted)">('+LEG[SK]+')</span><table class="ro"><tr><th></th><th>base model</th><th>'+(MODE==="naive"?'naive guidance':'RL-tuned model')+'</th></tr>';
+ for(var k=0;k<NSHOW;k++){h+='<tr><td class="n">'+(k+1)+'</td>';[baseP,guided].forEach(function(fn,c){var p=path(k,fn),dead=p.some(function(x){return S.dead(x);});h+='<td'+(SK==='code'?' class="mono"':'')+'>'+toks(stepIdx(p),c?1:0)+'<span class="fin">'+finalText(p[N],dead)+'</span></td>';});h+='</tr>';}
+ $('rollouts').innerHTML=h+'</table>';}
 function caption(){$('caption').innerHTML=
  '<div><b>The setup.</b> '+S.setup+' Maximize E[r] &minus; &beta;&middot;KL(&pi;&#8214;p) over whole outputs, with r(x<sub>N</sub>) = log q(x<sub>N</sub>) and w = 1/&beta;, so e<sup>r/&beta;</sup> = q<sup>w</sup>. The optimum is the base model times a preference factor: &pi;*(output) = p(output)&middot;q(x<sub>N</sub>)<sup>w</sup> / Z with Z = E<sub>p</sub>[q<sup>w</sup>]. This is classifier guidance, p(x)&middot;p(c|x)<sup>w</sup>, with q in the role of p(c|x).</div>'+
  '<div><b>One token at a time.</b> The model can only choose the next token. Define h<sub>t</sub>(x) = E<sub>p</sub>[q(x<sub>N</sub>)<sup>w</sup> | x<sub>t</sub> = x], computed backward from h<sub>N</sub> = q<sup>w</sup> by h<sub>t</sub>(x) = &Sigma;<sub>s</sub> p<sub>s</sub>&middot;h<sub>t+1</sub>(x+s). Then &pi;*(s | x, t) = p<sub>s</sub>&middot;h<sub>t+1</sub>(x+s)/h<sub>t</sub>(x). In logits: each candidate gets + log h<sub>t+1</sub>(next), the <em>soft value</em> V = (1/w) log h, the log of the expected reward-to-go. That is the middle panel. It is why guidance acts at every token though only the end is scored: V summarizes the future.</div>'+
